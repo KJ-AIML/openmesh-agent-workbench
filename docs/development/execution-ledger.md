@@ -1802,3 +1802,63 @@ Next recommended action: separate governance commit — review and commit the ex
 
 ### Final Automated Status: PASS — HUMAN ACCEPTED — COMMITTED — PUSH PENDING
 ### Dev Track 0.1.3.5 Unlocked: NO (whole track accepted PASS and feature-committed; governance commit and push must still complete before the next development track begins)
+
+## 2026-07-15 — Dev Track 0.1.3.5
+
+Status: PASS — HUMAN ACCEPTED — COMMIT PENDING
+Human final disposition date: 2026-07-15
+Checkpoints A–F: PASS. Checkpoint G: GREEN — accepted. Whole Dev Track 0.1.3.5: **PASS**.
+Full regression: GREEN. Real project data isolation: PASS. Architecture/dependency boundary: PASS. Product scope boundary: PASS.
+Branch: feat/openmesh-0.1.3
+Starting HEAD: `32ecf5b90236e5eb20bf0b968a29e0d11eb288ba` (Dev Track 0.1.3.4 governance commit)
+Feature commit: NOT YET
+Commit verification: NOT YET
+Push: NOT YET
+Release: NOT YET
+Objective: Signal Promotion, Correlation & Intelligence Seam — promotion domain contracts, project-scoped promotion audit storage with idempotency, deterministic qualification and suppression, correlation with duplicate vs corroboration, WorkEvent protocol `1.1` compatibility, core-only promotion-to-ledger append with composed `actor`, intelligence seam hardening, and full regression release-gate proof. Executed the approved plan (`.heli-harness/state/reports/openmesh-0.1.3.5-execution-plan.md`) through Checkpoints A–G.
+What changed (accepted product diff, uncommitted):
+- `crates/openmesh-core/src/domain.rs`: optional `WorkEvent.actor`; version-aware `validate_event_semantics`; `WORK_EVENT_PROTOCOL_VERSION_PROMOTED = "1.1"`.
+- `crates/openmesh-core/src/events.rs`: ledger classification accepts protocol `1.0` and `1.1`.
+- `crates/openmesh-core/src/intelligence.rs` (new): `ContinuityIntelligence` trait + hardened `NoopContinuityIntelligence`; proposal-only seam contract.
+- `crates/openmesh-core/src/promotion.rs` (new): promotion contracts, audit storage, qualification, correlation, `apply_promotion_decision`, protocol `1.1` WorkEvent composition and append.
+- `crates/openmesh-core/src/lib.rs`: export `promotion`, `intelligence`; module boundary documentation.
+- `crates/openmesh-core/tests/fixtures/events/valid-v1.1.json` (new): promoted-style `1.1` event fixture with `actor`.
+- `crates/openmesh-core/tests/intelligence_seam.rs` (new): intelligence seam + ambiguous handling tests.
+- `crates/openmesh-core/tests/ledger_boundary.rs`: promotion boundary hardening guards.
+- `crates/openmesh-core/tests/promotion_audit.rs` (new): promotion audit storage tests.
+- `crates/openmesh-core/tests/promotion_contracts.rs` (new): promotion domain contract tests.
+- `crates/openmesh-core/tests/promotion_correlation.rs` (new): correlation + duplicate/corroboration tests.
+- `crates/openmesh-core/tests/promotion_qualification.rs` (new): qualification + suppression tests.
+- `crates/openmesh-core/tests/promotion_to_events.rs` (new): promotion-to-ledger append tests.
+- `crates/openmesh-core/tests/protocol_compatibility.rs` (new): protocol `1.0`/`1.1` compatibility tests.
+- `crates/openmesh-core/src/signals.rs`, `crates/openmesh-cli`, `src-tauri/**`, frontend source tree, Reporter Skill, `Cargo.toml`, `Cargo.lock`: **zero diff**.
+Commands run and exact results (Checkpoint G, full regression, 2026-07-15):
+- `npm run verify` — exit 0. Test Files 22 passed (22). Tests **212 passed** (212). Type Errors: no errors.
+- `cargo fmt --check` — clean.
+- `cargo clippy --workspace -- -D warnings` — clean (after minimal clippy blocker fix in `promotion.rs` only).
+- `cargo test --workspace` — exit 0. **330 passed, 0 failed, 1 ignored** (295 `openmesh-core`; 35 `openmesh-cli` executed; `dogfood_verify.rs`'s single test correctly remained `ignored`, not run).
+- `cargo check --workspace` — clean.
+- `cargo build --workspace` — clean.
+- `git diff --check` — clean (benign CRLF/LF autocrlf warnings only).
+Real-project data-isolation proof: active project buckets remained `pending` 0 / `processed` 5 / `quarantine` 0 / `duplicate` 0 throughout; historical ancestor project remained `0/0/0/0` (history dir absent); no `.openmesh/events/` directory created; no promotion audit directory created; no WorkSignals created; no real active-project WorkEvents or promotion audit records; no signal inbox mutation.
+Architecture/dependency boundary:
+- Workspace members unchanged (`openmesh`, `openmesh-core`, `openmesh-cli`).
+- Dependency direction unchanged: `openmesh-cli` → `openmesh-core`; `openmesh-core` does not depend on `openmesh-cli`.
+- `#[tauri::command]` count: `src-tauri/src/lib.rs` **52**, `src-tauri/src/main.rs` 0 — unchanged.
+- Manifest versions and `Cargo.lock`: unchanged — no new third-party dependencies.
+Product scope boundary:
+- No CLI promotion command; no Tauri promotion command; no Desktop promotion UI/hooks; Reporter Skill unchanged.
+- No Current State projection, Catch Me Up, Work Proxy Profile, Context Pack Builder, or Ask My Proxy.
+- No Git/Heli evidence producers; no AXGA / LLM runtime; no daemon/watcher/background loop.
+- Promotion write surface is core-only (`openmesh_core::promotion::apply_promotion_decision`); no signal inbox scanning, `process_pending` orchestration, or signal file mutation in promotion path.
+- Dev Track 0.1.3.6 not started.
+**Final human acceptance (2026-07-15)**: Human/Main-Brain issued the final disposition — Dev Track 0.1.3.5 is accepted as **PASS**. Checkpoints A–G are all accepted (A–F PASS, G GREEN). Accepted implementation remains **uncommitted**. Push has **not** occurred. A separate commit gate is required before commit.
+Known limitations:
+- Full checkpoint-by-checkpoint detail is in `.heli-harness/state/reports/openmesh-0.1.3.5-implementation-report.md`.
+- Promotion orchestration (`promote_processed_signals`, inbox scanning, signal file moves) deferred — core-only apply API only.
+- Git/Heli evidence producers deferred to 0.1.3.6.
+- Real Local Continuity Intelligence / AXGA runtime deferred — noop seam only.
+Next recommended action: separate commit gate — final diff review and commit preparation.
+
+### Final Automated Status: PASS — HUMAN ACCEPTED — COMMIT PENDING
+### Dev Track 0.1.3.6 Unlocked: NO (whole track accepted PASS; commit, governance commit, and push must still complete before the next development track begins)

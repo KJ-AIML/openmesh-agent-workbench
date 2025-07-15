@@ -15,7 +15,7 @@
 // - EventError, LedgerClassification, LedgerValidationReport, ...
 // ============================================================================
 
-use crate::domain::{validate_event_semantics, WorkEvent, WORK_EVENT_PROTOCOL_VERSION};
+use crate::domain::{is_supported_work_event_protocol, validate_event_semantics, WorkEvent};
 use crate::storage::{get_project_dir, read_project, Project};
 use std::fs;
 use std::fs::OpenOptions;
@@ -192,7 +192,7 @@ pub fn classify_ledger_record(
         .get("protocolVersion")
         .and_then(|v| v.as_str())
         .ok_or_else(|| LedgerClassification::Malformed("missing protocolVersion".into()))?;
-    if protocol_version != WORK_EVENT_PROTOCOL_VERSION {
+    if !is_supported_work_event_protocol(protocol_version) {
         return Err(LedgerClassification::UnsupportedVersion(
             protocol_version.to_string(),
         ));
@@ -473,6 +473,7 @@ mod tests {
             corrects_event_id: None,
             sensitivity: Sensitivity::Private,
             protocol_version: WORK_EVENT_PROTOCOL_VERSION.to_string(),
+            actor: None,
         }
     }
 

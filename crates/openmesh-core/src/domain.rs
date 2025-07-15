@@ -27,6 +27,14 @@ pub const WORK_SIGNAL_PROTOCOL_VERSION: &str = "1.0";
 /// Wire-schema version for the Canonical WorkEvent protocol (Dev Track 0.1.3.4).
 pub const WORK_EVENT_PROTOCOL_VERSION: &str = "1.0";
 
+/// Wire-schema version for promotion-composed WorkEvents (Dev Track 0.1.3.5 E1).
+pub const WORK_EVENT_PROTOCOL_VERSION_PROMOTED: &str = "1.1";
+
+/// Returns true when `version` is a supported on-disk WorkEvent protocol.
+pub fn is_supported_work_event_protocol(version: &str) -> bool {
+    version == WORK_EVENT_PROTOCOL_VERSION || version == WORK_EVENT_PROTOCOL_VERSION_PROMOTED
+}
+
 /// Frozen bound: `event_id` maximum length (approved 0.1.3.4 plan §3.1).
 pub const MAX_EVENT_ID_BYTES: usize = 256;
 
@@ -147,8 +155,8 @@ pub struct WorkSignal {
 /// not a single reference, so that many signals may support one WorkEvent
 /// (Classification Pack case CC-1) without forcing a cardinality.
 ///
-/// Deliberately carries no `actor` field — actor attribution on promoted events
-/// is owned by 0.1.3.5, not frozen here.
+/// `actor` is required on wire for `protocolVersion = "1.1"` promoted events and
+/// absent for legacy `1.0` records (Dev Track 0.1.3.5 Checkpoint E1).
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -163,6 +171,8 @@ pub struct WorkEvent {
     pub corrects_event_id: Option<String>,
     pub sensitivity: Sensitivity,
     pub protocol_version: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub actor: Option<ActorRef>,
 }
 
 impl WorkEvent {
@@ -184,6 +194,7 @@ impl WorkEvent {
             corrects_event_id: None,
             sensitivity: Sensitivity::Private,
             protocol_version: WORK_EVENT_PROTOCOL_VERSION.to_string(),
+            actor: None,
         }
     }
 }
@@ -208,8 +219,12 @@ pub enum EventValidationError {
     InvalidTimestamp(String),
     #[error("evidence must not be empty for a canonical WorkEvent")]
     EmptyEvidence,
-    #[error("protocol_version must be {expected}, found {found}")]
-    WrongProtocolVersion { expected: String, found: String },
+    #[error("unsupported protocol_version {found}; accepted versions are 1.0 and 1.1")]
+    UnsupportedProtocolVersion { found: String },
+    #[error("protocol_version 1.1 requires actor")]
+    MissingActorOnPromotedEvent,
+    #[error("protocol_version 1.0 must not include actor")]
+    ActorNotAllowedOnLegacyProtocol,
     #[error("corrects_event_id is empty after trim")]
     EmptyCorrectsEventId,
     #[error("corrects_event_id exceeds the {max}-byte bound")]
@@ -247,9 +262,16 @@ pub fn validate_event_semantics(event: &WorkEvent) -> Result<(), EventValidation
             validate_utc_timestamp(observed_at).map_err(EventValidationError::InvalidObservedAt)?;
         }
     }
-    if event.protocol_version != WORK_EVENT_PROTOCOL_VERSION {
-        return Err(EventValidationError::WrongProtocolVersion {
-            expected: WORK_EVENT_PROTOCOL_VERSION.to_string(),
+    if event.protocol_version == WORK_EVENT_PROTOCOL_VERSION {
+        if event.actor.is_some() {
+            return Err(EventValidationError::ActorNotAllowedOnLegacyProtocol);
+        }
+    } else if event.protocol_version == WORK_EVENT_PROTOCOL_VERSION_PROMOTED {
+        if event.actor.is_none() {
+            return Err(EventValidationError::MissingActorOnPromotedEvent);
+        }
+    } else {
+        return Err(EventValidationError::UnsupportedProtocolVersion {
             found: event.protocol_version.clone(),
         });
     }
@@ -724,6 +746,7 @@ mod tests {
             corrects_event_id: None,
             sensitivity: Sensitivity::Private,
             protocol_version: WORK_EVENT_PROTOCOL_VERSION.to_string(),
+            actor: None,
         }
     }
 
@@ -840,8 +863,7 @@ mod tests {
         event.protocol_version = "99.0".into();
         assert_eq!(
             validate_event_semantics(&event),
-            Err(EventValidationError::WrongProtocolVersion {
-                expected: WORK_EVENT_PROTOCOL_VERSION.to_string(),
+            Err(EventValidationError::UnsupportedProtocolVersion {
                 found: "99.0".into(),
             })
         );
@@ -857,10 +879,9 @@ mod tests {
         ));
     }
 
-    /// WorkEvent deliberately has no `actor` field — attribution composition is
-    /// 0.1.3.5's job. Serialized JSON must not include one.
+    /// Legacy `1.0` WorkEvents omit `actor` on wire; `1.1` promoted events require it.
     #[test]
-    fn work_event_has_no_actor_field_on_wire() {
+    fn work_event_v1_0_serializes_without_actor_on_wire() {
         let json = serde_json::to_string(&sample_event()).expect("serialize");
         let value: serde_json::Value = serde_json::from_str(&json).expect("parse");
         let obj = value.as_object().expect("object");

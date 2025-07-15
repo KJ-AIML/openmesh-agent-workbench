@@ -1,0 +1,21 @@
+{
+  "eventId": "1783605120049-event001-promoted",
+  "workspaceId": "1783586870822-7352d",
+  "kind": "work.decision",
+  "summary": "Canonical WorkEvent fixture for Dev Track 0.1.3.5 Checkpoint E1.",
+  "timestamp": "2026-07-15T08:00:00Z",
+  "evidence": [
+    {
+      "evidenceRef": {
+        "type": "producer-signal",
+        "value": "s-promoted-1"
+      }
+    }
+  ],
+  "protocolVersion": "1.1",
+  "sensitivity": "private",
+  "actor": {
+    "type": "person",
+    "value": "ter"
+  }
+}

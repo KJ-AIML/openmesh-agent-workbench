@@ -1,7 +1,8 @@
 //! Dev Track 0.1.3.4 Checkpoint E — integration boundary guards and API smoke tests.
 //!
 //! Proves the WorkEvent ledger remains a pure `openmesh-core` surface with no
-//! CLI/Tauri/Desktop/Reporter leakage and no promotion/correlation modules.
+//! CLI/Tauri/Desktop/Reporter leakage. Promotion domain contracts (0.1.3.5 A)
+//! are allowed in core; product surfaces and execution modules remain blocked.
 
 use openmesh_core::domain::{validate_event_semantics, EvidenceAttachment, EvidenceRef, WorkEvent};
 use openmesh_core::events::{
@@ -18,6 +19,14 @@ const LEDGER_FORBIDDEN_TERMS: &[&str] = &[
     "effective_summary",
     "validate_ledger",
     "classify_ledger_record",
+];
+
+const PROMOTION_FORBIDDEN_TERMS: &[&str] = &[
+    "openmesh_core::promotion",
+    "promotion::",
+    "ContinuityIntelligence",
+    "process_pending_promotions",
+    "promotion_audit",
 ];
 
 fn workspace_root() -> PathBuf {
@@ -126,19 +135,60 @@ fn collect_ts_files(dir: &Path, out: &mut Vec<PathBuf>) {
 }
 
 #[test]
-fn openmesh_core_has_no_promotion_or_correlation_modules() {
+fn openmesh_core_allows_promotion_contracts_but_blocks_execution_modules() {
     let core_src = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
+    assert!(
+        core_src.join("promotion.rs").exists(),
+        "Checkpoint A must expose promotion.rs in openmesh-core"
+    );
+    assert!(
+        core_src.join("intelligence.rs").exists(),
+        "Checkpoint A must expose intelligence.rs seam contract"
+    );
     for forbidden in [
-        "promotion.rs",
         "correlation.rs",
         "suppression.rs",
         "current_state.rs",
+        "projection.rs",
+        "catch_up.rs",
+        "work_proxy.rs",
     ] {
         assert!(
             !core_src.join(forbidden).exists(),
-            "forbidden module leaked into openmesh-core: {forbidden}"
+            "forbidden execution module leaked into openmesh-core: {forbidden}"
         );
     }
+}
+
+#[test]
+fn cli_crate_has_no_promotion_surface() {
+    let cli_src = workspace_root().join("crates/openmesh-cli/src");
+    let mut files = Vec::new();
+    collect_rs_files(&cli_src, &mut files);
+    assert_files_exclude_terms(&files, PROMOTION_FORBIDDEN_TERMS, "CLI promotion");
+}
+
+#[test]
+fn tauri_crate_has_no_promotion_commands() {
+    let tauri_lib = workspace_root().join("src-tauri/src/lib.rs");
+    let content = read_if_exists(&tauri_lib).expect("src-tauri/src/lib.rs");
+    for term in PROMOTION_FORBIDDEN_TERMS {
+        assert!(
+            !content.contains(term),
+            "Tauri lib must not reference promotion API `{term}`"
+        );
+    }
+}
+
+#[test]
+fn desktop_frontend_has_no_promotion_hooks() {
+    let frontend_src = workspace_root().join("src");
+    let mut files = Vec::new();
+    collect_rs_files(&frontend_src, &mut files);
+    let mut ts_files = Vec::new();
+    collect_ts_files(&frontend_src, &mut ts_files);
+    files.extend(ts_files);
+    assert_files_exclude_terms(&files, PROMOTION_FORBIDDEN_TERMS, "Desktop promotion");
 }
 
 #[test]
@@ -283,4 +333,116 @@ fn ledger_public_api_smoke_test() {
         Some("corrected smoke summary")
     );
     assert!(ledger_dir(&project_path).exists());
+}
+
+const FUTURE_TRACK_FORBIDDEN_MODULES: &[&str] = &[
+    "current_state.rs",
+    "projection.rs",
+    "catch_up.rs",
+    "work_proxy.rs",
+    "git_producer.rs",
+    "heli_producer.rs",
+];
+
+const LLM_RUNTIME_FORBIDDEN_TERMS: &[&str] = &[
+    "axga-ai",
+    "axga_ai",
+    "openai",
+    "anthropic",
+    "llm::",
+    "invoke_model",
+    "chat_completion",
+    "OpenMeshAiRuntime",
+];
+
+#[test]
+fn boundary_blocks_cli_tauri_desktop_promotion_surfaces() {
+    let root = workspace_root();
+    for surface in ["crates/openmesh-cli/src", "src-tauri/src", "src"] {
+        let dir = root.join(surface);
+        if !dir.exists() {
+            continue;
+        }
+        let mut files = Vec::new();
+        collect_rs_files(&dir, &mut files);
+        if surface == "src" {
+            let mut ts_files = Vec::new();
+            collect_ts_files(&dir, &mut ts_files);
+            files.extend(ts_files);
+        }
+        assert_files_exclude_terms(&files, PROMOTION_FORBIDDEN_TERMS, "promotion surface");
+    }
+}
+
+#[test]
+fn boundary_blocks_current_state_projection_catch_up() {
+    let core_src = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
+    for forbidden in FUTURE_TRACK_FORBIDDEN_MODULES {
+        assert!(
+            !core_src.join(forbidden).exists(),
+            "forbidden future-track module leaked: {forbidden}"
+        );
+    }
+    let lib_rs = fs::read_to_string(core_src.join("lib.rs")).expect("lib.rs");
+    for term in ["current_state", "catch_me_up", "work_proxy"] {
+        assert!(
+            !lib_rs.contains(&format!("mod {term};")),
+            "lib.rs must not declare forbidden module `{term}`"
+        );
+    }
+}
+
+#[test]
+fn boundary_blocks_git_heli_producers() {
+    let core_src = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
+    for forbidden in ["git_producer.rs", "heli_producer.rs", "git_evidence.rs"] {
+        assert!(
+            !core_src.join(forbidden).exists(),
+            "Git/Heli producer module must remain absent: {forbidden}"
+        );
+    }
+    let domain_rs = include_str!("../src/domain.rs");
+    let enum_body = domain_rs
+        .split("pub enum EvidenceRef")
+        .nth(1)
+        .and_then(|rest| rest.split('}').next())
+        .expect("EvidenceRef enum");
+    assert!(!enum_body.contains("GitRef"));
+    assert!(!enum_body.contains("HeliRef"));
+}
+
+#[test]
+fn boundary_blocks_llm_axga_runtime_activation() {
+    let core_src = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut files = Vec::new();
+    collect_rs_files(&core_src, &mut files);
+    for path in files {
+        let Some(content) = read_if_exists(&path) else {
+            continue;
+        };
+        if path.ends_with("intelligence.rs") {
+            continue;
+        }
+        for term in LLM_RUNTIME_FORBIDDEN_TERMS {
+            assert!(
+                !content.contains(term),
+                "core must not activate LLM/AXGA runtime `{term}`: {}",
+                path.display()
+            );
+        }
+    }
+
+    let intelligence_rs = include_str!("../src/intelligence.rs");
+    for term in [
+        "std::fs",
+        "append_event",
+        "write_decision_record",
+        "reqwest",
+    ] {
+        assert!(
+            !intelligence_rs.contains(term),
+            "intelligence seam must remain side-effect free (`{term}`)"
+        );
+    }
+    assert!(intelligence_rs.contains("proposal-only"));
 }
