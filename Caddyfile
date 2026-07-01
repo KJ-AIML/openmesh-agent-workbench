@@ -1,23 +1,21 @@
-:81 {
-	@transform_port_query {
-		query XTransformPort=*
-	}
+{
+  auto_https off
+  admin off
+}
 
-	handle @transform_port_query {
-		reverse_proxy localhost:{query.XTransformPort} {
-			header_up Host {host}
-			header_up X-Forwarded-For {remote_host}
-			header_up X-Forwarded-Proto {scheme}
-			header_up X-Real-IP {remote_host}
-		}
-	}
+:80 {
+  @ws {
+    header Connection *Upgrade*
+    header Upgrade websocket
+  }
+  reverse_proxy @ws localhost:3000 {
+    header_up Connection "upgrade"
+  }
 
-	handle {
-		reverse_proxy localhost:3000 {
-			header_up Host {host}
-			header_up X-Forwarded-For {remote_host}
-			header_up X-Forwarded-Proto {scheme}
-			header_up X-Real-IP {remote_host}
-		}
-	}
+  reverse_proxy localhost:3000 {
+    header_up Host {host}
+    header_up X-Real-IP {remote_host}
+    header_up X-Forwarded-For {remote_host}
+    header_up X-Forwarded-Proto {scheme}
+  }
 }
