@@ -1,0 +1,1 @@
+{"default":{"identifier":"default","description":"Default capability for Openmesh v0.3.0 — Phase 3 adds folder picker dialog.","local":true,"windows":["main"],"permissions":["dialog:allow-open"]}}

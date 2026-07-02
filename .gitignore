@@ -52,3 +52,16 @@ prompt
 server.log
 # Skills directory
 /skills/
+
+# Tauri/Rust build artifacts
+src-tauri/target/
+
+# Vite build output
+dist/
+
+# Database files
+*.db
+
+# Uploaded files
+upload/
+download/

@@ -1,0 +1,11 @@
+Add-Type -AssemblyName System.Drawing
+$bmp = New-Object System.Drawing.Bitmap(32,32)
+$g = [System.Drawing.Graphics]::FromImage($bmp)
+$g.Clear([System.Drawing.Color]::FromArgb(17,24,39))
+$g.Dispose()
+$icon = [System.Drawing.Icon]::FromHandle($bmp.GetHicon())
+$fs = [System.IO.File]::Create('icon.ico')
+$icon.Save($fs)
+$fs.Close()
+$bmp.Dispose()
+$icon.Dispose()
