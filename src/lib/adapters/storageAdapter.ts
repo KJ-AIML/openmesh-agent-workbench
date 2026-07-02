@@ -1,42 +1,45 @@
 // Storage Adapter for Openmesh
-// Abstracts persistence layer (localStorage now, SQLite later)
-// Phase 1-2: Wraps existing localStorage/store behavior
+// File-based storage in ~/.openmesh/ and <project>/.openmesh/
+// Tauri only - no web mode
 
 import type { StorageStatus, AdapterResult } from "./types";
-import { getRuntimeKind } from "./environment";
 import { store } from "../store";
+import { useStore } from "../useStore";
 
 /**
  * Get storage status and metadata
- * Phase 1-2: Returns localStorage info
- * Future Tauri: Will return SQLite/database info
+ * Returns file-based storage info
  */
 export async function getStorageStatus(): Promise<
 	AdapterResult<StorageStatus>
 > {
-	const runtime = getRuntimeKind();
-
-	const size = store.getStorageSize();
-
+	// File-based storage - return placeholder info
 	return {
 		success: true,
 		data: {
-			storageType: "localStorage",
-			storageSize: size,
+			storageType: "file-based",
+			storageSize: 0, // TODO: Calculate actual size from ~/.openmesh/
 			version: "0.3.0",
 		},
-		isMock: runtime === "web",
+		isMock: false,
 	};
 }
 
 /**
- * Export all state as JSON
- * Phase 1-2: Uses existing store export
- * Future Tauri: Same behavior, but from SQLite
+ * Export current project state as JSON
  */
 export async function exportState(): Promise<AdapterResult<string>> {
 	try {
-		const json = store.exportAll();
+		const { currentProject } = useStore();
+		if (!currentProject.value) {
+			return {
+				success: false,
+				error: "No project selected",
+				isMock: false,
+			};
+		}
+
+		const json = await store.exportProject(currentProject.value.folderPath);
 		return {
 			success: true,
 			data: json,
@@ -53,41 +56,24 @@ export async function exportState(): Promise<AdapterResult<string>> {
 
 /**
  * Import state from JSON
- * Phase 1-2: Uses existing store import
- * Future Tauri: Same behavior, but to SQLite
+ * Note: Import is not yet implemented for file-based storage
  */
-export async function importState(json: string): Promise<AdapterResult<void>> {
-	try {
-		const result = store.importAll(json);
-		if (result.success) {
-			return {
-				success: true,
-				isMock: false,
-			};
-		} else {
-			return {
-				success: false,
-				error: result.error,
-				isMock: false,
-			};
-		}
-	} catch (e) {
-		return {
-			success: false,
-			error: (e as Error).message,
-			isMock: false,
-		};
-	}
+export async function importState(_json: string): Promise<AdapterResult<void>> {
+	return {
+		success: false,
+		error: "Import not yet implemented for file-based storage",
+		isMock: false,
+	};
 }
 
 /**
  * Reset all state
- * Phase 1-2: Uses existing store reset
- * Future Tauri: Will clear SQLite database
+ * Clears in-memory state (file deletion not yet implemented)
  */
 export async function resetState(): Promise<AdapterResult<void>> {
 	try {
-		store.resetAll();
+		const { resetAll } = useStore();
+		await resetAll();
 		return {
 			success: true,
 			isMock: false,

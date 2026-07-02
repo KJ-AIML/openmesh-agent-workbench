@@ -1,332 +1,495 @@
-// Reactive Vue composable for the Openmesh store
-import { ref, computed } from "vue";
+// Reactive Vue composable for the Openmesh file-based store
+import { ref, computed, watch } from "vue";
 import { store } from "./store";
 import type {
 	Project,
-	DocSource,
 	Sprint,
 	Task,
 	RecentItem,
 	AgentSession,
-	TerminalPreset,
 	CommandPreset,
 	Settings,
 } from "../types";
+import type { FileEntry } from "./store";
 
-// Global reactive state — shared across all components
-const projects = ref<Project[]>(store.getProjects());
-const currentProjectId = ref<string | null>(store.getCurrentProjectId());
-const docSources = ref<DocSource[]>(store.getDocSources());
-const sprints = ref<Sprint[]>(store.getSprints());
-const tasks = ref<Task[]>(store.getTasks());
-const recentItems = ref<RecentItem[]>(store.getRecentItems());
-const agentSessions = ref<AgentSession[]>(store.getAgentSessions());
-const terminalPresets = ref<TerminalPreset[]>(store.getTerminalPresets());
-const commandPresets = ref<CommandPreset[]>(store.getCommandPresets());
-const settings = ref<Settings>(store.getSettings());
+// --- Global reactive state ---
+const isLoading = ref(true);
+const settings = ref<Settings>(defaultSettings());
+const projectPaths = ref<string[]>([]);
+const currentProjectPath = ref<string | null>(null);
 
-// Derived
-const currentProject = computed(() =>
-	currentProjectId.value
-		? projects.value.find((p) => p.id === currentProjectId.value)
-		: undefined,
-);
+// --- Project-scoped reactive state ---
+const currentProject = ref<Project | null>(null);
+const sprints = ref<Sprint[]>([]);
+const tasks = ref<Task[]>([]);
+const recentItems = ref<RecentItem[]>([]);
+const agentSessions = ref<AgentSession[]>([]);
+const commandPresets = ref<CommandPreset[]>([]);
+const docs = ref<FileEntry[]>([]);
+const notes = ref<FileEntry[]>([]);
 
-const projectDocSources = computed(() =>
-	currentProjectId.value
-		? docSources.value.filter((d) => d.projectId === currentProjectId.value)
-		: [],
-);
+// --- Derived state ---
+const projectSprint = computed(() => sprints.value[0] || null);
 
-const projectSprint = computed(() =>
-	currentProjectId.value
-		? sprints.value.find((s) => s.projectId === currentProjectId.value)
-		: undefined,
-);
+const projectCommandPresets = computed(() => commandPresets.value);
 
-const projectTasks = computed(() =>
-	currentProjectId.value
-		? tasks.value.filter((t) => t.projectId === currentProjectId.value)
-		: [],
-);
+const projectNotes = computed(() => notes.value);
 
-const projectSessions = computed(() =>
-	agentSessions.value.filter((s) =>
-		currentProjectId.value ? s.projectId === currentProjectId.value : true,
-	),
-);
+const projectDocs = computed(() => docs.value);
 
-const projectPresets = computed(() =>
-	currentProjectId.value
-		? terminalPresets.value.filter(
-				(p) => p.projectId === currentProjectId.value,
-			)
-		: [],
-);
+const projectSessions = computed(() => agentSessions.value);
 
-const projectCommandPresets = computed(() =>
-	currentProjectId.value
-		? commandPresets.value.filter((p) => p.projectId === currentProjectId.value)
-		: [],
-);
+const projectTasks = computed(() => tasks.value);
 
-// Sync helpers — write to store, then update reactive refs
-function syncProjects() {
-	projects.value = store.getProjects();
-}
-function syncDocSources() {
-	docSources.value = store.getDocSources();
-}
-function syncSprints() {
-	sprints.value = store.getSprints();
-}
-function syncTasks() {
-	tasks.value = store.getTasks();
-}
-function syncRecentItems() {
-	recentItems.value = store.getRecentItems();
-}
-function syncAgentSessions() {
-	agentSessions.value = store.getAgentSessions();
-}
-function syncTerminalPresets() {
-	terminalPresets.value = store.getTerminalPresets();
-}
-function syncCommandPresets() {
-	commandPresets.value = store.getCommandPresets();
-}
-function syncSettings() {
-	settings.value = store.getSettings();
+// --- Default factories ---
+function defaultSettings(): Settings {
+	return {
+		workspace: { theme: "dark" },
+		provider: { apiKeyConfigured: false, usageTrackingEnabled: false },
+		models: { localModelEnabled: false },
+		server: {
+			mode: "local",
+			apiBaseUrl: "http://localhost:3000",
+			healthStatus: "unknown",
+			syncStatus: "unknown",
+		},
+		agentClis: {},
+		sessionDirs: {
+			codexEnabled: false,
+			claudeCodeEnabled: false,
+			opencodeEnabled: false,
+		},
+		localPaths: {},
+		appearance: { theme: "dark", fontSize: "medium" },
+	};
 }
 
-// Actions
-function selectProject(id: string | null) {
-	store.setCurrentProject(id);
-	currentProjectId.value = id;
-}
+// --- Load all data ---
+async function loadAll() {
+	isLoading.value = true;
+	try {
+		// Load global data
+		const [loadedSettings, loadedPaths, loadedAppState] = await Promise.all([
+			store.getSettings(),
+			store.getProjectsList(),
+			store.getAppState(),
+		]);
 
-function addProject(input: Parameters<typeof store.addProject>[0]): Project {
-	const project = store.addProject(input);
-	syncProjects();
-	currentProjectId.value = project.id;
-	// Init default doc sources for the new project
-	store.initDocSourcesForProject(project.id);
-	syncDocSources();
-	// Init mock agent sessions for the new project
-	store.initMockSessions(project.id);
-	syncAgentSessions();
-	// Init default command presets
-	store.addCommandPreset({
-		projectId: project.id,
-		name: "npm run dev",
-		command: "npm",
-		args: ["run", "dev"],
-		riskLevel: "safe",
-		cwd: project.folderPath,
-	});
-	store.addCommandPreset({
-		projectId: project.id,
-		name: "npm run build",
-		command: "npm",
-		args: ["run", "build"],
-		riskLevel: "safe",
-		cwd: project.folderPath,
-	});
-	store.addCommandPreset({
-		projectId: project.id,
-		name: "npm test",
-		command: "npm",
-		args: ["test"],
-		riskLevel: "safe",
-		cwd: project.folderPath,
-	});
-	store.addCommandPreset({
-		projectId: project.id,
-		name: "git status",
-		command: "git",
-		args: ["status"],
-		riskLevel: "safe",
-		cwd: project.folderPath,
-	});
-	syncCommandPresets();
-	// Track recent
-	store.addRecentItem({
-		type: "project",
-		title: project.name,
-		projectId: project.id,
-		sourceId: project.id,
-	});
-	syncRecentItems();
-	return project;
-}
+		settings.value = loadedSettings;
+		projectPaths.value = loadedPaths;
+		currentProjectPath.value = loadedAppState.currentProjectId || null;
 
-function updateDocSource(id: string, updates: Partial<DocSource>) {
-	store.updateDocSource(id, updates);
-	syncDocSources();
-	// Track recent when connecting a doc source
-	if (updates.isConnected) {
-		const source = store.getDocSources().find((s) => s.id === id);
-		if (source) {
-			store.addRecentItem({
-				type: "doc",
-				title: source.title,
-				projectId: source.projectId,
-				sourceId: source.id,
-			});
-			syncRecentItems();
+		// Load project-scoped data if we have a current project
+		if (currentProjectPath.value) {
+			await loadProjectData(currentProjectPath.value);
 		}
+	} catch (e) {
+		console.error("[useStore] Failed to load data:", e);
+	} finally {
+		isLoading.value = false;
 	}
 }
 
-function createMockSprint(projectId: string): Sprint {
-	const sprint = store.createMockSprint(projectId);
-	syncSprints();
-	syncTasks();
+async function loadProjectData(projectPath: string) {
+	console.log('[loadProjectData] Loading data for:', projectPath);
+	try {
+		const project = await store.getProject(projectPath);
+		console.log('[loadProjectData] Project from backend:', project);
+		
+		if (!project) {
+			console.error('[loadProjectData] Project is null! Check Rust backend.');
+			currentProject.value = null;
+			return;
+		}
+
+		const [loadedSprints, loadedTasks, loadedRecent, loadedSessions, loadedPresets, loadedDocs, loadedNotes] =
+			await Promise.all([
+				store.getSprint(projectPath).then((s) => (s ? [s] : [])),
+				store.getTasks(projectPath),
+				store.getRecent(projectPath),
+				store.getSessions(projectPath),
+				store.getPresets(projectPath),
+				store.listDocs(projectPath),
+				store.listNotes(projectPath),
+			]);
+
+		console.log('[loadProjectData] All data loaded successfully');
+		console.log('[loadProjectData] Tasks:', loadedTasks.length, 'Presets:', loadedPresets.length);
+
+		currentProject.value = project;
+		sprints.value = loadedSprints;
+		tasks.value = loadedTasks;
+		recentItems.value = loadedRecent;
+		agentSessions.value = loadedSessions;
+		commandPresets.value = loadedPresets;
+		docs.value = loadedDocs;
+		notes.value = loadedNotes;
+	} catch (e) {
+		console.error("[loadProjectData] Failed to load project data:", e);
+		currentProject.value = null;
+	}
+}
+
+// --- Watch project changes ---
+watch(currentProjectPath, async (newPath, oldPath) => {
+	console.log('[watch currentProjectPath] Changed from:', oldPath, 'to:', newPath);
+	if (newPath && newPath !== oldPath) {
+		console.log('[watch] Loading project data for:', newPath);
+		await loadProjectData(newPath);
+		await store.saveAppState({ currentProjectId: newPath });
+		console.log('[watch] Project data loaded, currentProject:', currentProject.value);
+	} else if (!newPath && oldPath) {
+		console.log('[watch] Clearing project data');
+		currentProject.value = null;
+		sprints.value = [];
+		tasks.value = [];
+		recentItems.value = [];
+		agentSessions.value = [];
+		commandPresets.value = [];
+		docs.value = [];
+		notes.value = [];
+		await store.saveAppState({ currentProjectId: null });
+	}
+});
+
+// --- Actions ---
+
+async function selectProject(path: string | null) {
+	console.log('[selectProject] Setting path to:', path);
+	currentProjectPath.value = path;
+	// The watch will handle loading the data
+}
+
+async function addProject(input: {
+	name: string;
+	folderPath: string;
+	repoUrl?: string;
+	defaultBranch?: string;
+	docsFolder?: string;
+	terminalDir?: string;
+	defaultAgentCli?: "codex" | "claude-code" | "opencode" | null;
+	notes?: string;
+}): Promise<Project> {
+	// Init .openmesh/ directory structure
+	await store.initProject(input.folderPath);
+
+	// Get the created project
+	const project = await store.getProject(input.folderPath);
+	if (!project) throw new Error("Failed to create project");
+
+	// Update with user-provided values
+	const updatedProject: Project = {
+		...project,
+		name: input.name,
+		repoUrl: input.repoUrl || undefined,
+		defaultBranch: input.defaultBranch || "main",
+		docsFolder: input.docsFolder || undefined,
+		terminalDir: input.terminalDir || undefined,
+		defaultAgentCli: input.defaultAgentCli || undefined,
+		notes: input.notes || undefined,
+	};
+	await store.saveProject(input.folderPath, updatedProject);
+
+	// Add to projects list
+	await store.addProjectToList(input.folderPath);
+	projectPaths.value = await store.getProjectsList();
+
+	// Create default command presets
+	const defaultPresets: CommandPreset[] = [
+		{
+			id: crypto.randomUUID(),
+			projectId: updatedProject.id,
+			name: "npm run dev",
+			command: "npm",
+			args: ["run", "dev"],
+			riskLevel: "safe",
+			cwd: input.folderPath,
+			createdAt: new Date().toISOString(),
+		},
+		{
+			id: crypto.randomUUID(),
+			projectId: updatedProject.id,
+			name: "npm run build",
+			command: "npm",
+			args: ["run", "build"],
+			riskLevel: "safe",
+			cwd: input.folderPath,
+			createdAt: new Date().toISOString(),
+		},
+		{
+			id: crypto.randomUUID(),
+			projectId: updatedProject.id,
+			name: "npm test",
+			command: "npm",
+			args: ["test"],
+			riskLevel: "safe",
+			cwd: input.folderPath,
+			createdAt: new Date().toISOString(),
+		},
+		{
+			id: crypto.randomUUID(),
+			projectId: updatedProject.id,
+			name: "git status",
+			command: "git",
+			args: ["status"],
+			riskLevel: "safe",
+			cwd: input.folderPath,
+			createdAt: new Date().toISOString(),
+		},
+	];
+	await store.savePresets(input.folderPath, defaultPresets);
+	commandPresets.value = defaultPresets;
+
+	// Set as current project - the watcher will handle loading data
+	currentProjectPath.value = input.folderPath;
+	await store.saveAppState({ currentProjectId: input.folderPath });
+
+	return updatedProject;
+}
+
+async function updateProject(updates: Partial<Project>) {
+	if (!currentProject.value || !currentProjectPath.value) return;
+	const updated = { ...currentProject.value, ...updates, updatedAt: new Date().toISOString() };
+	await store.saveProject(currentProjectPath.value, updated);
+	currentProject.value = updated;
+}
+
+async function deleteProject() {
+	if (!currentProjectPath.value) return;
+	await store.deleteProjectData(currentProjectPath.value);
+	projectPaths.value = await store.getProjectsList();
+	currentProjectPath.value = null;
+}
+
+async function saveSettings(updates: Partial<Settings>) {
+	const newSettings = { ...settings.value, ...updates };
+	await store.saveSettings(newSettings);
+	settings.value = newSettings;
+}
+
+// --- Sprint actions ---
+async function createMockSprint(name: string) {
+	if (!currentProject.value || !currentProjectPath.value) return;
+	const sprint: Sprint = {
+		id: crypto.randomUUID(),
+		projectId: currentProject.value.id,
+		name,
+		status: "active",
+		source: "mock",
+		createdAt: new Date().toISOString(),
+		updatedAt: new Date().toISOString(),
+	};
+	await store.saveSprint(currentProjectPath.value, sprint);
+	sprints.value = [sprint];
 	return sprint;
 }
 
-function updateTask(id: string, updates: Partial<Task>) {
-	store.updateTask(id, updates);
-	syncTasks();
-	// Track recent when task status changes
-	if (updates.status) {
-		const task = store.getTasks().find((t) => t.id === id);
-		if (task) {
-			store.addRecentItem({
-				type: "task",
-				title: task.title,
-				projectId: task.projectId,
-				sourceId: task.id,
-			});
-			syncRecentItems();
-		}
+// --- Task actions ---
+async function updateTask(id: string, updates: Partial<Task>) {
+	if (!currentProjectPath.value) return;
+	const idx = tasks.value.findIndex((t) => t.id === id);
+	if (idx >= 0) {
+		tasks.value[idx] = { ...tasks.value[idx], ...updates, updatedAt: new Date().toISOString() };
+		await store.saveTasks(currentProjectPath.value, tasks.value);
 	}
 }
 
-function addRecentItem(
-	item: Omit<RecentItem, "id" | "lastOpenedAt" | "pinned">,
-) {
-	store.addRecentItem(item);
-	syncRecentItems();
+// --- Recent items ---
+async function addRecentItem(item: Omit<RecentItem, "id" | "lastOpenedAt" | "pinned">) {
+	if (!currentProjectPath.value) return;
+	const dedupKey = `${item.type}:${item.projectId || ""}:${item.sourceId || item.sourcePath || item.title}`;
+	const existingIdx = recentItems.value.findIndex(
+		(i) => `${i.type}:${i.projectId || ""}:${i.sourceId || i.sourcePath || i.title}` === dedupKey
+	);
+	if (existingIdx >= 0) {
+		recentItems.value[existingIdx].lastOpenedAt = new Date().toISOString();
+		recentItems.value[existingIdx].title = item.title;
+	} else {
+		recentItems.value.unshift({
+			...item,
+			id: crypto.randomUUID(),
+			lastOpenedAt: new Date().toISOString(),
+			pinned: false,
+		});
+	}
+	// Prune to 50
+	recentItems.value = recentItems.value.slice(0, 50);
+	await store.saveRecent(currentProjectPath.value, recentItems.value);
 }
 
-function deleteAgentSession(id: string) {
-	store.deleteAgentSession(id);
-	syncAgentSessions();
+// --- Agent sessions ---
+async function deleteAgentSession(id: string) {
+	if (!currentProjectPath.value) return;
+	agentSessions.value = agentSessions.value.filter((s) => s.id !== id);
+	await store.saveSessions(currentProjectPath.value, agentSessions.value);
 }
 
-function updateAgentSession(id: string, updates: Partial<AgentSession>) {
-	store.updateAgentSession(id, updates);
-	syncAgentSessions();
+async function updateAgentSession(id: string, updates: Partial<AgentSession>) {
+	if (!currentProjectPath.value) return;
+	const idx = agentSessions.value.findIndex((s) => s.id === id);
+	if (idx >= 0) {
+		agentSessions.value[idx] = { ...agentSessions.value[idx], ...updates, updatedAt: new Date().toISOString() };
+		await store.saveSessions(currentProjectPath.value, agentSessions.value);
+	}
 }
 
-function initMockSessions(projectId: string) {
-	store.initMockSessions(projectId);
-	syncAgentSessions();
-}
-
-function addTerminalPreset(projectId: string, name: string, command: string) {
-	const preset = store.addTerminalPreset(projectId, name, command);
-	syncTerminalPresets();
-	return preset;
-}
-
-function addCommandPreset(preset: Omit<CommandPreset, "id" | "createdAt">) {
-	const newPreset = store.addCommandPreset(preset);
-	syncCommandPresets();
+// --- Command presets ---
+async function addCommandPreset(preset: Omit<CommandPreset, "id" | "createdAt">) {
+	if (!currentProjectPath.value) return;
+	const newPreset: CommandPreset = {
+		...preset,
+		id: crypto.randomUUID(),
+		createdAt: new Date().toISOString(),
+	};
+	commandPresets.value.push(newPreset);
+	await store.savePresets(currentProjectPath.value, commandPresets.value);
 	return newPreset;
 }
 
-function deleteCommandPreset(id: string) {
-	store.deleteCommandPreset(id);
-	syncCommandPresets();
+async function deleteCommandPreset(id: string) {
+	if (!currentProjectPath.value) return;
+	commandPresets.value = commandPresets.value.filter((p) => p.id !== id);
+	await store.savePresets(currentProjectPath.value, commandPresets.value);
 }
 
-function updateProject(id: string, updates: Partial<Project>) {
-	store.updateProject(id, updates);
-	syncProjects();
+// --- Docs ---
+async function refreshDocs() {
+	if (!currentProjectPath.value) return;
+	docs.value = await store.listDocs(currentProjectPath.value);
 }
 
-function deleteProject(id: string) {
-	store.deleteProject(id);
-	syncProjects();
-	currentProjectId.value = store.getCurrentProjectId();
-	syncDocSources();
-	syncSprints();
-	syncTasks();
-	syncAgentSessions();
-	syncCommandPresets();
-	syncTerminalPresets();
+async function writeDoc(filename: string, content: string) {
+	if (!currentProjectPath.value) return;
+	await store.writeDoc(currentProjectPath.value, filename, content);
+	await refreshDocs();
 }
 
-function updateCommandPreset(id: string, updates: Partial<CommandPreset>) {
-	store.updateCommandPreset(id, updates);
-	syncCommandPresets();
+async function deleteDoc(filename: string) {
+	if (!currentProjectPath.value) return;
+	await store.deleteDoc(currentProjectPath.value, filename);
+	await refreshDocs();
 }
 
-function saveSettings(updates: Partial<Settings>) {
-	store.updateSettings(updates);
-	syncSettings();
+async function readDoc(filename: string): Promise<string> {
+	if (!currentProjectPath.value) return "";
+	return store.readDoc(currentProjectPath.value, filename);
 }
 
-function resetAll() {
-	store.resetAll();
-	projects.value = [];
-	currentProjectId.value = null;
-	docSources.value = [];
+// --- Notes ---
+async function refreshNotes() {
+	if (!currentProjectPath.value) return;
+	notes.value = await store.listNotes(currentProjectPath.value);
+}
+
+async function writeNote(filename: string, content: string) {
+	if (!currentProjectPath.value) return;
+	await store.writeNote(currentProjectPath.value, filename, content);
+	await refreshNotes();
+}
+
+async function deleteNote(filename: string) {
+	if (!currentProjectPath.value) return;
+	await store.deleteNote(currentProjectPath.value, filename);
+	await refreshNotes();
+}
+
+async function readNote(filename: string): Promise<string> {
+	if (!currentProjectPath.value) return "";
+	return store.readNote(currentProjectPath.value, filename);
+}
+
+async function importFile(folder: string, filename: string, content: string) {
+	if (!currentProjectPath.value) return;
+	await store.importFile(currentProjectPath.value, folder, filename, content);
+	if (folder === "docs") await refreshDocs();
+	if (folder === "notes") await refreshNotes();
+}
+
+// --- Export ---
+function getRecentItemsForProject(limit = 5): RecentItem[] {
+	return recentItems.value.slice(0, limit);
+}
+
+// --- Reset (clear all file-based data) ---
+async function resetAll() {
+	// Get all project paths before resetting
+	const paths = [...projectPaths.value];
+	
+	// Call Rust backend to delete all data from disk
+	await store.resetAllData();
+	
+	// Clear in-memory state
+	projectPaths.value = [];
+	currentProjectPath.value = null;
+	currentProject.value = null;
 	sprints.value = [];
 	tasks.value = [];
 	recentItems.value = [];
 	agentSessions.value = [];
-	terminalPresets.value = [];
-	settings.value = store.getSettings();
+	commandPresets.value = [];
+	docs.value = [];
+	notes.value = [];
+	settings.value = defaultSettings();
+	
+	// Save default settings to recreate ~/.openmesh/settings.json
+	await store.saveSettings(settings.value);
+	await store.saveAppState({ currentProjectId: null });
 }
+
+// --- Init ---
+loadAll();
 
 export function useStore() {
 	return {
-		// Reactive state
-		projects,
-		currentProjectId,
-		currentProject,
-		docSources,
-		projectDocSources,
-		sprints,
-		projectSprint,
-		tasks,
-		projectTasks,
-		recentItems,
-		agentSessions,
-		projectSessions,
-		terminalPresets,
-		projectPresets,
-		commandPresets,
-		projectCommandPresets,
-		settings,
+		// Loading state
+		isLoading,
 
-		// Computed helpers
-		getRecentItemsForProject: (limit = 5) =>
-			store.getRecentItemsForProject(currentProjectId.value, limit),
+		// Global state
+		settings,
+		projectPaths,
+		currentProjectPath,
+
+		// Project-scoped state
+		currentProject,
+		projectSprint,
+		projectTasks,
+		projectSessions,
+		projectCommandPresets,
+		projectDocs,
+		projectNotes,
 
 		// Actions
 		selectProject,
 		addProject,
 		updateProject,
 		deleteProject,
-		updateDocSource,
+		saveSettings,
 		createMockSprint,
 		updateTask,
 		addRecentItem,
 		deleteAgentSession,
 		updateAgentSession,
-		initMockSessions,
-		addTerminalPreset,
 		addCommandPreset,
 		deleteCommandPreset,
-		updateCommandPreset,
-		saveSettings,
 		resetAll,
 
-		// Raw store access (for export/import)
+		// Docs
+		refreshDocs,
+		readDoc,
+		writeDoc,
+		deleteDoc,
+
+		// Notes
+		refreshNotes,
+		readNote,
+		writeNote,
+		deleteNote,
+		importFile,
+
+		// Helpers
+		getRecentItemsForProject,
+
+		// Raw store access
 		store,
 	};
 }

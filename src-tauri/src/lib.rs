@@ -1,6 +1,9 @@
+mod storage;
+
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::process::Command;
+use storage::*;
 
 /// Normalize an agent tool identifier.
 ///
@@ -257,21 +260,43 @@ fn open_terminal(cwd: String) -> TerminalLaunchResult {
     #[cfg(target_os = "windows")]
     {
         // Try Windows Terminal first
-        if let Ok(_status) = Command::new("wt").arg("-d").arg(&cwd).spawn() {
-            return TerminalLaunchResult {
-                success: true,
-                error: None,
-            };
+        match Command::new("wt").arg("-d").arg(&cwd).spawn() {
+            Ok(_) => {
+                return TerminalLaunchResult {
+                    success: true,
+                    error: None,
+                };
+            }
+            Err(_) => {
+                // Windows Terminal not available, try fallback
+            }
         }
 
-        // Fallback to cmd
+        // Fallback to PowerShell
+        match Command::new("powershell")
+            .arg("-NoExit")
+            .arg("-Command")
+            .arg(format!("Set-Location -Path '{}'", cwd))
+            .spawn()
+        {
+            Ok(_) => {
+                return TerminalLaunchResult {
+                    success: true,
+                    error: None,
+                };
+            }
+            Err(_) => {
+                // PowerShell not available, try cmd
+            }
+        }
+
+        // Final fallback to cmd
         match Command::new("cmd")
             .arg("/C")
             .arg("start")
             .arg("cmd")
             .arg("/K")
-            .arg("cd")
-            .arg(&cwd)
+            .arg(format!("cd /d \"{}\"", cwd))
             .spawn()
         {
             Ok(_) => TerminalLaunchResult {
@@ -858,10 +883,242 @@ fn run_command_preset(command: String, args: Vec<String>, cwd: String) -> RunCom
     }
 }
 
+// ============================================================================
+// File-Based Storage Commands
+// ============================================================================
+
+// --- Global Settings ---
+
+#[tauri::command]
+fn get_settings() -> Settings {
+    read_global::<Settings>("settings.json").unwrap_or_else(default_settings)
+}
+
+#[tauri::command]
+fn save_settings(settings: Settings) -> Result<(), String> {
+    write_global("settings.json", &settings)
+}
+
+// --- Projects List (global) ---
+
+#[tauri::command]
+fn get_projects_list() -> Vec<String> {
+    read_global::<Vec<String>>("projects.json").unwrap_or_default()
+}
+
+#[tauri::command]
+fn add_project_to_list(path: String) -> Result<(), String> {
+    let mut projects = get_projects_list();
+    if !projects.contains(&path) {
+        projects.push(path);
+        write_global("projects.json", &projects)?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn remove_project_from_list(path: String) -> Result<(), String> {
+    let projects = get_projects_list();
+    let filtered: Vec<String> = projects.into_iter().filter(|p| p != &path).collect();
+    write_global("projects.json", &filtered)
+}
+
+// --- App State (global) ---
+
+#[tauri::command]
+fn get_app_state() -> AppState {
+    read_global::<AppState>("app-state.json").unwrap_or_else(default_app_state)
+}
+
+#[tauri::command]
+fn save_app_state(state: AppState) -> Result<(), String> {
+    write_global("app-state.json", &state)
+}
+
+// --- Project Init / Read / Delete ---
+
+#[tauri::command]
+fn init_project_cmd(project_path: String) -> Result<(), String> {
+    init_project(&project_path)?;
+    add_project_to_list(project_path).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn get_project(project_path: String) -> Option<Project> {
+    read_project::<Project>(&project_path, "project.json")
+}
+
+#[tauri::command]
+fn save_project(project_path: String, project: Project) -> Result<(), String> {
+    write_project(&project_path, "project.json", &project)
+}
+
+#[tauri::command]
+fn delete_project_cmd(project_path: String) -> Result<(), String> {
+    delete_project_data(&project_path)?;
+    remove_project_from_list(project_path).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+// --- Project-Scoped Data ---
+
+#[tauri::command]
+fn get_sessions(project_path: String) -> Vec<AgentSession> {
+    read_project::<Vec<AgentSession>>(&project_path, "sessions.json").unwrap_or_default()
+}
+
+#[tauri::command]
+fn save_sessions(project_path: String, sessions: Vec<AgentSession>) -> Result<(), String> {
+    write_project(&project_path, "sessions.json", &sessions)
+}
+
+#[tauri::command]
+fn get_sprint(project_path: String) -> Option<Sprint> {
+    read_project::<Sprint>(&project_path, "sprint.json")
+}
+
+#[tauri::command]
+fn save_sprint(project_path: String, sprint: Sprint) -> Result<(), String> {
+    write_project(&project_path, "sprint.json", &sprint)
+}
+
+#[tauri::command]
+fn get_tasks(project_path: String) -> Vec<Task> {
+    read_project::<Vec<Task>>(&project_path, "tasks.json").unwrap_or_default()
+}
+
+#[tauri::command]
+fn save_tasks(project_path: String, tasks: Vec<Task>) -> Result<(), String> {
+    write_project(&project_path, "tasks.json", &tasks)
+}
+
+#[tauri::command]
+fn get_presets(project_path: String) -> Vec<CommandPreset> {
+    read_project::<Vec<CommandPreset>>(&project_path, "presets.json").unwrap_or_default()
+}
+
+#[tauri::command]
+fn save_presets(project_path: String, presets: Vec<CommandPreset>) -> Result<(), String> {
+    write_project(&project_path, "presets.json", &presets)
+}
+
+#[tauri::command]
+fn get_recent(project_path: String) -> Vec<RecentItem> {
+    read_project::<Vec<RecentItem>>(&project_path, "recent.json").unwrap_or_default()
+}
+
+#[tauri::command]
+fn save_recent(project_path: String, items: Vec<RecentItem>) -> Result<(), String> {
+    write_project(&project_path, "recent.json", &items)
+}
+
+// --- Docs (markdown files in .openmesh/docs/) ---
+
+#[tauri::command]
+fn list_docs(project_path: String) -> Vec<FileEntry> {
+    let docs_dir = get_project_dir(&project_path).join("docs");
+    list_files(&docs_dir, &["md", "txt"])
+}
+
+#[tauri::command]
+fn read_doc(project_path: String, filename: String) -> Result<String, String> {
+    let path = get_project_dir(&project_path).join("docs").join(&filename);
+    read_file_content(&path.to_string_lossy())
+}
+
+#[tauri::command]
+fn write_doc(project_path: String, filename: String, content: String) -> Result<(), String> {
+    let path = get_project_dir(&project_path).join("docs").join(&filename);
+    write_file_content(&path.to_string_lossy(), &content)
+}
+
+#[tauri::command]
+fn delete_doc(project_path: String, filename: String) -> Result<(), String> {
+    let path = get_project_dir(&project_path).join("docs").join(&filename);
+    delete_file(&path.to_string_lossy())
+}
+
+// --- Notes (markdown files in .openmesh/notes/) ---
+
+#[tauri::command]
+fn list_notes(project_path: String) -> Vec<FileEntry> {
+    let notes_dir = get_project_dir(&project_path).join("notes");
+    list_files(&notes_dir, &["md", "txt"])
+}
+
+#[tauri::command]
+fn read_note(project_path: String, filename: String) -> Result<String, String> {
+    let path = get_project_dir(&project_path).join("notes").join(&filename);
+    read_file_content(&path.to_string_lossy())
+}
+
+#[tauri::command]
+fn write_note(project_path: String, filename: String, content: String) -> Result<(), String> {
+    let path = get_project_dir(&project_path).join("notes").join(&filename);
+    write_file_content(&path.to_string_lossy(), &content)
+}
+
+#[tauri::command]
+fn delete_note(project_path: String, filename: String) -> Result<(), String> {
+    let path = get_project_dir(&project_path).join("notes").join(&filename);
+    delete_file(&path.to_string_lossy())
+}
+
+#[tauri::command]
+fn import_file(project_path: String, folder: String, filename: String, content: String) -> Result<(), String> {
+    let path = get_project_dir(&project_path).join(&folder).join(&filename);
+    write_file_content(&path.to_string_lossy(), &content)
+}
+
+// --- Export / Import (whole project) ---
+
+#[tauri::command]
+fn export_project(project_path: String) -> Result<String, String> {
+    let project = get_project(project_path.clone());
+    let sessions = get_sessions(project_path.clone());
+    let tasks = get_tasks(project_path.clone());
+    let presets = get_presets(project_path.clone());
+    let recent = get_recent(project_path.clone());
+    let sprint = get_sprint(project_path.clone());
+
+    let docs = list_docs(project_path.clone());
+    let notes = list_notes(project_path.clone());
+
+    let export = serde_json::json!({
+        "schemaVersion": SCHEMA_VERSION,
+        "project": project,
+        "sessions": sessions,
+        "tasks": tasks,
+        "presets": presets,
+        "recent": recent,
+        "sprint": sprint,
+        "docs": docs.iter().map(|d| {
+            let content = read_doc(project_path.clone(), d.name.clone()).unwrap_or_default();
+            serde_json::json!({"filename": d.name, "content": content})
+        }).collect::<Vec<_>>(),
+        "notes": notes.iter().map(|n| {
+            let content = read_note(project_path.clone(), n.name.clone()).unwrap_or_default();
+            serde_json::json!({"filename": n.name, "content": content})
+        }).collect::<Vec<_>>(),
+    });
+
+    serde_json::to_string_pretty(&export).map_err(|e| e.to_string())
+}
+
+// --- Reset All Data ---
+
+#[tauri::command]
+fn reset_all_data_cmd() -> Result<(), String> {
+    let project_paths = get_projects_list();
+    reset_all_data(&project_paths)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .invoke_handler(tauri::generate_handler![
             greet,
             validate_path,
@@ -870,7 +1127,40 @@ pub fn run() {
             open_terminal,
             open_agent_cli,
             scan_agent_sessions,
-            run_command_preset
+            run_command_preset,
+            // File-based storage commands
+            get_settings,
+            save_settings,
+            get_projects_list,
+            add_project_to_list,
+            remove_project_from_list,
+            get_app_state,
+            save_app_state,
+            init_project_cmd,
+            get_project,
+            save_project,
+            delete_project_cmd,
+            get_sessions,
+            save_sessions,
+            get_sprint,
+            save_sprint,
+            get_tasks,
+            save_tasks,
+            get_presets,
+            save_presets,
+            get_recent,
+            save_recent,
+            list_docs,
+            read_doc,
+            write_doc,
+            delete_doc,
+            list_notes,
+            read_note,
+            write_note,
+            delete_note,
+            import_file,
+            export_project,
+            reset_all_data_cmd,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

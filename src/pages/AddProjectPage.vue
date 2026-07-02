@@ -3,6 +3,7 @@ import { ref, computed } from "vue";
 import { useRouter } from "vue-router";
 import { useStore } from "../lib/useStore";
 import * as fileSystemAdapter from "../lib/adapters/fileSystemAdapter";
+import { FolderOpen } from "lucide-vue-next";
 
 const router = useRouter();
 const { addProject } = useStore();
@@ -27,7 +28,8 @@ const isValid = computed(() => {
 function validate(): boolean {
   errors.value = {};
   if (!form.value.name.trim()) errors.value.name = "Project name is required";
-  if (!form.value.folderPath.trim()) errors.value.folderPath = "Folder path is required";
+  if (!form.value.folderPath.trim())
+    errors.value.folderPath = "Folder path is required";
   return Object.keys(errors.value).length === 0;
 }
 
@@ -38,21 +40,27 @@ async function handleChooseFolder() {
   }
 }
 
-function handleSave() {
+async function handleSave() {
   if (!validate()) return;
 
-  addProject({
-    name: form.value.name.trim(),
-    folderPath: form.value.folderPath.trim(),
-    repoUrl: form.value.repoUrl.trim() || undefined,
-    defaultBranch: form.value.defaultBranch || "main",
-    docsFolder: form.value.docsFolder.trim() || undefined,
-    terminalDir: form.value.terminalDir.trim() || undefined,
-    defaultAgentCli: form.value.defaultAgentCli || null,
-    notes: form.value.notes.trim() || undefined,
-  });
+  try {
+    await addProject({
+      name: form.value.name.trim(),
+      folderPath: form.value.folderPath.trim(),
+      repoUrl: form.value.repoUrl.trim() || undefined,
+      defaultBranch: form.value.defaultBranch || "main",
+      docsFolder: form.value.docsFolder.trim() || undefined,
+      terminalDir: form.value.terminalDir.trim() || undefined,
+      defaultAgentCli: form.value.defaultAgentCli || null,
+      notes: form.value.notes.trim() || undefined,
+    });
 
-  router.push("/");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    router.push("/");
+  } catch (e) {
+    console.error("Failed to add project:", e);
+    alert("Failed to create project. Please check the folder path and try again.");
+  }
 }
 
 function handleCancel() {
@@ -61,114 +69,107 @@ function handleCancel() {
 </script>
 
 <template>
-  <div class="max-w-2xl mx-auto space-y-6">
+  <div class="max-w-2xl mx-auto space-y-8 animate-fade-in">
     <div>
-      <h1 class="text-2xl font-bold">Add Project</h1>
-      <p class="text-sm mt-1" style="color: var(--muted-foreground)">
+      <h1 class="text-title">Add Project</h1>
+      <p class="text-body text-muted mt-1">
         Add a project to Openmesh. All work context will be anchored to this project.
       </p>
     </div>
 
-    <form @submit.prevent="handleSave" class="space-y-4">
+    <form @submit.prevent="handleSave" class="space-y-6">
       <!-- Required fields -->
-      <div class="space-y-4 rounded-lg border p-4" style="border-color: var(--border)">
-        <div class="text-xs font-medium uppercase tracking-wider" style="color: var(--muted-foreground)">
-          Required
-        </div>
+      <div class="workbench-card p-6 space-y-4">
+        <div class="sidebar-section-label !px-0">Required</div>
 
         <div>
-          <label class="block text-sm font-medium mb-1">Project Name</label>
+          <label class="block text-caption font-medium mb-2 text-muted">Project Name</label>
           <input
             v-model="form.name"
             type="text"
             placeholder="e.g., OpenMesh"
-            class="w-full rounded-md border px-3 py-2 text-sm"
-            style="background: var(--background); border-color: var(--border); color: var(--foreground)"
+            class="input-luxury w-full"
             :class="{ 'border-red-500': errors.name }"
           />
-          <p v-if="errors.name" class="text-xs text-red-500 mt-1">{{ errors.name }}</p>
+          <p v-if="errors.name" class="text-[12px] mt-2" style="color: #ef4444">
+            {{ errors.name }}
+          </p>
         </div>
 
         <div>
-          <label class="block text-sm font-medium mb-1">Local Folder Path</label>
+          <label class="block text-caption font-medium mb-2 text-muted">Local Folder Path</label>
           <div class="flex gap-2">
             <input
               v-model="form.folderPath"
               type="text"
               placeholder="e.g., C:\KJ\Repos\open-mesh-lab"
-              class="flex-1 rounded-md border px-3 py-2 text-sm"
-              style="background: var(--background); border-color: var(--border); color: var(--foreground)"
+              class="input-luxury flex-1"
               :class="{ 'border-red-500': errors.folderPath }"
             />
             <button
               type="button"
               @click="handleChooseFolder"
-              class="rounded-md border px-3 py-2 text-sm font-medium transition-colors whitespace-nowrap"
-              style="border-color: var(--border); color: var(--foreground); background: var(--background)"
+              class="btn-secondary flex items-center gap-1.5"
             >
+              <FolderOpen class="h-4 w-4" />
               Choose Folder
             </button>
           </div>
-          <p v-if="errors.folderPath" class="text-xs text-red-500 mt-1">{{ errors.folderPath }}</p>
+          <p v-if="errors.folderPath" class="text-[12px] mt-2" style="color: #ef4444">
+            {{ errors.folderPath }}
+          </p>
         </div>
       </div>
 
       <!-- Optional fields -->
-      <div class="space-y-4 rounded-lg border p-4" style="border-color: var(--border)">
-        <div class="text-xs font-medium uppercase tracking-wider" style="color: var(--muted-foreground)">
-          Optional
-        </div>
+      <div class="workbench-card p-6 space-y-4">
+        <div class="sidebar-section-label !px-0">Optional</div>
 
         <div>
-          <label class="block text-sm font-medium mb-1">Repo URL or Path</label>
+          <label class="block text-caption font-medium mb-2 text-muted">Repo URL or Path</label>
           <input
             v-model="form.repoUrl"
             type="text"
             placeholder="https://github.com/... or local path"
-            class="w-full rounded-md border px-3 py-2 text-sm"
-            style="background: var(--background); border-color: var(--border); color: var(--foreground)"
+            class="input-luxury w-full"
           />
         </div>
 
         <div>
-          <label class="block text-sm font-medium mb-1">Default Branch</label>
+          <label class="block text-caption font-medium mb-2 text-muted">Default Branch</label>
           <input
             v-model="form.defaultBranch"
             type="text"
             placeholder="main"
-            class="w-full rounded-md border px-3 py-2 text-sm"
-            style="background: var(--background); border-color: var(--border); color: var(--foreground)"
+            class="input-luxury w-full"
           />
         </div>
 
         <div>
-          <label class="block text-sm font-medium mb-1">Docs Folder</label>
+          <label class="block text-caption font-medium mb-2 text-muted">Docs Folder</label>
           <input
             v-model="form.docsFolder"
             type="text"
             placeholder="docs/"
-            class="w-full rounded-md border px-3 py-2 text-sm"
-            style="background: var(--background); border-color: var(--border); color: var(--foreground)"
+            class="input-luxury w-full"
           />
         </div>
 
         <div>
-          <label class="block text-sm font-medium mb-1">Default Terminal Directory</label>
+          <label class="block text-caption font-medium mb-2 text-muted">Default Terminal Directory</label>
           <input
             v-model="form.terminalDir"
             type="text"
             placeholder="Defaults to folder path"
-            class="w-full rounded-md border px-3 py-2 text-sm"
-            style="background: var(--background); border-color: var(--border); color: var(--foreground)"
+            class="input-luxury w-full"
           />
         </div>
 
         <div>
-          <label class="block text-sm font-medium mb-1">Default Agent CLI</label>
+          <label class="block text-caption font-medium mb-2 text-muted">Default Agent CLI</label>
           <select
             v-model="form.defaultAgentCli"
-            class="w-full rounded-md border px-3 py-2 text-sm"
-            style="background: var(--background); border-color: var(--border); color: var(--foreground)"
+            class="input-luxury w-full"
           >
             <option value="">None</option>
             <option value="codex">Codex</option>
@@ -178,13 +179,12 @@ function handleCancel() {
         </div>
 
         <div>
-          <label class="block text-sm font-medium mb-1">Notes</label>
+          <label class="block text-caption font-medium mb-2 text-muted">Notes</label>
           <textarea
             v-model="form.notes"
             rows="3"
             placeholder="Any notes about this project..."
-            class="w-full rounded-md border px-3 py-2 text-sm resize-none"
-            style="background: var(--background); border-color: var(--border); color: var(--foreground)"
+            class="input-luxury w-full resize-none"
           ></textarea>
         </div>
       </div>
@@ -194,17 +194,14 @@ function handleCancel() {
         <button
           type="submit"
           :disabled="!isValid"
-          class="rounded-md px-4 py-2 text-sm font-medium transition-colors"
-          style="background: var(--foreground); color: var(--background)"
-          :class="{ 'opacity-50 cursor-not-allowed': !isValid }"
+          class="btn-primary disabled:opacity-30"
         >
           Save Project
         </button>
         <button
           type="button"
           @click="handleCancel"
-          class="rounded-md px-4 py-2 text-sm font-medium transition-colors"
-          style="border: 1px solid var(--border); color: var(--muted-foreground)"
+          class="btn-secondary"
         >
           Cancel
         </button>

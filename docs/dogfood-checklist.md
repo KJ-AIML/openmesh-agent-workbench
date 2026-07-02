@@ -1,7 +1,7 @@
-# Openmesh v0.2 Dogfood Checklist
+# Openmesh v0.3 Dogfood Checklist
 
-**Purpose:** Verify Openmesh is ready for daily use before dogfooding.  
-**Version:** 0.2.0  
+**Purpose:** Verify Openmesh v0.3 storage architecture is stable for daily use  
+**Version:** 0.3.0  
 **Last Updated:** 2026-01-15
 
 ---
@@ -11,322 +11,476 @@
 ### Build Verification
 - [ ] `npm run build` completes without errors
 - [ ] `cargo check` completes without errors
-- [ ] `npm run dev` starts dev server successfully
 - [ ] No TypeScript type errors
+- [ ] No Rust compilation errors (warnings OK)
 
-### Environment Detection
-- [ ] App shows "Web" badge in sidebar when running in browser
-- [ ] App shows "Desktop" badge in sidebar when running in Tauri
-- [ ] Runtime badge color is correct (blue for Web, green for Desktop)
-
----
-
-## Core Workflow Testing
-
-### 1. Project Management
-- [ ] Can add a new project with required fields (name, folder path)
-- [ ] Can add a project with all optional fields (repo URL, branch, docs folder, terminal dir, default agent CLI, notes)
-- [ ] Project appears in sidebar immediately after creation
-- [ ] Can switch between multiple projects
-- [ ] Current project persists after page refresh
-- [ ] Can edit project details (name, path, repo URL, branch, etc.)
-- [ ] Can change project status (active/archived)
-- [ ] Can delete project from sidebar (hover to see delete button)
-- [ ] Can delete project from Edit Project page
-- [ ] Delete confirmation shows explicit warning about data deletion
-- [ ] Delete confirmation mentions "Original files on disk are NOT deleted"
-- [ ] After deletion, related data is cleaned up (docs, sprints, tasks, sessions, presets)
-- [ ] After deletion, app redirects to Home with no project selected
-
-### 2. Home Dashboard
-- [ ] Home shows "No project selected" state when no project exists
-- [ ] Home shows "Add Project" button in empty state
-- [ ] Home shows project name and folder path when project is selected
-- [ ] Git status section shows branch name
-- [ ] Git status section shows clean/dirty badge
-- [ ] Git status section shows last commit hash (if available)
-- [ ] Git status section shows "Mock" badge in web mode
-- [ ] Git status refresh button works (click to refresh)
-- [ ] Quick actions row shows all buttons (Open Folder, Open Terminal, agent CLIs, View Sprint, View Docs, Agent Sessions, Dev Connector)
-- [ ] Agent CLI buttons are disabled when CLI path is not configured
-- [ ] Agent CLI buttons are enabled when CLI path is configured
-- [ ] Setup Checklist section shows all 6 items
-- [ ] Setup Checklist shows correct done/not-done status
-- [ ] Setup Checklist items are clickable and navigate to correct pages
-- [ ] Recent Work section shows recent items with type icons
-- [ ] Recent Work section shows "No recent work yet" when empty
-- [ ] Recent Work items show correct emoji icons (📁 project, ⌨️ terminal, 🤖 agent, etc.)
-- [ ] Active Sprint section shows sprint name and task list
-- [ ] Active Sprint section shows "No sprint configured" when no sprint exists
-- [ ] Agent Sessions section shows recent sessions
-- [ ] Agent Sessions section shows "No agent sessions" when empty
-- [ ] System Status section shows provider and agent CLI status
-
-### 3. Docs Page
-- [ ] Docs page shows 7 doc source cards (specs, engineering, api, sprint, research, architecture, agent-instructions)
-- [ ] Each card shows title, description, and connected/not-connected badge
-- [ ] Can connect a doc source (click Connect button)
-- [ ] Connecting a doc source opens folder picker (native in Tauri, prompt in web)
-- [ ] After connecting, card shows connected path and file count
-- [ ] Can disconnect a doc source (click Disconnect button)
-- [ ] Can toggle agent context on/off for connected doc sources
-- [ ] Agent context badge shows "Agent context: ON" when enabled
-
-### 4. Sprint Page
-- [ ] Sprint page shows "No sprint source configured" when no sprint exists
-- [ ] Can create mock sprint (click "Use Mock Sprint" button)
-- [ ] After creating mock sprint, page shows sprint name and status
-- [ ] Sprint page shows task list with status and priority badges
-- [ ] Can filter tasks by status (all, pending, in-progress, blocked, completed)
-- [ ] Can click task to see detail panel
-- [ ] Task detail panel shows status and priority dropdowns
-- [ ] Can change task status via dropdown
-- [ ] Can change task priority via dropdown
-- [ ] Can mark task as active (click "Mark Active" button)
-- [ ] Progress bar shows correct completion percentage
-- [ ] Sprint data persists after page refresh
-
-### 5. Agent Sessions Page
-- [ ] Agent Sessions page shows mock sessions for current project
-- [ ] Each session shows tool icon, title, status badge, and timestamp
-- [ ] Mock sessions show "Mock" badge
-- [ ] Can filter sessions by tool (all, codex, claude-code, opencode)
-- [ ] Can click session to see detail panel
-- [ ] Session detail panel shows tool, status, last active time, summary
-- [ ] Session detail panel shows changed files list (if available)
-- [ ] Can mark session as important (click "Mark Important" button)
-- [ ] Important sessions show ⭐ icon
-- [ ] Can delete session from index (click "Delete from Index" button)
-- [ ] Delete confirmation mentions "Original files are not deleted"
-- [ ] Can attach session to task (select task from dropdown)
-- [ ] Scan Sessions button works (in Tauri mode with session dirs configured)
-- [ ] Scanned sessions show "Real" badge
-- [ ] Scanned sessions show file size and path
-- [ ] Scanned sessions show preview (with secrets redacted)
-
-### 6. Dev Connector Page
-- [ ] Dev Connector page shows project context (name, path, terminal dir, agent CLI)
-- [ ] Terminal Launcher section shows working directory
-- [ ] Can open terminal (click "Open Terminal" button)
-- [ ] Git Status section shows branch, clean/dirty status, last commit
-- [ ] Git Status section shows "Mock" or "Real" badge
-- [ ] Git Status refresh button works (click to refresh)
-- [ ] Agent CLI Paths section shows configured paths for codex, claude, opencode
-- [ ] Unconfigured CLIs show "Not configured" in yellow
-- [ ] Configured CLIs show path in foreground color
-- [ ] Can launch agent CLI (click "Open Codex/Claude Code/OpenCode" button)
-- [ ] Unconfigured agent buttons are disabled
-- [ ] Command Presets section shows list of presets
-- [ ] Each preset shows name, command, args, and risk level badge
-- [ ] Can run a preset (click "Run" button)
-- [ ] Running a preset opens terminal and executes command (in Tauri mode)
-- [ ] Running a dangerous preset shows confirmation dialog
-- [ ] Running a caution preset shows confirmation dialog
-- [ ] Can copy preset command (click "Copy" button)
-- [ ] Can delete preset (click "✕" button)
-- [ ] Delete preset shows confirmation dialog
-- [ ] Can add new preset (fill form and click "Add Preset")
-- [ ] New preset appears in list immediately
-
-### 7. Settings Page
-- [ ] Settings page shows Configuration Status section with 6 items
-- [ ] Configuration Status shows correct done/not-done badges
-- [ ] Provider section shows provider name, API key status, default model
-- [ ] API key section shows "Dev-only" badge
-- [ ] API key section shows "Status tracking only. The key value is not stored" notice
-- [ ] Can mark API key as configured (enter key and click "Mark Configured")
-- [ ] Can change API key (click "Change" button)
-- [ ] Models section shows coding, research, summarization model inputs
-- [ ] Can save models (click "Save Models" button)
-- [ ] Server section shows API base URL, health status
-- [ ] Can check server health (click "Check" button)
-- [ ] Can save server settings (click "Save Server" button)
-- [ ] Agent CLIs section shows codex, claude, opencode path inputs
-- [ ] Each CLI path has "Validate" button
-- [ ] Can validate CLI path (click "Validate" button)
-- [ ] Validation shows "✓ Valid" or "✗ Invalid" feedback
-- [ ] Can save agent CLIs (click "Save Agent CLIs" button)
-- [ ] Session Directories section shows codex, claude, opencode dir inputs
-- [ ] Each session dir has "Choose Folder" and "Validate" buttons
-- [ ] Can choose session directory (click "Choose Folder" button)
-- [ ] Can validate session directory (click "Validate" button)
-- [ ] Can save session directories (click "Save Session Directories" button)
-- [ ] Local Paths section shows default projects directory input
-- [ ] Can choose projects directory (click "Choose Folder" button)
-- [ ] Can validate projects directory (click "Validate" button)
-- [ ] Can save local paths (click "Save Paths" button)
-- [ ] Appearance section shows theme and font size dropdowns
-- [ ] Can save appearance settings (click "Save Appearance" button)
-- [ ] Data Storage section shows storage size
-- [ ] Data Storage section shows "⚠️ Dev-only" warning about localStorage
-- [ ] Can export data (click "Export Data" button)
-- [ ] Export file has timestamp in filename (e.g., `openmesh-export-2026-01-15T14-30-45.json`)
-- [ ] Can import data (click "Import Data" button, select file)
-- [ ] Import shows success toast and reloads page
-- [ ] Import shows error toast if file is invalid
-- [ ] Can reset all data (click "Reset All Data" button)
-- [ ] Reset confirmation shows explicit list of what gets deleted
-- [ ] Reset confirmation mentions "Original files on disk are NOT affected"
-- [ ] Reset confirmation mentions "This cannot be undone"
-- [ ] Reset clears all data and reloads page
+### Environment Setup
+- [ ] Delete `~/.openmesh/` if it exists (clean slate)
+- [ ] Identify a test project directory (not your real projects!)
+- [ ] Ensure test project is NOT a Git repository (for initial tests)
 
 ---
 
-## Data Persistence Testing
+## Storage Architecture Tests
 
-### localStorage Persistence
-- [ ] Projects persist after page refresh
-- [ ] Current project persists after page refresh
-- [ ] Doc sources persist after page refresh
-- [ ] Sprints persist after page refresh
-- [ ] Tasks persist after page refresh
-- [ ] Agent sessions persist after page refresh
-- [ ] Command presets persist after page refresh
-- [ ] Settings persist after page refresh
-- [ ] Recent work persists after page refresh
+### 1. First Launch (Clean State)
 
-### Export/Import/Reset
-- [ ] Export creates valid JSON file
-- [ ] Export file contains all openmesh data
-- [ ] Export file includes `_version` field
-- [ ] Import restores all data correctly
-- [ ] Import shows warnings for version mismatch
-- [ ] Import rejects non-object JSON
-- [ ] Import rejects arrays
-- [ ] Import validates array keys (projects, doc-sources, etc.)
-- [ ] Import validates object keys (settings, app-state)
-- [ ] Import skips invalid keys with warnings
-- [ ] Reset clears all openmesh data
-- [ ] Reset does not affect non-openmesh localStorage keys
+**Setup:** Delete `~/.openmesh/` directory
+
+**Tests:**
+- [ ] Launch app - should not crash
+- [ ] Check `~/.openmesh/` is created automatically
+- [ ] Check `~/.openmesh/settings.json` exists with default values
+- [ ] Check `~/.openmesh/projects.json` exists (empty array)
+- [ ] Check `~/.openmesh/app-state.json` exists (null currentProjectId)
+- [ ] UI shows "No project selected" state
+- [ ] No errors in browser console
+- [ ] No errors in Rust console
+
+**Expected files:**
+```
+~/.openmesh/
+├── settings.json       # Default settings
+├── projects.json       # []
+└── app-state.json      # { "currentProjectId": null }
+```
+
+### 2. Add Project
+
+**Setup:** Have a test project directory ready (e.g., `C:\KJ\Repos\test-project`)
+
+**Tests:**
+- [ ] Click "Add Project" button
+- [ ] Select test project folder via dialog
+- [ ] Enter project name
+- [ ] Click "Save Project"
+- [ ] Check `~/.openmesh/projects.json` contains the project path
+- [ ] Check `~/.openmesh/app-state.json` has currentProjectId set
+- [ ] Check `<project>/.openmesh/` directory is created
+- [ ] Check `<project>/.openmesh/project.json` exists with project metadata
+- [ ] Check `<project>/.openmesh/docs/` directory is created
+- [ ] Check `<project>/.openmesh/notes/` directory is created
+- [ ] Check `<project>/.openmesh/sessions.json` exists (empty array)
+- [ ] Check `<project>/.openmesh/tasks.json` exists (empty array)
+- [ ] Check `<project>/.openmesh/presets.json` exists (default presets)
+- [ ] Check `<project>/.openmesh/recent.json` exists (empty array)
+- [ ] UI shows project in sidebar
+- [ ] UI shows project as active
+
+**Expected files:**
+```
+<project>/.openmesh/
+├── project.json        # Project metadata
+├── docs/               # Empty directory
+├── notes/              # Empty directory
+├── sessions.json       # []
+├── tasks.json          # []
+├── presets.json        # Default presets
+└── recent.json         # []
+```
+
+### 3. Create and Edit Notes
+
+**Tests:**
+- [ ] Navigate to Notes page
+- [ ] Click "New Note" button
+- [ ] Enter note title
+- [ ] Enter note content (markdown)
+- [ ] Wait 1 second (auto-save)
+- [ ] Check `<project>/.openmesh/notes/<filename>.md` exists
+- [ ] Check file content matches what you typed
+- [ ] Edit the note
+- [ ] Wait 1 second
+- [ ] Check file is updated
+- [ ] Create another note
+- [ ] Check both notes appear in list
+- [ ] Close app
+- [ ] Reopen app
+- [ ] Check notes persist
+- [ ] Check note content is intact
+
+### 4. Create and Edit Docs
+
+**Tests:**
+- [ ] Navigate to Docs page
+- [ ] Click "New Doc" button
+- [ ] Enter doc title
+- [ ] Enter doc content (markdown)
+- [ ] Check `<project>/.openmesh/docs/<filename>.md` exists
+- [ ] Check file content matches what you typed
+- [ ] Edit the doc
+- [ ] Check file is updated
+- [ ] Close app
+- [ ] Reopen app
+- [ ] Check docs persist
+
+### 5. Drag and Drop Import
+
+**Setup:** Create a test markdown file on your desktop
+
+**Tests:**
+- [ ] Drag `.md` file onto Notes page
+- [ ] Check file is imported to `<project>/.openmesh/notes/`
+- [ ] Check file content is preserved
+- [ ] Check note appears in list
+- [ ] Drag `.md` file onto Docs page
+- [ ] Check file is imported to `<project>/.openmesh/docs/`
+- [ ] Check file content is preserved
+- [ ] Check doc appears in list
+
+### 6. Switch Projects
+
+**Setup:** Add a second project
+
+**Tests:**
+- [ ] Add second project
+- [ ] Check both projects appear in sidebar
+- [ ] Click first project
+- [ ] Check first project's notes/docs are shown
+- [ ] Click second project
+- [ ] Check second project's notes/docs are shown (should be empty)
+- [ ] Check `~/.openmesh/app-state.json` updates to second project
+- [ ] Close app
+- [ ] Reopen app
+- [ ] Check second project is still active
+
+### 7. Delete Project
+
+**Tests:**
+- [ ] Select a project with notes/docs
+- [ ] Click delete button (or use Edit Project page)
+- [ ] Confirm deletion
+- [ ] Check `<project>/.openmesh/` directory is deleted
+- [ ] Check project is removed from sidebar
+- [ ] Check `~/.openmesh/projects.json` no longer contains the path
+- [ ] **CRITICAL:** Check user source files are NOT deleted
+- [ ] Check other projects are not affected
+- [ ] Check app does not crash
+
+### 8. Corrupt File Recovery
+
+**Setup:** Close the app
+
+**Tests:**
+- [ ] Open `<project>/.openmesh/tasks.json` in a text editor
+- [ ] Replace content with invalid JSON: `{ this is not valid json }`
+- [ ] Save the file
+- [ ] Launch app
+- [ ] Check app does not crash
+- [ ] Check console shows warning about corrupt file
+- [ ] Check `tasks.json.corrupt-<timestamp>.bak` exists
+- [ ] Check `tasks.json` is recreated with default data (empty array)
+- [ ] Check app continues to work normally
+- [ ] Repeat test with `sessions.json`
+- [ ] Repeat test with `presets.json`
+- [ ] Repeat test with `recent.json`
+- [ ] Repeat test with `~/.openmesh/settings.json`
+- [ ] Repeat test with `~/.openmesh/projects.json`
+- [ ] Repeat test with `~/.openmesh/app-state.json`
+
+### 9. Atomic Write Test
+
+**Setup:** This is hard to test manually, but we can verify the code
+
+**Tests:**
+- [ ] Check `storage.rs` has `atomic_write()` function
+- [ ] Check all `write_global()` calls use atomic write
+- [ ] Check all `write_project()` calls use atomic write
+- [ ] Check temp files have `.tmp` extension
+- [ ] Check rename operation is used (not copy + delete)
+
+### 10. Git Safety Test
+
+**Setup:** Initialize a Git repository in test project
+
+**Tests:**
+- [ ] Run `git init` in test project
+- [ ] Add project to Openmesh (or delete and re-add)
+- [ ] Check `.git/info/exclude` exists
+- [ ] Check `.git/info/exclude` contains `.openmesh/`
+- [ ] Check `.git/info/exclude` contains comment about Openmesh
+- [ ] Create a note
+- [ ] Run `git status`
+- [ ] Check `.openmesh/` is NOT shown as untracked
+- [ ] Check other files are still tracked normally
+- [ ] Run `git add .`
+- [ ] Run `git status`
+- [ ] Check `.openmesh/` is still not staged
+
+### 11. Export Test
+
+**Tests:**
+- [ ] Navigate to Settings page
+- [ ] Click "Export Project" button
+- [ ] Check JSON file is downloaded
+- [ ] Open JSON file
+- [ ] Check `schemaVersion` field exists and is "1.0.0"
+- [ ] Check `project` field contains project metadata
+- [ ] Check `docs` array contains all docs with content
+- [ ] Check `notes` array contains all notes with content
+- [ ] Check `tasks` array contains all tasks
+- [ ] Check `sessions` array contains all sessions
+- [ ] Check `presets` array contains all presets
+- [ ] Check `recent` array contains recent items
+- [ ] Validate JSON is well-formed
+
+### 12. Reset All Data Test
+
+**WARNING:** This will delete ALL Openmesh data!
+
+**Setup:** Add multiple projects with notes/docs
+
+**Tests:**
+- [ ] Navigate to Settings page
+- [ ] Click "Reset All Data" button
+- [ ] Confirm the warning dialog
+- [ ] Check `~/.openmesh/` is deleted
+- [ ] Check all `<project>/.openmesh/` directories are deleted
+- [ ] Check `~/.openmesh/` is recreated with default settings
+- [ ] Check all projects are removed from sidebar
+- [ ] Check app returns to "No project selected" state
+- [ ] **CRITICAL:** Check user source files are NOT deleted
+- [ ] Check app continues to work normally
+
+### 13. Concurrent Access Test
+
+**Setup:** Open app in two windows (if possible)
+
+**Tests:**
+- [ ] Open app in window 1
+- [ ] Open app in window 2 (if Tauri allows)
+- [ ] Edit a note in window 1
+- [ ] Check note is saved
+- [ ] Edit the same note in window 2
+- [ ] Check note is saved (last write wins)
+- [ ] Check no corruption occurs
+- [ ] Check no temp files are left behind
+
+### 14. Large Data Test
+
+**Setup:** Create many notes/docs
+
+**Tests:**
+- [ ] Create 50 notes
+- [ ] Check all notes appear in list
+- [ ] Check list is scrollable
+- [ ] Check performance is acceptable
+- [ ] Create 50 docs
+- [ ] Check all docs appear in list
+- [ ] Check performance is acceptable
+- [ ] Close app
+- [ ] Reopen app
+- [ ] Check all data persists
+- [ ] Check startup time is acceptable
+
+### 15. Path Edge Cases
+
+**Tests:**
+- [ ] Add project with spaces in path
+- [ ] Add project with special characters in path
+- [ ] Add project with unicode characters in path
+- [ ] Add project with very long path
+- [ ] Check all projects work correctly
+- [ ] Check notes/docs can be created
+- [ ] Check data persists correctly
+
+### 16. Missing Project Directory
+
+**Setup:** Delete a project directory while app is closed
+
+**Tests:**
+- [ ] Close app
+- [ ] Delete project directory from filesystem
+- [ ] Launch app
+- [ ] Check app does not crash
+- [ ] Check project still appears in sidebar (or is removed)
+- [ ] Check error message is shown (if any)
+- [ ] Check other projects are not affected
+- [ ] Check app continues to work
+
+### 17. Permission Denied Test
+
+**Setup:** Make a project directory read-only
+
+**Tests:**
+- [ ] Make `<project>/.openmesh/` read-only (if possible)
+- [ ] Try to create a note
+- [ ] Check error message is shown
+- [ ] Check app does not crash
+- [ ] Restore write permissions
+- [ ] Try to create a note again
+- [ ] Check note is created successfully
+
+### 18. Disk Full Test
+
+**Setup:** This is hard to test, but we can verify error handling
+
+**Tests:**
+- [ ] Check `storage.rs` has error handling for write failures
+- [ ] Check errors are propagated to frontend
+- [ ] Check error messages are shown to user
+- [ ] Check app does not crash on write failure
+
+### 19. Schema Migration Test (Future)
+
+**Note:** This test is for future versions when schema changes
+
+**Tests:**
+- [ ] Export data with v0.3 schema
+- [ ] Modify `schemaVersion` to "2.0.0"
+- [ ] Try to import (when import is implemented)
+- [ ] Check migration warning is shown
+- [ ] Check data is migrated correctly (or rejected)
+
+### 20. Concurrent Project Access
+
+**Setup:** Two projects with same note filename
+
+**Tests:**
+- [ ] Create `test.md` in project 1
+- [ ] Create `test.md` in project 2
+- [ ] Check both notes exist independently
+- [ ] Edit note in project 1
+- [ ] Check note in project 2 is not affected
+- [ ] Check files are in separate directories
 
 ---
 
-## Safety Testing
+## Performance Tests
 
-### Destructive Actions
-- [ ] Delete project shows confirmation dialog
-- [ ] Delete project confirmation mentions data deletion
-- [ ] Delete project confirmation mentions "Original files on disk are NOT deleted"
-- [ ] Delete project actually removes project from list
-- [ ] Delete project actually removes related data (docs, sprints, tasks, sessions, presets)
-- [ ] Delete project does NOT delete files on disk
-- [ ] Reset shows confirmation dialog
-- [ ] Reset confirmation lists all data that will be deleted
-- [ ] Reset confirmation mentions "Original files on disk are NOT affected"
-- [ ] Reset confirmation mentions "This cannot be undone"
-- [ ] Reset actually clears all data
-- [ ] Reset does NOT delete files on disk
+### Startup Time
+- [ ] Measure time from launch to "ready" state
+- [ ] Should be < 2 seconds on SSD
+- [ ] Should be < 5 seconds on HDD
 
-### Command Preset Safety
-- [ ] Safe presets run without confirmation
-- [ ] Caution presets show confirmation dialog
-- [ ] Dangerous presets show confirmation dialog with warning
-- [ ] Rust backend blocks `rm -rf` pattern
-- [ ] Rust backend blocks `rm -fr` pattern
-- [ ] Rust backend blocks `del /s` pattern
-- [ ] Rust backend blocks `del /f` pattern
-- [ ] Rust backend blocks `rmdir /s` pattern
-- [ ] Rust backend blocks `git reset --hard` pattern
-- [ ] Rust backend blocks `git clean -fd` pattern
-- [ ] Rust backend blocks `git push --force` pattern
-- [ ] Rust backend blocks `git push -f` pattern
-- [ ] Rust backend blocks `format c:` pattern
-- [ ] Rust backend blocks `format d:` pattern
-- [ ] Rust backend blocks `format e:` pattern
-- [ ] Rust backend blocks `mkfs` pattern
-- [ ] Rust backend does NOT block `npm run format` (false positive fixed)
-- [ ] Blocked commands return error message with pattern name
+### Note List Rendering
+- [ ] Create 100 notes
+- [ ] Measure time to render list
+- [ ] Should be < 500ms
 
-### Agent CLI Safety
-- [ ] Agent CLI launcher only accepts `codex`, `claude`, `claude-code`, `opencode`
-- [ ] Agent CLI launcher rejects unknown tools with error message
-- [ ] Agent CLI launcher validates cwd exists and is a directory
-- [ ] Agent CLI launcher returns error if cwd is invalid
+### Search Performance
+- [ ] Create 100 notes
+- [ ] Search for a note
+- [ ] Should be < 200ms
 
-### Session Scanner Safety
-- [ ] Session scanner validates directory exists
-- [ ] Session scanner returns error if directory is invalid
-- [ ] Session scanner only accepts `codex`, `claude`, `claude-code`, `opencode`
-- [ ] Session scanner rejects unknown tools with error message
-- [ ] Session scanner skips symlinks (does not follow them)
-- [ ] Session scanner skips directories
-- [ ] Session scanner only reads files with allowed extensions (json, jsonl, md, txt, log)
-- [ ] Session scanner limits results to configured limit (default 100)
-- [ ] Session scanner redacts secrets in preview (sk-*, ghp_*, AKIA*, Bearer tokens, key=value)
+### Export Performance
+- [ ] Create 50 notes with large content
+- [ ] Export project
+- [ ] Should complete in < 5 seconds
 
 ---
 
-## Edge Cases
+## Security Tests
+
+### File Permissions
+- [ ] Check `.openmesh/` directories are created with appropriate permissions
+- [ ] Check JSON files are not world-readable (if possible)
+- [ ] Check sensitive data is not logged to console
+
+### Path Traversal
+- [ ] Try to create note with `../` in filename
+- [ ] Check file is created inside `notes/` directory
+- [ ] Check no files are created outside `.openmesh/`
+
+### SQL Injection (N/A)
+- [ ] Not applicable (no SQL database)
+
+### XSS (N/A)
+- [ ] Not applicable (no web server)
+
+---
+
+## Data Integrity Tests
+
+### JSON Validation
+- [ ] Check all JSON files are valid
+- [ ] Use `jq` or similar tool to validate
+- [ ] Check no trailing commas
+- [ ] Check proper escaping of special characters
+
+### Markdown Rendering
+- [ ] Create note with complex markdown
+- [ ] Check rendering is correct
+- [ ] Check code blocks are preserved
+- [ ] Check links are preserved
+- [ ] Check images are preserved (if supported)
+
+### File Encoding
+- [ ] Create note with unicode characters
+- [ ] Check file is saved as UTF-8
+- [ ] Check characters are preserved after reload
+
+---
+
+## User Experience Tests
+
+### Error Messages
+- [ ] Trigger various errors (corrupt file, permission denied, etc.)
+- [ ] Check error messages are clear and actionable
+- [ ] Check error messages are not technical jargon
+
+### Loading States
+- [ ] Check loading indicator is shown during async operations
+- [ ] Check UI is not frozen during loading
+- [ ] Check loading completes successfully
 
 ### Empty States
-- [ ] Home shows empty state when no project exists
-- [ ] Docs shows empty state when no doc sources exist (should not happen, but test anyway)
-- [ ] Sprint shows empty state when no sprint exists
-- [ ] Agent Sessions shows empty state when no sessions exist
-- [ ] Recent Work shows empty state when no recent items exist
-- [ ] Command Presets shows empty state when no presets exist
+- [ ] Check "No project selected" state is clear
+- [ ] Check "No notes yet" state is clear
+- [ ] Check "No docs yet" state is clear
+- [ ] Check empty states have helpful guidance
 
-### Invalid Data
-- [ ] App handles invalid project path gracefully (shows error, does not crash)
-- [ ] App handles invalid session directory gracefully (shows error, does not crash)
-- [ ] App handles invalid CLI path gracefully (shows error, does not crash)
-- [ ] App handles invalid import JSON gracefully (shows error, does not crash)
-- [ ] App handles missing localStorage gracefully (uses defaults, does not crash)
-
-### Concurrent Operations
-- [ ] Can switch projects while on any page
-- [ ] Switching project updates all scoped data (docs, sprints, tasks, sessions, presets)
-- [ ] Can add project while on Home page
-- [ ] Can edit project while on Edit Project page
-- [ ] Can delete project while on any page
+### Confirmation Dialogs
+- [ ] Check delete project has confirmation
+- [ ] Check reset all data has confirmation
+- [ ] Check confirmation messages are clear about consequences
 
 ---
 
-## Web Mode vs Desktop Mode
+## Regression Tests
 
-### Web Mode (Browser)
-- [ ] Folder picker uses `prompt()` dialog
-- [ ] Git status returns mock data
-- [ ] Terminal launch shows alert
-- [ ] Agent CLI launch shows alert
-- [ ] Session scanning returns empty array
-- [ ] Command preset execution shows alert
-- [ ] All features work without errors
+### v0.2 Features Still Work
+- [ ] Add project
+- [ ] Edit project
+- [ ] Delete project
+- [ ] Switch projects
+- [ ] Open terminal
+- [ ] Launch agent CLI
+- [ ] Run command preset
+- [ ] View git status
+- [ ] Scan agent sessions
 
-### Desktop Mode (Tauri)
-- [ ] Folder picker uses native dialog
-- [ ] Git status returns real data
-- [ ] Terminal launch opens terminal
-- [ ] Agent CLI launch opens agent CLI
-- [ ] Session scanning returns real sessions
-- [ ] Command preset execution opens terminal and runs command
-- [ ] All features work without errors
-
----
-
-## Performance
-
-- [ ] Home page loads in < 1 second
-- [ ] Project switching is instant (< 100ms)
-- [ ] Git status refresh is fast (< 500ms)
-- [ ] Session scanning is fast (< 2 seconds for 100 sessions)
-- [ ] Export is fast (< 1 second)
-- [ ] Import is fast (< 1 second)
-- [ ] Reset is instant (< 100ms)
+### Settings Persistence
+- [ ] Change theme
+- [ ] Change agent CLI paths
+- [ ] Change session directories
+- [ ] Close app
+- [ ] Reopen app
+- [ ] Check settings persist
 
 ---
 
 ## Final Checks
 
-- [ ] All builds pass (`npm run build`, `cargo check`)
-- [ ] No console errors in browser dev tools
-- [ ] No TypeScript errors
-- [ ] App feels smooth and responsive
-- [ ] All destructive actions have clear warnings
-- [ ] All safety controls work as expected
-- [ ] Data persists correctly
-- [ ] Export/import/reset work correctly
-- [ ] App is ready for daily dogfood use
+### Console Errors
+- [ ] Check browser console for errors
+- [ ] Check Rust console for errors
+- [ ] All errors should be investigated and fixed
+
+### Memory Leaks
+- [ ] Use app for 30 minutes
+- [ ] Check memory usage is stable
+- [ ] Check no memory leaks in Task Manager
+
+### File Handles
+- [ ] Use app for 30 minutes
+- [ ] Check no file handle leaks
+- [ ] Check all files are closed properly
+
+### Temp Files
+- [ ] Use app for 30 minutes
+- [ ] Check no `.tmp` files are left behind
+- [ ] Check no `.corrupt-*.bak` files unless intentional
 
 ---
 
@@ -336,6 +490,13 @@
 **Date:** _________________  
 **Result:** [ ] PASS  [ ] FAIL  
 **Notes:** _______________________________________________
+
+**Issues Found:**
+1. _______________________________________________
+2. _______________________________________________
+3. _______________________________________________
+
+**Recommendation:** [ ] Ready for daily use  [ ] Needs fixes  [ ] Not ready
 
 ---
 

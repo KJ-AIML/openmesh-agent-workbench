@@ -33,7 +33,7 @@ export interface TerminalOptions {
 }
 
 export interface StorageStatus {
-	storageType: "localStorage" | "sqlite" | "json";
+	storageType: "localStorage" | "sqlite" | "json" | "file-based";
 	storagePath?: string;
 	storageSize: number;
 	version: string;

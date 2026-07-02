@@ -2,6 +2,7 @@
 import { computed } from "vue";
 import { useRoute } from "vue-router";
 import Sidebar from "./components/Sidebar.vue";
+import Titlebar from "./components/Titlebar.vue";
 import { useStore } from "./lib/useStore";
 
 const route = useRoute();
@@ -12,6 +13,7 @@ const pageLabels: Record<string, string> = {
   "/status": "Status",
   "/usage": "Usage",
   "/docs": "Docs",
+  "/notes": "Notes",
   "/sprint": "Sprint",
   "/models": "Models",
   "/server": "Server",
@@ -25,7 +27,6 @@ const breadcrumb = computed(() => {
   const page = pageLabels[route.path] ?? "Page";
   if (route.path === "/" || !currentProject.value) return [page];
   if (page === "Home") return [currentProject.value.name];
-  // Handle edit project page
   if (route.path.startsWith("/projects/") && route.path.endsWith("/edit")) {
     return ["Edit Project"];
   }
@@ -35,36 +36,46 @@ const breadcrumb = computed(() => {
 
 <template>
   <div
-    class="flex min-h-screen w-full"
+    class="flex flex-col h-screen w-full overflow-hidden"
     style="background: var(--background); color: var(--foreground)"
   >
-    <Sidebar />
+    <!-- Custom Titlebar -->
+    <Titlebar />
 
-    <div class="flex flex-1 flex-col min-w-0">
-      <!-- Header with breadcrumb -->
-      <header
-        class="sticky top-0 z-10 flex h-14 items-center gap-1 border-b px-4 backdrop-blur"
-        style="
-          border-color: var(--border);
-          background: color-mix(in srgb, var(--background) 80%, transparent);
-        "
-      >
-        <nav class="flex items-center gap-1 text-sm">
-          <template v-for="(crumb, idx) in breadcrumb" :key="idx">
-            <span v-if="idx > 0" class="px-1 opacity-40" style="color: var(--muted-foreground)">/</span>
-            <span
-              :class="idx === breadcrumb.length - 1 ? '' : 'opacity-60'"
-              style="color: var(--muted-foreground)"
-            >
-              {{ crumb }}
-            </span>
-          </template>
-        </nav>
-      </header>
+    <div class="flex flex-1 min-h-0">
+      <!-- Sidebar -->
+      <Sidebar />
 
-      <main class="flex-1 p-4 md:p-6 lg:p-8">
-        <router-view />
-      </main>
+      <!-- Main Content -->
+      <div class="flex flex-1 flex-col min-w-0">
+        <!-- Breadcrumb header -->
+        <header
+          class="flex h-11 items-center px-5"
+          style="border-bottom: 1px solid var(--border)"
+        >
+          <nav class="flex items-center gap-1.5 text-[12px]">
+            <template v-for="(crumb, idx) in breadcrumb" :key="idx">
+              <span
+                v-if="idx > 0"
+                class="px-0.5"
+                style="color: var(--muted-foreground); opacity: 0.4"
+                >/</span
+              >
+              <span
+                :class="idx === breadcrumb.length - 1 ? 'font-semibold' : 'font-medium opacity-60'"
+                style="color: var(--foreground)"
+              >
+                {{ crumb }}
+              </span>
+            </template>
+          </nav>
+        </header>
+
+        <!-- Main content area -->
+        <main class="flex-1 overflow-y-auto p-5 animate-fade-in">
+          <router-view />
+        </main>
+      </div>
     </div>
   </div>
 </template>

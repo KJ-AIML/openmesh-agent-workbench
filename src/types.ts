@@ -104,6 +104,16 @@ export type AgentSession = {
 	updatedAt: string;
 };
 
+export type Note = {
+	id: string;
+	projectId?: string;
+	title: string;
+	content: string;
+	tags?: string[];
+	createdAt: string;
+	updatedAt: string;
+};
+
 export type ScannedSession = {
 	id: string;
 	toolName: string;

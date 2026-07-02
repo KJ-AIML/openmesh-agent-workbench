@@ -62,6 +62,7 @@
     "input-otp": "^1.4.2",
     "lucide-react": "^0.525.0",
     "lucide-vue-next": "^0.468.0",
+    "marked": "^18.0.5",
     "next": "^16.1.1",
     "next-auth": "^4.24.11",
     "next-intl": "^4.3.4",

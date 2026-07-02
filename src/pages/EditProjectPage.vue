@@ -1,15 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
-import { useRouter, useRoute } from "vue-router";
+import { ref, onMounted } from "vue";
+import { useRouter } from "vue-router";
 import { useStore } from "../lib/useStore";
 import * as fileSystemAdapter from "../lib/adapters/fileSystemAdapter";
+import { FolderOpen, Trash2 } from "lucide-vue-next";
 
 const router = useRouter();
-const route = useRoute();
-const { projects, updateProject, deleteProject, selectProject } = useStore();
-
-const projectId = route.params.id as string;
-const project = computed(() => projects.value.find((p) => p.id === projectId));
+const { currentProject, updateProject, deleteProject } = useStore();
 
 const form = ref({
   name: "",
@@ -26,43 +23,44 @@ const form = ref({
 const errors = ref<Record<string, string>>({});
 
 onMounted(() => {
-  if (project.value) {
+  if (currentProject.value) {
     form.value = {
-      name: project.value.name,
-      folderPath: project.value.folderPath,
-      repoUrl: project.value.repoUrl || "",
-      defaultBranch: project.value.defaultBranch || "main",
-      docsFolder: project.value.docsFolder || "",
-      terminalDir: project.value.terminalDir || "",
-      defaultAgentCli: project.value.defaultAgentCli || "",
-      notes: project.value.notes || "",
-      status: project.value.status,
+      name: currentProject.value.name,
+      folderPath: currentProject.value.folderPath,
+      repoUrl: currentProject.value.repoUrl || "",
+      defaultBranch: currentProject.value.defaultBranch || "main",
+      docsFolder: currentProject.value.docsFolder || "",
+      terminalDir: currentProject.value.terminalDir || "",
+      defaultAgentCli: (currentProject.value.defaultAgentCli as any) || "",
+      notes: currentProject.value.notes || "",
+      status: currentProject.value.status,
     };
   }
 });
 
-const isValid = computed(() => {
-  return form.value.name.trim() !== "" && form.value.folderPath.trim() !== "";
-});
+const isValid = ref(false);
 
 function validate(): boolean {
   errors.value = {};
   if (!form.value.name.trim()) errors.value.name = "Project name is required";
-  if (!form.value.folderPath.trim()) errors.value.folderPath = "Folder path is required";
-  return Object.keys(errors.value).length === 0;
+  if (!form.value.folderPath.trim())
+    errors.value.folderPath = "Folder path is required";
+  isValid.value = Object.keys(errors.value).length === 0;
+  return isValid.value;
 }
 
 async function handleChooseFolder() {
   const result = await fileSystemAdapter.pickFolder();
   if (result.success && result.path) {
     form.value.folderPath = result.path;
+    validate();
   }
 }
 
-function handleSave() {
-  if (!validate() || !project.value) return;
+async function handleSave() {
+  if (!validate() || !currentProject.value) return;
 
-  updateProject(project.value.id, {
+  await updateProject({
     name: form.value.name.trim(),
     folderPath: form.value.folderPath.trim(),
     repoUrl: form.value.repoUrl.trim() || undefined,
@@ -77,10 +75,14 @@ function handleSave() {
   router.push("/");
 }
 
-function handleDelete() {
-  if (!project.value) return;
-  if (confirm(`Delete project "${project.value.name}"?\n\nThis will remove all associated data (docs, sprints, tasks, sessions, presets). Original files on disk are NOT deleted.`)) {
-    deleteProject(project.value.id);
+async function handleDelete() {
+  if (!currentProject.value) return;
+  if (
+    confirm(
+      `Delete project "${currentProject.value.name}"?\n\nThis will remove all associated data (docs, sprints, tasks, sessions, presets). Original files on disk are NOT deleted.`,
+    )
+  ) {
+    await deleteProject();
     router.push("/");
   }
 }
@@ -91,83 +93,109 @@ function handleCancel() {
 </script>
 
 <template>
-  <div class="max-w-2xl mx-auto space-y-6">
-    <div v-if="!project" class="rounded-lg border p-8 text-center" style="border-color: var(--border)">
-      <p class="text-lg font-medium">Project not found</p>
-      <button @click="router.push('/')" class="text-sm mt-2 underline" style="color: var(--muted-foreground)">Go home</button>
+  <div class="max-w-2xl mx-auto space-y-8 animate-fade-in">
+    <div v-if="!currentProject" class="workbench-card p-12 text-center">
+      <p class="text-[15px] font-semibold">Project not found</p>
+      <button
+        @click="router.push('/')"
+        class="btn-ghost mt-3 text-[13px] text-muted"
+      >
+        Go home
+      </button>
     </div>
 
     <template v-else>
       <div>
-        <h1 class="text-2xl font-bold">Edit Project</h1>
-        <p class="text-sm mt-1" style="color: var(--muted-foreground)">
+        <h1 class="text-title">Edit Project</h1>
+        <p class="text-body text-muted mt-1">
           Update project settings or delete the project.
         </p>
       </div>
 
-      <form @submit.prevent="handleSave" class="space-y-4">
-        <div class="space-y-4 rounded-lg border p-4" style="border-color: var(--border)">
-          <div class="text-xs font-medium uppercase tracking-wider" style="color: var(--muted-foreground)">
-            Project Details
-          </div>
+      <form @submit.prevent="handleSave" class="space-y-6">
+        <div class="workbench-card p-6 space-y-4">
+          <div class="sidebar-section-label !px-0">Project Details</div>
 
           <div>
-            <label class="block text-sm font-medium mb-1">Project Name</label>
+            <label class="block text-caption font-medium mb-2 text-muted">Project Name</label>
             <input
               v-model="form.name"
               type="text"
-              class="w-full rounded-md border px-3 py-2 text-sm"
-              style="background: var(--background); border-color: var(--border); color: var(--foreground)"
+              class="input-luxury w-full"
               :class="{ 'border-red-500': errors.name }"
+              @input="validate"
             />
-            <p v-if="errors.name" class="text-xs text-red-500 mt-1">{{ errors.name }}</p>
+            <p v-if="errors.name" class="text-[12px] mt-2" style="color: #ef4444">
+              {{ errors.name }}
+            </p>
           </div>
 
           <div>
-            <label class="block text-sm font-medium mb-1">Local Folder Path</label>
+            <label class="block text-caption font-medium mb-2 text-muted">Local Folder Path</label>
             <div class="flex gap-2">
               <input
                 v-model="form.folderPath"
                 type="text"
-                class="flex-1 rounded-md border px-3 py-2 text-sm"
-                style="background: var(--background); border-color: var(--border); color: var(--foreground)"
+                class="input-luxury flex-1"
                 :class="{ 'border-red-500': errors.folderPath }"
+                @input="validate"
               />
               <button
                 type="button"
                 @click="handleChooseFolder"
-                class="rounded-md border px-3 py-2 text-sm font-medium whitespace-nowrap"
-                style="border-color: var(--border); color: var(--foreground); background: var(--background)"
+                class="btn-secondary flex items-center gap-1.5"
               >
+                <FolderOpen class="h-4 w-4" />
                 Choose Folder
               </button>
             </div>
-            <p v-if="errors.folderPath" class="text-xs text-red-500 mt-1">{{ errors.folderPath }}</p>
+            <p v-if="errors.folderPath" class="text-[12px] mt-2" style="color: #ef4444">
+              {{ errors.folderPath }}
+            </p>
           </div>
 
           <div>
-            <label class="block text-sm font-medium mb-1">Repo URL or Path</label>
-            <input v-model="form.repoUrl" type="text" class="w-full rounded-md border px-3 py-2 text-sm" style="background: var(--background); border-color: var(--border); color: var(--foreground)" />
+            <label class="block text-caption font-medium mb-2 text-muted">Repo URL or Path</label>
+            <input
+              v-model="form.repoUrl"
+              type="text"
+              class="input-luxury w-full"
+            />
           </div>
 
           <div>
-            <label class="block text-sm font-medium mb-1">Default Branch</label>
-            <input v-model="form.defaultBranch" type="text" class="w-full rounded-md border px-3 py-2 text-sm" style="background: var(--background); border-color: var(--border); color: var(--foreground)" />
+            <label class="block text-caption font-medium mb-2 text-muted">Default Branch</label>
+            <input
+              v-model="form.defaultBranch"
+              type="text"
+              class="input-luxury w-full"
+            />
           </div>
 
           <div>
-            <label class="block text-sm font-medium mb-1">Docs Folder</label>
-            <input v-model="form.docsFolder" type="text" class="w-full rounded-md border px-3 py-2 text-sm" style="background: var(--background); border-color: var(--border); color: var(--foreground)" />
+            <label class="block text-caption font-medium mb-2 text-muted">Docs Folder</label>
+            <input
+              v-model="form.docsFolder"
+              type="text"
+              class="input-luxury w-full"
+            />
           </div>
 
           <div>
-            <label class="block text-sm font-medium mb-1">Default Terminal Directory</label>
-            <input v-model="form.terminalDir" type="text" class="w-full rounded-md border px-3 py-2 text-sm" style="background: var(--background); border-color: var(--border); color: var(--foreground)" />
+            <label class="block text-caption font-medium mb-2 text-muted">Default Terminal Directory</label>
+            <input
+              v-model="form.terminalDir"
+              type="text"
+              class="input-luxury w-full"
+            />
           </div>
 
           <div>
-            <label class="block text-sm font-medium mb-1">Default Agent CLI</label>
-            <select v-model="form.defaultAgentCli" class="w-full rounded-md border px-3 py-2 text-sm" style="background: var(--background); border-color: var(--border); color: var(--foreground)">
+            <label class="block text-caption font-medium mb-2 text-muted">Default Agent CLI</label>
+            <select
+              v-model="form.defaultAgentCli"
+              class="input-luxury w-full"
+            >
               <option value="">None</option>
               <option value="codex">Codex</option>
               <option value="claude-code">Claude Code</option>
@@ -176,16 +204,23 @@ function handleCancel() {
           </div>
 
           <div>
-            <label class="block text-sm font-medium mb-1">Status</label>
-            <select v-model="form.status" class="w-full rounded-md border px-3 py-2 text-sm" style="background: var(--background); border-color: var(--border); color: var(--foreground)">
+            <label class="block text-caption font-medium mb-2 text-muted">Status</label>
+            <select
+              v-model="form.status"
+              class="input-luxury w-full"
+            >
               <option value="active">Active</option>
               <option value="archived">Archived</option>
             </select>
           </div>
 
           <div>
-            <label class="block text-sm font-medium mb-1">Notes</label>
-            <textarea v-model="form.notes" rows="3" class="w-full rounded-md border px-3 py-2 text-sm resize-none" style="background: var(--background); border-color: var(--border); color: var(--foreground)"></textarea>
+            <label class="block text-caption font-medium mb-2 text-muted">Notes</label>
+            <textarea
+              v-model="form.notes"
+              rows="3"
+              class="input-luxury w-full resize-none"
+            ></textarea>
           </div>
         </div>
 
@@ -193,34 +228,34 @@ function handleCancel() {
           <button
             type="submit"
             :disabled="!isValid"
-            class="rounded-md px-4 py-2 text-sm font-medium"
-            style="background: var(--foreground); color: var(--background)"
-            :class="{ 'opacity-50 cursor-not-allowed': !isValid }"
+            class="btn-primary disabled:opacity-30"
           >
             Save Changes
           </button>
-          <button
-            type="button"
-            @click="handleCancel"
-            class="rounded-md px-4 py-2 text-sm font-medium"
-            style="border: 1px solid var(--border); color: var(--muted-foreground)"
-          >
+          <button type="button" @click="handleCancel" class="btn-secondary">
             Cancel
           </button>
         </div>
       </form>
 
       <!-- Danger zone -->
-      <div class="rounded-lg border p-4 space-y-3" style="border-color: #ef444440">
-        <h2 class="text-sm font-semibold" style="color: #ef4444">Danger Zone</h2>
-        <p class="text-xs" style="color: var(--muted-foreground)">
-          Deleting a project removes it from Openmesh along with all associated data (docs, sprints, tasks, sessions, presets). Original files on disk are NOT deleted.
+      <div
+        class="workbench-card p-6 space-y-3"
+        style="border-color: rgba(239, 68, 68, 0.2)"
+      >
+        <h3 class="text-heading" style="color: #ef4444">
+          Danger Zone
+        </h3>
+        <p class="text-caption text-muted">
+          Deleting a project removes it from Openmesh along with all associated
+          data (docs, sprints, tasks, sessions, presets). Original files on disk
+          are NOT deleted.
         </p>
         <button
           @click="handleDelete"
-          class="rounded-md px-4 py-2 text-sm font-medium"
-          style="border: 1px solid #ef4444; color: #ef4444"
+          class="btn-danger flex items-center gap-2"
         >
+          <Trash2 class="h-4 w-4" />
           Delete Project
         </button>
       </div>

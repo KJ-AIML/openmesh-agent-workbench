@@ -11,6 +11,7 @@ import DocsPage from "./pages/DocsPage.vue";
 import SprintPage from "./pages/SprintPage.vue";
 import AgentSessionsPage from "./pages/AgentSessionsPage.vue";
 import DevConnectorPage from "./pages/DevConnectorPage.vue";
+import NotesPage from "./pages/NotesPage.vue";
 
 const router = createRouter({
 	history: createWebHistory(),
@@ -34,6 +35,11 @@ const router = createRouter({
 			path: "/dev-connector",
 			name: "dev-connector",
 			component: DevConnectorPage,
+		},
+		{
+			path: "/notes",
+			name: "notes",
+			component: NotesPage,
 		},
 	],
 });
