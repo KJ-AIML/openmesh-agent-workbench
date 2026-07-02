@@ -36,6 +36,10 @@ const {
   settings,
 } = useStore();
 
+const emit = defineEmits<{
+  openPalette: [];
+}>();
+
 const projectsExpanded = ref(true);
 const projectNames = ref<Record<string, string>>({});
 
@@ -157,6 +161,7 @@ async function handleDeleteProject(projectPath: string) {
           cursor: pointer;
           transition: all 0.15s ease;
         "
+        @click="emit('openPalette')"
         @mouseenter="($event.currentTarget as HTMLElement).style.borderColor = 'var(--border-strong)'"
         @mouseleave="($event.currentTarget as HTMLElement).style.borderColor = 'var(--border)'"
       >
@@ -171,7 +176,7 @@ async function handleDeleteProject(projectPath: string) {
             color: var(--muted-foreground);
             border: 1px solid var(--border);
           "
-          >/</kbd
+          >⌘K</kbd
         >
       </div>
     </div>

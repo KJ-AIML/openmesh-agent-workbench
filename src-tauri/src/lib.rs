@@ -1114,6 +1114,78 @@ fn reset_all_data_cmd() -> Result<(), String> {
     reset_all_data(&project_paths)
 }
 
+// --- Work Snapshot ---
+
+#[derive(Serialize)]
+struct WriteSnapshotResult {
+    success: bool,
+    filename: Option<String>,
+    error: Option<String>,
+}
+
+#[tauri::command]
+fn write_snapshot(project_path: String, filename: String, content: String) -> WriteSnapshotResult {
+    // Sanitize filename to prevent path traversal
+    let safe_filename = filename
+        .replace("..", "")
+        .replace('/', "")
+        .replace('\\', "");
+
+    if safe_filename.is_empty() {
+        return WriteSnapshotResult {
+            success: false,
+            filename: None,
+            error: Some("Invalid filename".to_string()),
+        };
+    }
+
+    // Create snapshots directory if missing
+    let snapshots_dir = get_project_dir(&project_path)
+        .join("notes")
+        .join("snapshots");
+
+    if let Err(e) = std::fs::create_dir_all(&snapshots_dir) {
+        return WriteSnapshotResult {
+            success: false,
+            filename: None,
+            error: Some(format!("Failed to create snapshots directory: {}", e)),
+        };
+    }
+
+    // Check for filename collision and append counter if needed
+    let final_path = snapshots_dir.join(&safe_filename);
+    let final_filename = if final_path.exists() {
+        // Append counter
+        let stem = safe_filename.trim_end_matches(".md");
+        let mut counter = 1;
+        loop {
+            let candidate = format!("{}-{}.md", stem, counter);
+            let candidate_path = snapshots_dir.join(&candidate);
+            if !candidate_path.exists() {
+                break candidate;
+            }
+            counter += 1;
+        }
+    } else {
+        safe_filename.clone()
+    };
+
+    let write_path = snapshots_dir.join(&final_filename);
+
+    match atomic_write(&write_path, &content) {
+        Ok(_) => WriteSnapshotResult {
+            success: true,
+            filename: Some(final_filename),
+            error: None,
+        },
+        Err(e) => WriteSnapshotResult {
+            success: false,
+            filename: None,
+            error: Some(format!("Failed to write snapshot: {}", e)),
+        },
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1161,6 +1233,7 @@ pub fn run() {
             import_file,
             export_project,
             reset_all_data_cmd,
+            write_snapshot,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

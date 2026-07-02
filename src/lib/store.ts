@@ -137,4 +137,9 @@ export const store = {
 	async resetAllData(): Promise<void> {
 		return invoke("reset_all_data_cmd");
 	},
+
+	// Work snapshot
+	async writeSnapshot(projectPath: string, filename: string, content: string): Promise<{ success: boolean; filename?: string; error?: string }> {
+		return invoke("write_snapshot", { projectPath, filename, content });
+	},
 };
