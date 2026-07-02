@@ -1,9 +1,15 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capability for Openmesh v0.3.0 — Full file-based storage.",
+  "description": "Default capability for Openmesh v0.3.0 — file-based storage + window controls.",
   "windows": ["main"],
   "permissions": [
+    "core:default",
+    "core:window:allow-minimize",
+    "core:window:allow-close",
+    "core:window:allow-toggle-maximize",
+    "core:window:allow-start-dragging",
+    "core:window:allow-is-maximized",
     "dialog:allow-open",
     "fs:default",
     "fs:allow-read-file",
@@ -14,6 +20,5 @@
     "fs:allow-exists",
     "fs:scope-home",
     "fs:scope-home-recursive"
-  ],
-  "_comment": "Broad filesystem permissions required because projects can be stored anywhere on disk. App only writes to .openmesh/ directories within project folders and ~/.openmesh/ for global data. User source files are never modified or deleted."
+  ]
 }
