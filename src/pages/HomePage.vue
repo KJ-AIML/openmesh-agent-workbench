@@ -67,6 +67,44 @@ async function refreshGitStatus() {
   }
 }
 
+// ── Agent launch helpers (zero-config) ─────────────────────────────────
+// Default commands used when no custom override is set in Settings.
+const AGENT_DEFAULTS: Record<string, string> = {
+  codex: "codex",
+  "claude-code": "claude",
+  opencode: "opencode",
+};
+
+function getAgentDefaultCommand(tool: string): string {
+  return AGENT_DEFAULTS[tool] ?? tool;
+}
+
+function getAgentCommand(tool: string): string {
+  const overrides: Record<string, string | undefined> = {
+    codex: settings.value.agentClis?.codexPath,
+    "claude-code": settings.value.agentClis?.claudeCodePath,
+    opencode: settings.value.agentClis?.opencodePath,
+  };
+  return overrides[tool] || getAgentDefaultCommand(tool);
+}
+
+function getAgentCommandDescription(tool: string): string {
+  const overrides: Record<string, string | undefined> = {
+    codex: settings.value.agentClis?.codexPath,
+    "claude-code": settings.value.agentClis?.claudeCodePath,
+    opencode: settings.value.agentClis?.opencodePath,
+  };
+  const override = overrides[tool];
+  const defaultCmd = getAgentDefaultCommand(tool);
+  return override
+    ? `Using custom command: ${override}`
+    : `Runs ${defaultCmd} from PATH`;
+}
+
+function canLaunchAgent(): boolean {
+  return !!currentProject.value;
+}
+
 const checklist = computed(() => [
   {
     label: "Project",
@@ -84,13 +122,10 @@ const checklist = computed(() => [
     link: "/sprint",
   },
   {
-    label: "Agent CLI",
-    done: !!(
-      settings.value.agentClis?.codexPath ||
-      settings.value.agentClis?.claudeCodePath ||
-      settings.value.agentClis?.opencodePath
-    ),
+    label: "Agent launch ready",
+    done: !!currentProject.value,
     link: "/settings",
+    description: "Uses codex, claude, and opencode from PATH unless overridden.",
   },
   {
     label: "Sessions",
@@ -114,19 +149,22 @@ const agentClis = computed(() => [
     tool: "codex" as const,
     label: "Codex",
     icon: "⚡",
-    path: settings.value.agentClis?.codexPath,
+    command: getAgentCommand("codex"),
+    description: getAgentCommandDescription("codex"),
   },
   {
     tool: "claude-code" as const,
     label: "Claude",
     icon: "🟠",
-    path: settings.value.agentClis?.claudeCodePath,
+    command: getAgentCommand("claude-code"),
+    description: getAgentCommandDescription("claude-code"),
   },
   {
     tool: "opencode" as const,
     label: "OpenCode",
     icon: "🔵",
-    path: settings.value.agentClis?.opencodePath,
+    command: getAgentCommand("opencode"),
+    description: getAgentCommandDescription("opencode"),
   },
 ]);
 
@@ -189,9 +227,13 @@ async function resumeAction(action: string) {
   }
 }
 
-async function launchAgent(tool: string, cliPath: string | undefined) {
-  if (!currentProject.value || !cliPath) return;
+async function launchAgent(tool: string) {
+  if (!currentProject.value) {
+    showToast("No project selected");
+    return;
+  }
   const cwd = currentProject.value.terminalDir || currentProject.value.folderPath;
+  const cliPath = getAgentCommand(tool);
   const result = await terminalAdapter.openAgentCli(tool, cwd, cliPath);
   if (result.success) {
     await addRecentItem({
@@ -278,8 +320,8 @@ async function launchAgent(tool: string, cliPath: string | undefined) {
             }}
           </div>
           <div class="chip chip-muted">Desktop</div>
-          <div class="chip chip-muted">
-            {{ [settings.agentClis?.codexPath, settings.agentClis?.claudeCodePath, settings.agentClis?.opencodePath].filter(Boolean).length }} CLIs
+          <div class="chip chip-success">
+            Agent launch ready
           </div>
         </div>
 
@@ -302,8 +344,9 @@ async function launchAgent(tool: string, cliPath: string | undefined) {
           <button
             v-for="cli in agentClis"
             :key="cli.tool"
-            @click="launchAgent(cli.tool, cli.path)"
-            :disabled="!cli.path"
+            @click="launchAgent(cli.tool)"
+            :disabled="!canLaunchAgent()"
+            :title="cli.description"
             class="action-pill disabled:opacity-40"
           >
             <span>{{ cli.icon }}</span>
@@ -350,8 +393,8 @@ async function launchAgent(tool: string, cliPath: string | undefined) {
                   Open Terminal
                 </button>
                 <button
-                  @click="launchAgent('codex', settings.agentClis?.codexPath)"
-                  :disabled="!settings.agentClis?.codexPath"
+                  @click="launchAgent('codex')"
+                  :disabled="!canLaunchAgent()"
                   class="action-pill disabled:opacity-40"
                 >
                   <Sparkles class="h-3 w-3" />
@@ -584,11 +627,7 @@ async function launchAgent(tool: string, cliPath: string | undefined) {
                 "
               >
                 <CheckCircle2
-                  v-if="
-                    settings.agentClis?.codexPath ||
-                    settings.agentClis?.claudeCodePath ||
-                    settings.agentClis?.opencodePath
-                  "
+                  v-if="canLaunchAgent()"
                   class="h-3.5 w-3.5 flex-shrink-0"
                   style="color: var(--accent-green)"
                 />
@@ -599,11 +638,9 @@ async function launchAgent(tool: string, cliPath: string | undefined) {
                 />
                 <span class="flex-1">Agent CLIs</span>
                 <span class="text-[9px] text-subtle">{{
-                  settings.agentClis?.codexPath ||
-                  settings.agentClis?.claudeCodePath ||
-                  settings.agentClis?.opencodePath
-                    ? "Configured"
-                    : "Not set"
+                  canLaunchAgent()
+                    ? "Default PATH commands"
+                    : "No project"
                 }}</span>
               </button>
             </div>

@@ -8,6 +8,8 @@ import { useStore } from "./lib/useStore";
 import { getCommands, type Command } from "./lib/commands";
 import * as gitAdapter from "./lib/adapters/gitAdapter";
 import * as agentSessionAdapter from "./lib/adapters/agentSessionAdapter";
+import * as terminalAdapter from "./lib/adapters/terminalAdapter";
+import type { GitStatus } from "./lib/adapters/types";
 import {
   generateSnapshotMarkdown,
   generateAgentContextPrompt,
@@ -22,9 +24,26 @@ const {
   projectPaths,
   settings,
   projectCommandPresets,
+  projectSprint,
+  projectTasks,
+  projectSessions,
+  projectDocs,
+  getRecentItemsForProject,
   addRecentItem,
   store,
 } = useStore();
+
+// ─── Cached Git Status ───────────────────────────────────────────────
+const cachedGitStatus = ref<GitStatus | null>(null);
+
+async function fetchGitStatus(): Promise<GitStatus | null> {
+  if (!currentProject.value) return null;
+  const result = await gitAdapter.getGitStatus(currentProject.value.folderPath);
+  if (result.success && result.data) {
+    cachedGitStatus.value = result.data;
+  }
+  return result.data || null;
+}
 
 // ─── Command Palette State ────────────────────────────────────────────
 const paletteVisible = ref(false);
@@ -80,7 +99,7 @@ const commands = computed(() =>
     },
     async refreshGitStatus() {
       if (!currentProject.value) return;
-      await gitAdapter.getGitStatus(currentProject.value.folderPath);
+      await fetchGitStatus();
     },
     async scanSessions() {
       if (!settings.value.sessionDirs) return;
@@ -127,39 +146,137 @@ const commands = computed(() =>
       if (!currentProject.value) return;
       const projectPath = currentProject.value.folderPath;
       const filename = generateSnapshotFilename();
-      const content = generateSnapshotMarkdown({
+
+      // Fetch real git status
+      const gitStatus = await fetchGitStatus();
+
+      const context: SnapshotContext = {
         project: currentProject.value,
         settings: settings.value,
-        gitStatus: null, // Will be fetched if needed
-        recentItems: [], // Will be populated from store
-        tasks: [], // Will be populated from store
-        sprint: null, // Will be populated from store
-        sessions: [], // Will be populated from store
+        gitStatus,
+        recentItems: getRecentItemsForProject(10),
+        tasks: projectTasks.value,
+        sprint: projectSprint.value,
+        sessions: projectSessions.value,
         presets: projectCommandPresets.value,
-      });
+      };
+
+      const content = generateSnapshotMarkdown(context);
       const result = await store.writeSnapshot(projectPath, filename, content);
       if (!result.success) {
         console.error("[Snapshot] Failed to create snapshot:", result.error);
       }
+
+      if (import.meta.env.DEV) {
+        console.log(`[Snapshot] Generated with ${content.length} chars, git: ${gitStatus ? 'yes' : 'no'}, tasks: ${context.tasks.length}, sessions: ${context.sessions.length}`);
+      }
     },
     async copyAgentContext() {
       if (!currentProject.value) return;
-      const prompt = generateAgentContextPrompt({
+
+      // Fetch real git status
+      const gitStatus = await fetchGitStatus();
+
+      const context: SnapshotContext = {
         project: currentProject.value,
         settings: settings.value,
-        gitStatus: null,
-        recentItems: [],
-        tasks: [],
-        sprint: null,
-        sessions: [],
+        gitStatus,
+        recentItems: getRecentItemsForProject(5),
+        tasks: projectTasks.value,
+        sprint: projectSprint.value,
+        sessions: projectSessions.value,
         presets: projectCommandPresets.value,
-      });
+      };
+
+      const prompt = generateAgentContextPrompt(context);
+
+      if (import.meta.env.DEV) {
+        console.log(`[AgentContext] Generated prompt with ${prompt.length} chars`);
+        console.log(`[AgentContext] Sections: project=${!!context.project}, git=${!!context.gitStatus}, recent=${context.recentItems.length}, tasks=${context.tasks.length}, sessions=${context.sessions.length}`);
+      }
+
       try {
         await navigator.clipboard.writeText(prompt);
       } catch (e) {
         console.error("[AgentContext] Failed to copy to clipboard:", e);
-        // Fallback: show in alert
         alert("Failed to copy to clipboard. Please copy manually:\n\n" + prompt);
+      }
+    },
+    async launchAgentWithContext(tool: string, label: string) {
+      if (!currentProject.value) return;
+      const cwd = currentProject.value.terminalDir || currentProject.value.folderPath;
+      // Get CLI path override from settings (optional - backend uses default if empty)
+      const cliPath =
+        tool === "codex"
+          ? settings.value.agentClis?.codexPath
+          : tool === "claude-code"
+          ? settings.value.agentClis?.claudeCodePath
+          : settings.value.agentClis?.opencodePath;
+
+      // Fetch real git status before generating prompt
+      const gitStatus = await fetchGitStatus();
+
+      // Build context with real workspace state
+      const context: SnapshotContext = {
+        project: currentProject.value,
+        settings: settings.value,
+        gitStatus,
+        recentItems: getRecentItemsForProject(5),
+        tasks: projectTasks.value,
+        sprint: projectSprint.value,
+        sessions: projectSessions.value,
+        presets: projectCommandPresets.value,
+      };
+
+      // Generate context prompt with real data
+      const prompt = generateAgentContextPrompt(context);
+
+      if (import.meta.env.DEV) {
+        console.log(`[LaunchWithContext] Generated prompt for ${label} with ${prompt.length} chars`);
+        console.log(`[LaunchWithContext] Context: git=${!!context.gitStatus}, recent=${context.recentItems.length}, tasks=${context.tasks.length}, sessions=${context.sessions.length}, sprint=${!!context.sprint}`);
+      }
+
+      // Try to copy to clipboard
+      let clipboardSuccess = false;
+      try {
+        await navigator.clipboard.writeText(prompt);
+        clipboardSuccess = true;
+      } catch (e) {
+        console.error("[LaunchWithContext] Failed to copy to clipboard:", e);
+      }
+
+      // Show feedback
+      if (clipboardSuccess) {
+        if (import.meta.env.DEV) {
+          console.log(`[LaunchWithContext] Context copied. Launching ${label}...`);
+        }
+      } else {
+        alert(
+          `Failed to copy context to clipboard. Please copy manually if needed.\n\n` +
+          `Launching ${label} in ${currentProject.value.name}...\n\n` +
+          `Context prompt:\n${prompt}`,
+        );
+      }
+
+      // Launch the agent CLI
+      if (import.meta.env.DEV) {
+        console.log(`[LaunchWithContext] Calling openAgentCli with tool=${tool}, cwd=${cwd}, cliPath=${cliPath || 'default'}`);
+      }
+      
+      const launchResult = await terminalAdapter.openAgentCli(tool, cwd, cliPath);
+      
+      if (import.meta.env.DEV) {
+        console.log(`[LaunchWithContext] Launch result:`, launchResult);
+      }
+      
+      if (!launchResult.success) {
+        const errorMsg = launchResult.error || `Failed to launch ${label}`;
+        console.error(`[LaunchWithContext] Launch failed:`, errorMsg);
+        alert(`Failed to launch ${label}:\n\n${errorMsg}\n\nMake sure ${tool} is installed and available in PATH, or set a custom command in Settings.`);
+      } else {
+        if (import.meta.env.DEV) {
+          console.log(`[LaunchWithContext] ${label} launched successfully`);
+        }
       }
     },
   }),

@@ -407,16 +407,142 @@ fn open_agent_cli(tool: String, cwd: String, cli_path: Option<String>) -> AgentC
     // Determine command to run: prefer configured path, else the canonical tool name
     let command = cli_path.unwrap_or_else(|| canonical_tool.to_string());
 
-    // Launch the agent CLI
-    match Command::new(&command).current_dir(&cwd).spawn() {
-        Ok(_) => AgentCliLaunchResult {
-            success: true,
-            error: None,
-        },
-        Err(e) => AgentCliLaunchResult {
+    #[cfg(target_os = "windows")]
+    {
+        // Escape double quotes inside the command for safe embedding in cmd /k "...".
+        let escaped_command = command.replace('"', "\"\"");
+        let cwd_escaped = cwd.replace('"', "\"\"");
+
+        // Strategy: open a visible terminal that runs the command and stays open.
+        // Priority: Windows Terminal (wt.exe) → PowerShell → cmd.exe.
+
+        // 1. Try Windows Terminal: wt.exe -d "<cwd>" cmd /k "<command>"
+        //    cmd /k keeps the shell open after the command exits.
+        let wt_result = Command::new("wt")
+            .arg("-d")
+            .arg(&cwd)
+            .arg("cmd")
+            .arg("/k")
+            .arg(&escaped_command)
+            .spawn();
+
+        if wt_result.is_ok() {
+            if cfg!(debug_assertions) {
+                eprintln!("[open_agent_cli] Windows Terminal launched: {} in {}", command, cwd);
+            }
+            return AgentCliLaunchResult { success: true, error: None };
+        }
+
+        // 2. Fallback to PowerShell: powershell -NoExit -Command "Set-Location '<cwd>'; & '<command>'"
+        let ps_result = Command::new("powershell")
+            .arg("-NoExit")
+            .arg("-Command")
+            .arg(format!("Set-Location '{}'; & '{}'", cwd_escaped, escaped_command))
+            .spawn();
+
+        if ps_result.is_ok() {
+            if cfg!(debug_assertions) {
+                eprintln!("[open_agent_cli] PowerShell launched: {} in {}", command, cwd);
+            }
+            return AgentCliLaunchResult { success: true, error: None };
+        }
+
+        // 3. Final fallback to cmd.exe: cmd /K "cd /d "<cwd>" && <command>"
+        let cmd_result = Command::new("cmd")
+            .arg("/C")
+            .arg("start")
+            .arg("cmd")
+            .arg("/K")
+            .arg(format!("cd /d \"{}\" && {}", cwd_escaped, escaped_command))
+            .spawn();
+
+        match cmd_result {
+            Ok(_) => {
+                if cfg!(debug_assertions) {
+                    eprintln!("[open_agent_cli] cmd.exe launched: {} in {}", command, cwd);
+                }
+                AgentCliLaunchResult { success: true, error: None }
+            }
+            Err(e) => {
+                let msg = format!(
+                    "Could not launch {} using `{}`. It may not be installed or not available in PATH for Tauri. Try setting a command override in Settings. (Error: {})",
+                    canonical_tool, command, e
+                );
+                if cfg!(debug_assertions) {
+                    eprintln!("[open_agent_cli] All terminal launchers failed: {}", msg);
+                }
+                AgentCliLaunchResult { success: false, error: Some(msg) }
+            }
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        // Use osascript to tell Terminal.app to open a new window, cd to cwd, and run the command.
+        // The trailing "; exec bash" keeps the shell open after the command exits.
+        let script = format!(
+            "tell application \"Terminal\" to do script \"cd '{}' && {}; exec bash\"",
+            cwd.replace('\'', "'\\''"),
+            command.replace('\'', "'\\''")
+        );
+
+        match Command::new("osascript").arg("-e").arg(&script).spawn() {
+            Ok(_) => {
+                if cfg!(debug_assertions) {
+                    eprintln!("[open_agent_cli] Terminal.app launched: {} in {}", command, cwd);
+                }
+                AgentCliLaunchResult { success: true, error: None }
+            }
+            Err(e) => {
+                let msg = format!(
+                    "Could not launch {} using `{}`. (Error: {})",
+                    canonical_tool, command, e
+                );
+                AgentCliLaunchResult { success: false, error: Some(msg) }
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        // Try common Linux terminals. Each runs the command in cwd and keeps the shell open.
+        let terminals: &[(&str, &[&str])] = &[
+            ("gnome-terminal", &["--working-directory", "--", "bash", "-c"]),
+            ("konsole", &["--workdir", "--", "bash", "-c"]),
+            ("xterm", &["-e", "bash", "-c"]),
+        ];
+
+        let keep_open_cmd = format!("cd '{}' && {}; exec bash", cwd.replace('\'', "'\\''"), command.replace('\'', "'\\''"));
+
+        for (terminal, prefix_args) in terminals.iter() {
+            let mut cmd = Command::new(terminal);
+            for arg in *prefix_args {
+                cmd.arg(arg);
+            }
+            // For gnome-terminal/konsole, the -c arg comes after --; for xterm, after -e.
+            cmd.arg(&keep_open_cmd);
+
+            if cmd.spawn().is_ok() {
+                if cfg!(debug_assertions) {
+                    eprintln!("[open_agent_cli] {} launched: {} in {}", terminal, command, cwd);
+                }
+                return AgentCliLaunchResult { success: true, error: None };
+            }
+        }
+
+        let msg = format!(
+            "Could not launch {} using `{}`. No supported terminal found. Install gnome-terminal, konsole, or xterm.",
+            canonical_tool, command
+        );
+        AgentCliLaunchResult { success: false, error: Some(msg) }
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
+    {
+        AgentCliLaunchResult {
             success: false,
-            error: Some(format!("Failed to launch {}: {}", canonical_tool, e)),
-        },
+            error: Some("Unsupported platform".to_string()),
+        }
     }
 }
 

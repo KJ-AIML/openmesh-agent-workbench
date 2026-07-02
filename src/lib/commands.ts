@@ -43,6 +43,7 @@ export interface CommandContext {
   createNote: () => Promise<void>;
   createSnapshot: () => Promise<void>;
   copyAgentContext: () => Promise<void>;
+  launchAgentWithContext: (tool: string, label: string) => Promise<void>;
 }
 
 export function getCommands(ctx: CommandContext): Command[] {
@@ -137,7 +138,9 @@ export function getCommands(ctx: CommandContext): Command[] {
     });
   }
 
-  // ─── Agent Commands ─────────────────────────────────────────────────
+  // ─── Agent Commands ────────────────────────────────────────────────
+  // Default commands used when no custom override is set in Settings.
+  // Settings paths are optional overrides — OpenMesh launches from PATH by default.
   const agentClis = [
     {
       id: "agent-codex",
@@ -146,6 +149,7 @@ export function getCommands(ctx: CommandContext): Command[] {
       path: ctx.settings.agentClis?.codexPath,
       tool: "codex",
       label: "Codex",
+      defaultCmd: "codex",
     },
     {
       id: "agent-claude",
@@ -154,6 +158,7 @@ export function getCommands(ctx: CommandContext): Command[] {
       path: ctx.settings.agentClis?.claudeCodePath,
       tool: "claude-code",
       label: "Claude Code",
+      defaultCmd: "claude",
     },
     {
       id: "agent-opencode",
@@ -162,27 +167,28 @@ export function getCommands(ctx: CommandContext): Command[] {
       path: ctx.settings.agentClis?.opencodePath,
       tool: "opencode",
       label: "OpenCode",
+      defaultCmd: "opencode",
     },
   ];
 
   for (const agent of agentClis) {
+    const usesDefault = !agent.path;
+    const commandDisplay = agent.path || agent.defaultCmd;
+
     commands.push({
       id: agent.id,
       group: "Agents",
       title: agent.title,
-      description: agent.path
-        ? `Launch ${agent.label} in current project`
-        : `${agent.label} CLI not configured`,
+      description: usesDefault
+        ? `Will run \`${commandDisplay}\` from PATH`
+        : `Launch ${agent.label} using custom command: ${commandDisplay}`,
       icon: agent.icon,
-      available: !!agent.path && !!project,
-      disabledReason: !agent.path
-        ? `${agent.label} CLI not configured`
-        : !project
-        ? "No current project"
-        : undefined,
+      available: !!project,
+      disabledReason: !project ? "No current project" : undefined,
       async run() {
-        if (!agent.path || !project) return;
-        await terminalAdapter.openAgentCli(agent.tool, cwd!, agent.path);
+        if (!project) return;
+        // Pass path override only if configured; backend falls back to default command
+        await terminalAdapter.openAgentCli(agent.tool, cwd!, agent.path || undefined);
         await ctx.addRecentItem({
           type: "agent_session",
           title: `${agent.label}: ${project.name}`,
@@ -222,6 +228,64 @@ export function getCommands(ctx: CommandContext): Command[] {
       });
     },
   });
+
+  // ─── Agent with Context Commands ───────────────────────────────────
+  const agentWithContextClis = [
+    {
+      id: "agent-codex-context",
+      title: "Launch Codex with Context",
+      icon: "zap",
+      path: ctx.settings.agentClis?.codexPath,
+      tool: "codex",
+      label: "Codex",
+      defaultCmd: "codex",
+    },
+    {
+      id: "agent-claude-context",
+      title: "Launch Claude Code with Context",
+      icon: "bot",
+      path: ctx.settings.agentClis?.claudeCodePath,
+      tool: "claude-code",
+      label: "Claude Code",
+      defaultCmd: "claude",
+    },
+    {
+      id: "agent-opencode-context",
+      title: "Launch OpenCode with Context",
+      icon: "code",
+      path: ctx.settings.agentClis?.opencodePath,
+      tool: "opencode",
+      label: "OpenCode",
+      defaultCmd: "opencode",
+    },
+  ];
+
+  for (const agent of agentWithContextClis) {
+    const usesDefault = !agent.path;
+    const commandDisplay = agent.path || agent.defaultCmd;
+
+    commands.push({
+      id: agent.id,
+      group: "Agents",
+      title: agent.title,
+      description: usesDefault
+        ? `Copy context, then run \`${commandDisplay}\` from PATH`
+        : `Copy context, then launch ${agent.label} using: ${commandDisplay}`,
+      icon: agent.icon,
+      available: !!project,
+      disabledReason: !project ? "No current project" : undefined,
+      async run() {
+        if (!project) return;
+        await ctx.launchAgentWithContext(agent.tool, agent.label);
+        await ctx.addRecentItem({
+          type: "agent_session",
+          title: `Launched ${agent.label} with context`,
+          projectId: project.id,
+          sourcePath: cwd,
+        });
+      },
+    });
+  }
 
   // ─── Dev Commands ───────────────────────────────────────────────────
   const presetCommands = [

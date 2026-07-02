@@ -381,13 +381,16 @@ const configStatus = computed(() => [
     <!-- Agent CLIs -->
     <div class="workbench-card p-6 space-y-4">
       <h3 class="text-heading">Agent CLIs</h3>
+      <p class="text-caption text-muted">
+        Optional command overrides. Leave empty to use the default command from PATH.
+      </p>
       <div>
-        <label class="block text-caption font-medium mb-2 text-muted">Codex Path</label>
+        <label class="block text-caption font-medium mb-2 text-muted">Codex Command Override</label>
         <div class="flex gap-2">
           <input
             v-model="form.agentClis.codexPath"
             type="text"
-            placeholder="/usr/local/bin/codex"
+            placeholder="Leave empty to use default: codex"
             class="input-luxury flex-1"
           />
           <button
@@ -414,12 +417,12 @@ const configStatus = computed(() => [
         </p>
       </div>
       <div>
-        <label class="block text-caption font-medium mb-2 text-muted">Claude Code Path</label>
+        <label class="block text-caption font-medium mb-2 text-muted">Claude Code Command Override</label>
         <div class="flex gap-2">
           <input
             v-model="form.agentClis.claudeCodePath"
             type="text"
-            placeholder="/usr/local/bin/claude"
+            placeholder="Leave empty to use default: claude"
             class="input-luxury flex-1"
           />
           <button
@@ -446,12 +449,12 @@ const configStatus = computed(() => [
         </p>
       </div>
       <div>
-        <label class="block text-caption font-medium mb-2 text-muted">OpenCode Path</label>
+        <label class="block text-caption font-medium mb-2 text-muted">OpenCode Command Override</label>
         <div class="flex gap-2">
           <input
             v-model="form.agentClis.opencodePath"
             type="text"
-            placeholder="/usr/local/bin/opencode"
+            placeholder="Leave empty to use default: opencode"
             class="input-luxury flex-1"
           />
           <button
@@ -473,7 +476,7 @@ const configStatus = computed(() => [
           {{
             validationStatus["agentClis.opencodePath"].valid
               ? "✓ Valid"
-              : "✗ Invalid"
+              : " Invalid"
           }}
         </p>
       </div>
