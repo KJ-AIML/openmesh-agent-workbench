@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://github.com/KJ-AIML/openmesh-agent-workbench/releases/latest">
-    <img src="https://img.shields.io/github/v/release/KJ-AIML/openmesh-agent-workbench?style=for-the-badge&color=7c3aed&labelColor=1a1a2e" alt="Latest Release" />
+    <img src="https://img.shields.io/github/v/release/KJ-AIML/openmesh-agent-workbench?sort=semver&style=for-the-badge&color=7c3aed&labelColor=1a1a2e" alt="Latest Release" />
   </a>
   <a href="https://github.com/KJ-AIML/openmesh-agent-workbench/releases">
     <img src="https://img.shields.io/github/downloads/KJ-AIML/openmesh-agent-workbench/total?style=for-the-badge&color=3b82f6&labelColor=1a1a2e" alt="Downloads" />
