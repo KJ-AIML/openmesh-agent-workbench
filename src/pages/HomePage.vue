@@ -349,7 +349,45 @@ async function launchAgent(tool: string) {
             :title="cli.description"
             class="action-pill disabled:opacity-40"
           >
-            <span>{{ cli.icon }}</span>
+            <svg
+              v-if="cli.tool === 'codex'"
+              viewBox="0 0 24 24"
+              class="h-3.5 w-3.5 flex-shrink-0"
+              aria-hidden="true"
+            >
+              <g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+                <path d="M12 4.2c2.6-2 6.4-.1 6.4 3.2 0 1.3-.6 2.4-1.5 3.2" />
+                <path d="M18 9.1c3 .9 3.8 5 .9 6.7-1.1.7-2.4.7-3.6.3" />
+                <path d="M15.7 16.8c-.7 3.1-4.7 4.4-6.7 1.8-.8-1-.9-2.4-.6-3.6" />
+                <path d="M9.2 18.2c-2.9 1.4-6.2-1.2-5.3-4.4.3-1.2 1.2-2.2 2.3-2.8" />
+                <path d="M5.8 11.7C3.4 9.6 4.5 5.5 7.8 5c1.2-.2 2.5.2 3.4 1" />
+                <path d="M10.5 5.7c1-3 5.2-3.4 6.8-.5.6 1.1.6 2.5.1 3.6" />
+              </g>
+              <circle cx="12" cy="12" r="2.3" fill="currentColor" />
+            </svg>
+            <svg
+              v-else-if="cli.tool === 'claude-code'"
+              viewBox="0 0 24 24"
+              class="h-3.5 w-3.5 flex-shrink-0"
+              aria-hidden="true"
+              style="color: #d97757"
+            >
+              <path
+                fill="currentColor"
+                d="M12 2.5l1.9 6.1 5.7-3-3 5.7 6.1 1.9-6.1 1.9 3 5.7-5.7-3L12 24l-1.9-6.2-5.7 3 3-5.7-6.1-1.9 6.1-1.9-3-5.7 5.7 3L12 2.5z"
+              />
+            </svg>
+            <svg
+              v-else
+              viewBox="0 0 24 24"
+              class="h-3.5 w-3.5 flex-shrink-0"
+              aria-hidden="true"
+              style="color: #38bdf8"
+            >
+              <rect x="3.5" y="5" width="17" height="14" rx="3" fill="none" stroke="currentColor" stroke-width="1.8" />
+              <path d="M8 10l-2.5 2L8 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+              <path d="M11 15h5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            </svg>
             {{ cli.label }}
           </button>
         </div>

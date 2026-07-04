@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::io::Write;
 
 // ============================================================================
@@ -238,6 +238,20 @@ pub struct FileEntry {
     pub modified_at: Option<String>,
 }
 
+/// Tree node for docs folder structure.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DocTreeNode {
+    pub name: String,
+    /// Relative path from docs/ root (e.g. "architecture/overview.md")
+    pub path: String,
+    pub node_type: String, // "file" or "folder"
+    pub children: Option<Vec<DocTreeNode>>,
+    // File-only fields
+    pub size: Option<u64>,
+    pub modified_at: Option<String>,
+}
+
 // ============================================================================
 // Global Storage (~/.openmesh/)
 // ============================================================================
@@ -442,6 +456,240 @@ pub fn delete_file(path: &str) -> Result<(), String> {
     if Path::new(path).exists() {
         fs::remove_file(path).map_err(|e| e.to_string())?;
     }
+    Ok(())
+}
+
+fn safe_child_path(base: &Path, relative: &str) -> Result<PathBuf, String> {
+    let relative = relative.trim();
+    if relative.is_empty() {
+        return Err("Path cannot be empty".to_string());
+    }
+
+    let mut out = base.to_path_buf();
+    for component in Path::new(relative).components() {
+        match component {
+            Component::Normal(part) => out.push(part),
+            _ => return Err("Invalid path".to_string()),
+        }
+    }
+    Ok(out)
+}
+
+// ============================================================================
+// Docs Tree (nested folder support)
+// ============================================================================
+
+/// Recursively build a tree of docs/ directory.
+pub fn list_docs_tree_fn(dir_path: &Path, base_path: &str) -> Vec<DocTreeNode> {
+    let mut nodes = Vec::new();
+
+    if !dir_path.exists() {
+        return nodes;
+    }
+
+    let mut entries: Vec<_> = match fs::read_dir(dir_path) {
+        Ok(e) => e.filter_map(|e| e.ok()).collect(),
+        Err(_) => return nodes,
+    };
+
+    // Sort: folders first, then files; alphabetical within each group
+    entries.sort_by(|a, b| {
+        let a_is_dir = a.path().is_dir();
+        let b_is_dir = b.path().is_dir();
+        match (a_is_dir, b_is_dir) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => a.file_name().cmp(&b.file_name()),
+        }
+    });
+
+    for entry in entries {
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+
+        // Skip hidden files/folders
+        if name.starts_with('.') {
+            continue;
+        }
+
+        let metadata = match fs::metadata(&path) {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+
+        let modified_at = metadata
+            .modified()
+            .ok()
+            .and_then(|t| {
+                chrono::DateTime::<chrono::Utc>::from_timestamp(
+                    t.duration_since(std::time::UNIX_EPOCH)
+                        .ok()?
+                        .as_secs() as i64,
+                    0,
+                )
+                .map(|dt| dt.to_rfc3339())
+            });
+
+        if metadata.is_dir() {
+            let child_base = if base_path.is_empty() {
+                name.clone()
+            } else {
+                format!("{}/{}", base_path, name)
+            };
+            let children = list_docs_tree_fn(&path, &child_base);
+            nodes.push(DocTreeNode {
+                name: name.clone(),
+                path: child_base,
+                node_type: "folder".to_string(),
+                children: Some(children),
+                size: None,
+                modified_at,
+            });
+        } else {
+            // Only include markdown and text files
+            let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+            if !["md", "txt", "markdown"].contains(&ext) {
+                continue;
+            }
+
+            let relative_path = if base_path.is_empty() {
+                name.clone()
+            } else {
+                format!("{}/{}", base_path, name)
+            };
+
+            nodes.push(DocTreeNode {
+                name: name.clone(),
+                path: relative_path,
+                node_type: "file".to_string(),
+                children: None,
+                size: Some(metadata.len()),
+                modified_at,
+            });
+        }
+    }
+
+    nodes
+}
+
+/// Create a folder inside docs/.
+pub fn create_docs_folder(project_path: &str, folder_name: &str) -> Result<(), String> {
+    // Sanitize: reject path traversal attempts
+    if folder_name.contains("..") || folder_name.contains('/') || folder_name.contains('\\') {
+        return Err("Invalid folder name".to_string());
+    }
+    if folder_name.trim().is_empty() {
+        return Err("Folder name cannot be empty".to_string());
+    }
+
+    let docs_dir = get_project_dir(project_path).join("docs");
+    let folder_path = docs_dir.join(folder_name);
+
+    if folder_path.exists() {
+        return Err("Folder already exists".to_string());
+    }
+
+    fs::create_dir_all(&folder_path).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Rename a folder inside docs/.
+pub fn rename_docs_folder(project_path: &str, old_name: &str, new_name: &str) -> Result<(), String> {
+    let docs_dir = get_project_dir(project_path).join("docs");
+    let old_path = safe_child_path(&docs_dir, old_name)?;
+    let new_path = safe_child_path(&docs_dir, new_name)?;
+
+    if !old_path.exists() {
+        return Err("Folder not found".to_string());
+    }
+    if new_path.exists() {
+        return Err("A folder with that name already exists".to_string());
+    }
+
+    fs::rename(&old_path, &new_path).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Delete a folder inside docs/ (recursively).
+pub fn delete_docs_folder(project_path: &str, folder_name: &str) -> Result<(), String> {
+    let docs_dir = get_project_dir(project_path).join("docs");
+    let folder_path = safe_child_path(&docs_dir, folder_name)?;
+
+    if !folder_path.exists() {
+        return Err("Folder not found".to_string());
+    }
+
+    fs::remove_dir_all(&folder_path).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Move a doc file to a different folder within docs/.
+pub fn move_doc_fn(project_path: &str, filename: &str, target_folder: &str) -> Result<(), String> {
+    let docs_dir = get_project_dir(project_path).join("docs");
+    let src_path = safe_child_path(&docs_dir, filename)?;
+    let dst_dir = if target_folder.is_empty() {
+        docs_dir.clone()
+    } else {
+        safe_child_path(&docs_dir, target_folder)?
+    };
+
+    if !src_path.exists() {
+        return Err("File not found".to_string());
+    }
+
+    if !dst_dir.exists() {
+        fs::create_dir_all(&dst_dir).map_err(|e| e.to_string())?;
+    }
+
+    let file_name = src_path.file_name().ok_or("Invalid filename")?;
+    let dst_path = dst_dir.join(file_name);
+
+    if dst_path.exists() {
+        return Err("A file with that name already exists in the target folder".to_string());
+    }
+
+    fs::rename(&src_path, &dst_path).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Rename a doc file within docs/.
+pub fn rename_doc_fn(project_path: &str, old_filename: &str, new_filename: &str) -> Result<(), String> {
+    if new_filename.trim().is_empty() {
+        return Err("Filename cannot be empty".to_string());
+    }
+
+    let docs_dir = get_project_dir(project_path).join("docs");
+    let old_path = safe_child_path(&docs_dir, old_filename)?;
+    let new_path = safe_child_path(&docs_dir, new_filename)?;
+
+    if !old_path.exists() {
+        return Err("File not found".to_string());
+    }
+    if new_path.exists() {
+        return Err("A file with that name already exists".to_string());
+    }
+
+    fs::rename(&old_path, &new_path).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn rename_note_fn(project_path: &str, old_filename: &str, new_filename: &str) -> Result<(), String> {
+    if new_filename.trim().is_empty() {
+        return Err("Filename cannot be empty".to_string());
+    }
+
+    let notes_dir = get_project_dir(project_path).join("notes");
+    let old_path = safe_child_path(&notes_dir, old_filename)?;
+    let new_path = safe_child_path(&notes_dir, new_filename)?;
+
+    if !old_path.exists() {
+        return Err("Note not found".to_string());
+    }
+    if new_path.exists() {
+        return Err("A note with that name already exists".to_string());
+    }
+
+    fs::rename(&old_path, &new_path).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -669,4 +917,39 @@ pub fn reset_all_data(project_paths: &[String]) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_project(name: &str) -> PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "openmesh-storage-test-{}-{}",
+            name,
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&path);
+        fs::create_dir_all(path.join(".openmesh").join("docs").join("folder")).unwrap();
+        path
+    }
+
+    #[test]
+    fn rename_doc_keeps_nested_relative_path_inside_docs() {
+        let project = temp_project("rename-doc");
+        fs::write(
+            project.join(".openmesh").join("docs").join("folder").join("old.md"),
+            "hello",
+        )
+        .unwrap();
+
+        let project_path = project.to_string_lossy().to_string();
+        let result = rename_doc_fn(&project_path, "folder/old.md", "folder/new.md");
+
+        assert!(result.is_ok(), "{result:?}");
+        assert!(project.join(".openmesh/docs/folder/new.md").exists());
+        assert!(!project.join(".openmesh/docs/folder/old.md").exists());
+
+        let _ = fs::remove_dir_all(project);
+    }
 }

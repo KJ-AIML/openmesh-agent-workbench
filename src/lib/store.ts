@@ -21,6 +21,15 @@ export interface FileEntry {
 	modified_at: string | null;
 }
 
+export interface DocTreeNode {
+	name: string;
+	path: string;
+	nodeType: "file" | "folder";
+	children?: DocTreeNode[];
+	size?: number | null;
+	modifiedAt?: string | null;
+}
+
 // --- Global Store API (async, file-based) ---
 
 export const store = {
@@ -101,6 +110,9 @@ export const store = {
 	async listDocs(projectPath: string): Promise<FileEntry[]> {
 		return invoke<FileEntry[]>("list_docs", { projectPath });
 	},
+	async listDocsTree(projectPath: string): Promise<DocTreeNode[]> {
+		return invoke<DocTreeNode[]>("list_docs_tree", { projectPath });
+	},
 	async readDoc(projectPath: string, filename: string): Promise<string> {
 		return invoke<string>("read_doc", { projectPath, filename });
 	},
@@ -109,6 +121,21 @@ export const store = {
 	},
 	async deleteDoc(projectPath: string, filename: string): Promise<void> {
 		return invoke("delete_doc", { projectPath, filename });
+	},
+	async createDocFolder(projectPath: string, folderName: string): Promise<void> {
+		return invoke("create_doc_folder", { projectPath, folderName });
+	},
+	async renameDocFolder(projectPath: string, oldName: string, newName: string): Promise<void> {
+		return invoke("rename_doc_folder", { projectPath, oldName, newName });
+	},
+	async deleteDocFolder(projectPath: string, folderName: string): Promise<void> {
+		return invoke("delete_doc_folder", { projectPath, folderName });
+	},
+	async moveDoc(projectPath: string, filename: string, targetFolder: string): Promise<void> {
+		return invoke("move_doc", { projectPath, filename, targetFolder });
+	},
+	async renameDoc(projectPath: string, oldFilename: string, newFilename: string): Promise<void> {
+		return invoke("rename_doc", { projectPath, oldFilename, newFilename });
 	},
 
 	// Notes (markdown files)
@@ -123,6 +150,9 @@ export const store = {
 	},
 	async deleteNote(projectPath: string, filename: string): Promise<void> {
 		return invoke("delete_note", { projectPath, filename });
+	},
+	async renameNote(projectPath: string, oldFilename: string, newFilename: string): Promise<void> {
+		return invoke("rename_note", { projectPath, oldFilename, newFilename });
 	},
 	async importFile(projectPath: string, folder: string, filename: string, content: string): Promise<void> {
 		return invoke("import_file", { projectPath, folder, filename, content });

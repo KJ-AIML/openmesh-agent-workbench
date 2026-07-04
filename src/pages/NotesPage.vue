@@ -11,6 +11,7 @@ const {
   readNote,
   writeNote,
   deleteNote,
+  renameNote,
   importFile,
 } = useStore();
 
@@ -19,6 +20,25 @@ const selectedContent = ref<string>("");
 const isEditing = ref(true);
 const isDragging = ref(false);
 const loading = ref(false);
+const isRenaming = ref(false);
+const renameValue = ref("");
+
+// Inline confirm dialog
+const confirmDialog = ref<{ message: string; onConfirm: () => void } | null>(null);
+
+// Toast notifications
+const toast = ref<{ message: string; type: "error" | "success" } | null>(null);
+let toastTimeout: ReturnType<typeof setTimeout> | null = null;
+
+function showToast(message: string, type: "error" | "success" = "error") {
+  toast.value = { message, type };
+  if (toastTimeout) clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => { toast.value = null; }, 3000);
+}
+
+function showConfirm(message: string, onConfirm: () => void) {
+  confirmDialog.value = { message, onConfirm };
+}
 
 const selectedNote = computed(() =>
   projectNotes.value.find((n) => n.name === selectedFilename.value),
@@ -60,19 +80,69 @@ async function handleSelectNote(filename: string) {
 
 async function handleNewNote() {
   if (!currentProject.value) return;
-  const filename = "untitled.md";
+
+  // Generate unique filename
+  const existingNames = projectNotes.value.map(n => n.name);
+  let counter = 1;
+  let filename = `untitled-${counter}.md`;
+  while (existingNames.includes(filename)) {
+    counter++;
+    filename = `untitled-${counter}.md`;
+  }
+
   selectedFilename.value = filename;
   selectedContent.value = "";
   isEditing.value = true;
+
+  // Create the file immediately so it appears in the list
+  await writeNote(filename, "");
+  await refreshNotes();
+}
+
+async function handleRenameNote() {
+  if (!selectedFilename.value || !currentProject.value) return;
+
+  const newFilename = renameValue.value.trim();
+  if (!newFilename || newFilename === selectedFilename.value) {
+    isRenaming.value = false;
+    return;
+  }
+
+  // Ensure .md extension
+  const finalName = newFilename.endsWith('.md') ? newFilename : `${newFilename}.md`;
+
+  // Check if filename already exists
+  const exists = projectNotes.value.some(n => n.name === finalName);
+  if (exists) {
+    showToast(`A note named "${finalName}" already exists.`);
+    return;
+  }
+
+  try {
+    clearTimeout((window as any).__noteSaveTimeout);
+    await writeNote(selectedFilename.value, selectedContent.value);
+    await renameNote(selectedFilename.value, finalName);
+    selectedFilename.value = finalName;
+    isRenaming.value = false;
+  } catch (e) {
+    showToast(e instanceof Error ? e.message : "Failed to rename note");
+  }
+}
+
+function startRename() {
+  if (!selectedFilename.value) return;
+  renameValue.value = selectedFilename.value.replace(/\.md$/, "");
+  isRenaming.value = true;
 }
 
 async function handleDeleteNote() {
   if (!selectedFilename.value) return;
-  if (confirm("Delete this note? This cannot be undone.")) {
-    await deleteNote(selectedFilename.value);
+  showConfirm("Delete this note? This cannot be undone.", async () => {
+    await deleteNote(selectedFilename.value!);
     selectedFilename.value = null;
     selectedContent.value = "";
-  }
+    confirmDialog.value = null;
+  });
 }
 
 async function handleContentChange(newContent: string) {
@@ -91,6 +161,7 @@ async function handleContentChange(newContent: string) {
 }
 
 function handleDragOver(e: DragEvent) {
+  if (!Array.from(e.dataTransfer?.items || []).some((item) => item.kind === "file")) return;
   e.preventDefault();
   isDragging.value = true;
 }
@@ -177,27 +248,51 @@ function formatTime(dateStr: string | null) {
       </div>
 
       <div v-else class="flex-1 overflow-y-auto py-2">
-        <button
+        <div
           v-for="note in projectNotes"
           :key="note.name"
-          @click="handleSelectNote(note.name)"
-          class="w-full text-left px-4 py-3 transition-all"
-          :class="
-            selectedFilename === note.name
-              ? 'font-medium'
-              : 'font-normal hover:bg-[var(--surface-highlight)]'
-          "
-          :style="
-            selectedFilename === note.name
-              ? 'background: var(--sidebar-accent); color: var(--foreground)'
-              : 'color: var(--muted-foreground)'
-          "
+          class="group relative"
         >
-          <div class="text-[13px] truncate">{{ note.name.replace(/\.md$/, "") }}</div>
-          <div class="text-[11px] mt-1 text-subtle">
-            {{ formatTime(note.modified_at) }}
+          <button
+            @click="handleSelectNote(note.name)"
+            class="w-full text-left px-4 py-3 transition-all"
+            :class="
+              selectedFilename === note.name
+                ? 'font-medium'
+                : 'font-normal hover:bg-[var(--surface-highlight)]'
+            "
+            :style="
+              selectedFilename === note.name
+                ? 'background: var(--sidebar-accent); color: var(--foreground)'
+                : 'color: var(--muted-foreground)'
+            "
+          >
+            <div class="text-[13px] truncate pr-6">{{ note.name.replace(/\.md$/, "") }}</div>
+            <div class="text-[11px] mt-1 text-subtle">
+              {{ formatTime(note.modified_at) }}
+            </div>
+          </button>
+          <div
+            v-if="selectedFilename === note.name"
+            class="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity"
+          >
+            <button
+              @click.stop="selectedFilename = note.name; startRename()"
+              class="btn-ghost p-1"
+              title="Rename"
+            >
+              <Edit class="h-3 w-3" />
+            </button>
+            <button
+              @click.stop="selectedFilename = note.name; handleDeleteNote()"
+              class="btn-ghost p-1"
+              style="color: #ef4444"
+              title="Delete"
+            >
+              <Trash2 class="h-3 w-3" />
+            </button>
           </div>
-        </button>
+        </div>
       </div>
     </div>
 
@@ -246,12 +341,42 @@ function formatTime(dateStr: string | null) {
           class="flex items-center gap-2 px-5 py-3 flex-shrink-0"
           style="border-bottom: 1px solid var(--divider)"
         >
-          <div
-            class="flex-1 text-[14px] font-semibold truncate"
-            style="color: var(--foreground)"
-          >
+          <div v-if="isRenaming" class="flex-1 flex items-center gap-2">
+            <input
+              v-model="renameValue"
+              @keyup.enter="handleRenameNote"
+              @keyup.escape="isRenaming = false"
+              class="flex-1 bg-transparent border-b border-[var(--border)] outline-none text-[14px] font-semibold px-1 py-0.5"
+              style="color: var(--foreground)"
+              placeholder="Note name"
+              autofocus
+            />
+            <button
+              @click="handleRenameNote"
+              class="btn-ghost text-[11px]"
+              style="color: var(--accent-green)"
+            >
+              Save
+            </button>
+            <button
+              @click="isRenaming = false"
+              class="btn-ghost text-[11px]"
+            >
+              Cancel
+            </button>
+          </div>
+          <div v-else class="flex-1 text-[14px] font-semibold truncate" style="color: var(--foreground)">
             {{ selectedFilename.replace(/\.md$/, "") }}
           </div>
+          <button
+            v-if="!isRenaming"
+            @click="startRename"
+            class="btn-ghost flex items-center gap-1.5"
+            title="Rename note"
+          >
+            <Edit class="h-4 w-4" />
+            <span class="text-[12px]">Rename</span>
+          </button>
           <button
             @click="isEditing = !isEditing"
             class="btn-ghost flex items-center gap-1.5"
@@ -296,6 +421,29 @@ function formatTime(dateStr: string | null) {
           />
         </div>
       </div>
+    </div>
+
+    <!-- Confirm dialog -->
+    <div v-if="confirmDialog" class="fixed inset-0 z-50 flex items-center justify-center"
+      style="background: rgba(0,0,0,0.6)" @click.self="confirmDialog = null">
+      <div class="rounded-2xl p-6 max-w-sm w-full mx-4"
+        style="background: var(--surface-2); border: 1px solid var(--border); box-shadow: 0 20px 60px rgba(0,0,0,0.5)">
+        <p class="text-[14px] mb-5" style="color: var(--foreground)">{{ confirmDialog.message }}</p>
+        <div class="flex gap-2 justify-end">
+          <button @click="confirmDialog = null" class="btn-ghost text-[12px]">Cancel</button>
+          <button @click="confirmDialog?.onConfirm()" class="btn-primary text-[12px]" style="background: #ef4444; color: white">Delete</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast notification -->
+    <div v-if="toast" class="fixed bottom-6 right-6 z-50 rounded-xl px-4 py-3 shadow-lg text-[13px]"
+      :style="{
+        background: toast.type === 'error' ? 'rgba(239,68,68,0.15)' : 'rgba(16,185,129,0.15)',
+        border: `1px solid ${toast.type === 'error' ? 'rgba(239,68,68,0.3)' : 'rgba(16,185,129,0.3)'}`,
+        color: toast.type === 'error' ? '#fca5a5' : '#6ee7b7'
+      }">
+      {{ toast.message }}
     </div>
   </div>
 </template>

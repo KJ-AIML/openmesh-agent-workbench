@@ -20,6 +20,7 @@ import {
 const route = useRoute();
 const router = useRouter();
 const {
+  isLoading,
   currentProject,
   projectPaths,
   settings,
@@ -32,6 +33,15 @@ const {
   addRecentItem,
   store,
 } = useStore();
+
+const splashMinimumElapsed = ref(false);
+const showSplash = computed(() => isLoading.value || !splashMinimumElapsed.value);
+
+onMounted(() => {
+  window.setTimeout(() => {
+    splashMinimumElapsed.value = true;
+  }, 700);
+});
 
 // ─── Cached Git Status ───────────────────────────────────────────────
 const cachedGitStatus = ref<GitStatus | null>(null);
@@ -328,6 +338,14 @@ defineExpose({ openPalette });
     <!-- Custom Titlebar -->
     <Titlebar />
 
+    <Transition name="startup-splash">
+      <div v-if="showSplash" class="startup-splash">
+        <div class="startup-splash-mark">
+          <img src="/logo.svg" alt="OpenMesh" />
+        </div>
+      </div>
+    </Transition>
+
     <div class="flex flex-1 min-h-0">
       <!-- Sidebar -->
       <Sidebar @open-palette="openPalette" />
@@ -378,3 +396,53 @@ defineExpose({ openPalette });
     />
   </div>
 </template>
+
+<style scoped>
+.startup-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  background:
+    radial-gradient(circle at 50% 52%, rgba(255, 255, 255, 0.04), transparent 16rem),
+    #202020;
+}
+
+.startup-splash-mark {
+  display: grid;
+  place-items: center;
+  width: 58px;
+  height: 58px;
+  border-radius: 18px;
+  background: rgba(0, 0, 0, 0.18);
+  animation: startup-pulse 1.35s ease-in-out infinite;
+}
+
+.startup-splash-mark img {
+  width: 42px;
+  height: 42px;
+  display: block;
+}
+
+.startup-splash-enter-active,
+.startup-splash-leave-active {
+  transition: opacity 180ms ease;
+}
+
+.startup-splash-enter-from,
+.startup-splash-leave-to {
+  opacity: 0;
+}
+
+@keyframes startup-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.72;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+}
+</style>

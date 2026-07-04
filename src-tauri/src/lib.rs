@@ -1148,6 +1148,12 @@ fn list_docs(project_path: String) -> Vec<FileEntry> {
 }
 
 #[tauri::command]
+fn list_docs_tree(project_path: String) -> Vec<DocTreeNode> {
+    let docs_dir = get_project_dir(&project_path).join("docs");
+    list_docs_tree_fn(&docs_dir, "")
+}
+
+#[tauri::command]
 fn read_doc(project_path: String, filename: String) -> Result<String, String> {
     let path = get_project_dir(&project_path).join("docs").join(&filename);
     read_file_content(&path.to_string_lossy())
@@ -1163,6 +1169,31 @@ fn write_doc(project_path: String, filename: String, content: String) -> Result<
 fn delete_doc(project_path: String, filename: String) -> Result<(), String> {
     let path = get_project_dir(&project_path).join("docs").join(&filename);
     delete_file(&path.to_string_lossy())
+}
+
+#[tauri::command]
+fn create_doc_folder(project_path: String, folder_name: String) -> Result<(), String> {
+    create_docs_folder(&project_path, &folder_name)
+}
+
+#[tauri::command]
+fn rename_doc_folder(project_path: String, old_name: String, new_name: String) -> Result<(), String> {
+    rename_docs_folder(&project_path, &old_name, &new_name)
+}
+
+#[tauri::command]
+fn delete_doc_folder(project_path: String, folder_name: String) -> Result<(), String> {
+    delete_docs_folder(&project_path, &folder_name)
+}
+
+#[tauri::command]
+fn move_doc(project_path: String, filename: String, target_folder: String) -> Result<(), String> {
+    storage::move_doc_fn(&project_path, &filename, &target_folder)
+}
+
+#[tauri::command]
+fn rename_doc(project_path: String, old_filename: String, new_filename: String) -> Result<(), String> {
+    storage::rename_doc_fn(&project_path, &old_filename, &new_filename)
 }
 
 // --- Notes (markdown files in .openmesh/notes/) ---
@@ -1192,7 +1223,18 @@ fn delete_note(project_path: String, filename: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn rename_note(project_path: String, old_filename: String, new_filename: String) -> Result<(), String> {
+    storage::rename_note_fn(&project_path, &old_filename, &new_filename)
+}
+
+#[tauri::command]
 fn import_file(project_path: String, folder: String, filename: String, content: String) -> Result<(), String> {
+    if folder != "docs" && folder != "notes" {
+        return Err("Invalid import folder".to_string());
+    }
+    if filename.contains("..") || filename.contains('/') || filename.contains('\\') {
+        return Err("Invalid filename".to_string());
+    }
     let path = get_project_dir(&project_path).join(&folder).join(&filename);
     write_file_content(&path.to_string_lossy(), &content)
 }
@@ -1349,13 +1391,20 @@ pub fn run() {
             get_recent,
             save_recent,
             list_docs,
+            list_docs_tree,
             read_doc,
             write_doc,
             delete_doc,
+            create_doc_folder,
+            rename_doc_folder,
+            delete_doc_folder,
+            move_doc,
+            rename_doc,
             list_notes,
             read_note,
             write_note,
             delete_note,
+            rename_note,
             import_file,
             export_project,
             reset_all_data_cmd,

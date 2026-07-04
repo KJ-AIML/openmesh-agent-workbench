@@ -112,8 +112,8 @@ Build artifacts are output to `src-tauri/target/release/bundle/`:
 
 ```
 bundle/
-├── nsis/OpenMesh_0.1.0_x64-setup.exe
-└── msi/OpenMesh_0.1.0_x64_en-US.msi
+├── nsis/OpenMesh_0.1.1_x64-setup.exe
+└── msi/OpenMesh_0.1.1_x64_en-US.msi
 ```
 
 ## Project Structure

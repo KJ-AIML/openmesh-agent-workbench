@@ -10,7 +10,7 @@ import type {
 	CommandPreset,
 	Settings,
 } from "../types";
-import type { FileEntry } from "./store";
+import type { FileEntry, DocTreeNode } from "./store";
 
 // --- Global reactive state ---
 const isLoading = ref(true);
@@ -26,6 +26,7 @@ const recentItems = ref<RecentItem[]>([]);
 const agentSessions = ref<AgentSession[]>([]);
 const commandPresets = ref<CommandPreset[]>([]);
 const docs = ref<FileEntry[]>([]);
+const docsTree = ref<DocTreeNode[]>([]);
 const notes = ref<FileEntry[]>([]);
 
 // --- Derived state ---
@@ -102,7 +103,7 @@ async function loadProjectData(projectPath: string) {
 			return;
 		}
 
-		const [loadedSprints, loadedTasks, loadedRecent, loadedSessions, loadedPresets, loadedDocs, loadedNotes] =
+		const [loadedSprints, loadedTasks, loadedRecent, loadedSessions, loadedPresets, loadedDocs, loadedDocsTree, loadedNotes] =
 			await Promise.all([
 				store.getSprint(projectPath).then((s) => (s ? [s] : [])),
 				store.getTasks(projectPath),
@@ -110,6 +111,7 @@ async function loadProjectData(projectPath: string) {
 				store.getSessions(projectPath),
 				store.getPresets(projectPath),
 				store.listDocs(projectPath),
+				store.listDocsTree(projectPath),
 				store.listNotes(projectPath),
 			]);
 
@@ -123,6 +125,7 @@ async function loadProjectData(projectPath: string) {
 		agentSessions.value = loadedSessions;
 		commandPresets.value = loadedPresets;
 		docs.value = loadedDocs;
+		docsTree.value = loadedDocsTree;
 		notes.value = loadedNotes;
 	} catch (e) {
 		console.error("[loadProjectData] Failed to load project data:", e);
@@ -147,6 +150,7 @@ watch(currentProjectPath, async (newPath, oldPath) => {
 		agentSessions.value = [];
 		commandPresets.value = [];
 		docs.value = [];
+		docsTree.value = [];
 		notes.value = [];
 		await store.saveAppState({ currentProjectId: null });
 	}
@@ -356,6 +360,7 @@ async function deleteCommandPreset(id: string) {
 async function refreshDocs() {
 	if (!currentProjectPath.value) return;
 	docs.value = await store.listDocs(currentProjectPath.value);
+	docsTree.value = await store.listDocsTree(currentProjectPath.value);
 }
 
 async function writeDoc(filename: string, content: string) {
@@ -375,6 +380,36 @@ async function readDoc(filename: string): Promise<string> {
 	return store.readDoc(currentProjectPath.value, filename);
 }
 
+async function createDocFolder(folderName: string) {
+	if (!currentProjectPath.value) return;
+	await store.createDocFolder(currentProjectPath.value, folderName);
+	await refreshDocs();
+}
+
+async function renameDocFolder(oldName: string, newName: string) {
+	if (!currentProjectPath.value) return;
+	await store.renameDocFolder(currentProjectPath.value, oldName, newName);
+	await refreshDocs();
+}
+
+async function deleteDocFolder(folderName: string) {
+	if (!currentProjectPath.value) return;
+	await store.deleteDocFolder(currentProjectPath.value, folderName);
+	await refreshDocs();
+}
+
+async function moveDoc(filename: string, targetFolder: string) {
+	if (!currentProjectPath.value) return;
+	await store.moveDoc(currentProjectPath.value, filename, targetFolder);
+	await refreshDocs();
+}
+
+async function renameDoc(oldFilename: string, newFilename: string) {
+	if (!currentProjectPath.value) return;
+	await store.renameDoc(currentProjectPath.value, oldFilename, newFilename);
+	await refreshDocs();
+}
+
 // --- Notes ---
 async function refreshNotes() {
 	if (!currentProjectPath.value) return;
@@ -390,6 +425,12 @@ async function writeNote(filename: string, content: string) {
 async function deleteNote(filename: string) {
 	if (!currentProjectPath.value) return;
 	await store.deleteNote(currentProjectPath.value, filename);
+	await refreshNotes();
+}
+
+async function renameNote(oldFilename: string, newFilename: string) {
+	if (!currentProjectPath.value) return;
+	await store.renameNote(currentProjectPath.value, oldFilename, newFilename);
 	await refreshNotes();
 }
 
@@ -457,6 +498,7 @@ export function useStore() {
 		projectCommandPresets,
 		projectDocs,
 		projectNotes,
+		docsTree,
 
 		// Actions
 		selectProject,
@@ -478,12 +520,18 @@ export function useStore() {
 		readDoc,
 		writeDoc,
 		deleteDoc,
+		createDocFolder,
+		renameDocFolder,
+		deleteDocFolder,
+		moveDoc,
+		renameDoc,
 
 		// Notes
 		refreshNotes,
 		readNote,
 		writeNote,
 		deleteNote,
+		renameNote,
 		importFile,
 
 		// Helpers
