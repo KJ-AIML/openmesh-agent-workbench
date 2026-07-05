@@ -58,6 +58,7 @@ pub enum FreshnessState {
 
 /// Structured freshness metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Freshness {
     pub state: FreshnessState,
     pub observed_at: String,

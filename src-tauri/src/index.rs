@@ -536,12 +536,24 @@ impl DerivedIndex {
             sanitize_fts_query(&query.query)
         };
 
-        let kinds_filter = match &query.kinds {
-            Some(kinds) if !kinds.is_empty() => Some(kinds.clone()),
-            _ => None,
+        // Build kind filter clause with dynamic placeholders, applied BEFORE LIMIT.
+        let kinds_clause = match &query.kinds {
+            Some(kinds) if !kinds.is_empty() => {
+                let n = kinds.len();
+                let placeholders: Vec<String> = (0..n).map(|i| format!("?{}", i + 3)).collect();
+                format!(" AND fts.source_kind IN ({})", placeholders.join(","))
+            }
+            _ => String::new(),
         };
 
-        let sql = String::from(
+        // Compute the LIMIT placeholder index: 1=MATCH, 2=project_id, 3..3+N=kinds, 3+N=limit
+        let limit_idx = if query.kinds.as_ref().map_or(0, |k| k.len()) == 0 {
+            3
+        } else {
+            3 + query.kinds.as_ref().map_or(0, |k| k.len())
+        };
+
+        let sql = format!(
             "SELECT fts.document_id,
                     fts.source_id,
                     fts.source_kind,
@@ -557,40 +569,45 @@ impl DerivedIndex {
                JOIN context_documents d ON d.document_id = fts.document_id
               WHERE context_documents_fts MATCH ?1
                 AND d.project_id = ?2
+              {}
               ORDER BY score ASC
-              LIMIT ?3",
+              LIMIT ?{}",
+            kinds_clause, limit_idx
         );
 
         let mut stmt = self.conn.prepare(&sql)?;
         let limit_val = limit as i64;
-        let rows = stmt.query_map(
-            rusqlite::params![effective.as_str(), &query.project_id, &limit_val],
-            |row| {
-                Ok(ContextHit {
-                    document_id: row.get(0)?,
-                    source_id: row.get(1)?,
-                    source_kind: row.get(2)?,
-                    project_id: row.get(3)?,
-                    canonical_ref: row.get(4)?,
-                    title: row.get(5)?,
-                    snippet: row.get::<_, Option<String>>(6)?.unwrap_or_default(),
-                    score: row.get(7)?,
-                    freshness_state: row.get(8)?,
-                    sensitivity: row.get(9)?,
-                    observed_at: row.get(10)?,
-                })
-            },
-        )?;
+        // Build params: [query, project_id, <kindN...>, limit]
+        let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = vec![
+            Box::new(effective.clone()),
+            Box::new(query.project_id.clone()),
+        ];
+        if let Some(kinds) = &query.kinds {
+            for k in kinds {
+                params_vec.push(Box::new(k.clone()));
+            }
+        }
+        params_vec.push(Box::new(limit_val));
+        let param_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|b| b.as_ref()).collect();
+        let rows = stmt.query_map(&param_refs[..], |row| {
+            Ok(ContextHit {
+                document_id: row.get(0)?,
+                source_id: row.get(1)?,
+                source_kind: row.get(2)?,
+                project_id: row.get(3)?,
+                canonical_ref: row.get(4)?,
+                title: row.get(5)?,
+                snippet: row.get::<_, Option<String>>(6)?.unwrap_or_default(),
+                score: row.get(7)?,
+                freshness_state: row.get(8)?,
+                sensitivity: row.get(9)?,
+                observed_at: row.get(10)?,
+            })
+        })?;
 
         let mut hits = Vec::with_capacity(limit);
         for row in rows {
             let hit = row?;
-            // Post-filter by kind in Rust to avoid dynamic placeholder numbering.
-            if let Some(kinds) = &kinds_filter {
-                if !kinds.iter().any(|k| k == &hit.source_kind) {
-                    continue;
-                }
-            }
             // Sensitivity ceiling: filter out 'secret' from search.
             if hit.sensitivity == "secret" {
                 continue;
@@ -1064,6 +1081,78 @@ mod tests {
         assert_eq!(hits[0].source_kind, "task");
     }
 
+    // Adversarial: excluded kinds must NOT consume the result limit.
+    #[test]
+    fn kind_filter_does_not_consume_limit() {
+        let mut idx = DerivedIndex::open_in_memory().unwrap();
+        // Insert several highly ranked docs of an EXCLUDED kind (doc).
+        // Each uses 'shared keyword' so they all match and rank equally/high.
+        for i in 0..5 {
+            idx.upsert_document(&IndexDocument {
+                document_id: format!("excl_{}", i),
+                source_id: format!("excl_{}_src", i),
+                project_id: "p1".into(),
+                source_kind: "doc".into(),
+                canonical_ref: "x".into(),
+                title: format!("Excluded doc {}", i),
+                text: "shared keyword".into(),
+                sensitivity: Sensitivity::Private,
+                agent_context_enabled: false,
+                freshness_state: "fresh".into(),
+                observed_at: "now".into(),
+                source_updated_at: None,
+                metadata_json: None,
+            })
+            .unwrap();
+        }
+        // Insert doc(s) of an ALLOWED kind (task) that ALSO match 'shared keyword'
+        // but rank lower because 'task' appears less frequently in this test corpus.
+        for i in 0..2 {
+            idx.upsert_document(&IndexDocument {
+                document_id: format!("allowed_{}", i),
+                source_id: format!("allowed_{}_src", i),
+                project_id: "p1".into(),
+                source_kind: "task".into(),
+                canonical_ref: "x".into(),
+                title: format!("Allowed task {}", i),
+                text: "shared keyword".into(),
+                sensitivity: Sensitivity::Private,
+                agent_context_enabled: false,
+                freshness_state: "fresh".into(),
+                observed_at: "now".into(),
+                source_updated_at: None,
+                metadata_json: None,
+            })
+            .unwrap();
+        }
+
+        // Query: search 'shared keyword', only want task kind, limit 1.
+        // bm25() makes 'task' rank LOWER (larger doc frequency) for term 'shared',
+        // but there are more task docs (2) than doc docs... no wait.
+        // bm25: IDF is higher for terms in FEWER documents.
+        // 'shared keyword' appears in all 7 docs. IDF is low for both.
+        // Within kind: task=2 docs, doc=5 docs. bm25 kind-weighting is not implemented.
+        // All docs rank roughly the same. LIMIT takes first 5 (the doc-kind).
+        // The query excludes 'doc' kind.
+        // Current behavior: SQL LIMIT returns 5 doc-kind rows; Rust drops them all; result=[]
+        // Expected behavior: result should contain the top-1 task doc.
+        let hits = idx
+            .search(&ContextQuery {
+                project_id: "p1".into(),
+                query: "shared keyword".into(),
+                kinds: Some(vec!["task".into()]),
+                limit: Some(1),
+                ..Default::default()
+            })
+            .unwrap();
+        assert!(
+            hits.len() == 1,
+            "expected 1 task-kind result, got {} (excluded kinds consumed limit)",
+            hits.len()
+        );
+        assert_eq!(hits[0].source_kind, "task");
+    }
+
     #[test]
     fn search_limit() {
         let mut idx = DerivedIndex::open_in_memory().unwrap();
@@ -1116,6 +1205,48 @@ mod tests {
         assert_eq!(hits.len(), 0);
     }
 
+    // ----- contract boundary ----
+
+    #[test]
+    fn context_document_identity_survives_index_conversion() {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let fixture_path = format!(
+            "{}/tests/fixtures/context/valid-document.json",
+            manifest_dir.replace("src-tauri", "")
+        );
+        let json = std::fs::read_to_string(&fixture_path).unwrap();
+        let ctx_doc: ContextDocument = serde_json::from_str(&json).unwrap();
+        let idx_doc = IndexDocument::from(&ctx_doc);
+
+        assert_eq!(idx_doc.document_id, ctx_doc.id);
+        assert_eq!(idx_doc.source_id, ctx_doc.source_id);
+        assert_eq!(idx_doc.project_id, ctx_doc.project_id);
+        assert_eq!(idx_doc.canonical_ref, ctx_doc.canonical_ref);
+        assert_eq!(idx_doc.title, ctx_doc.title);
+        assert_eq!(idx_doc.text, ctx_doc.text);
+        assert_eq!(
+            idx_doc.sensitivity, ctx_doc.sensitivity,
+            "sensitivity must survive conversion"
+        );
+        assert_eq!(idx_doc.source_kind, "doc");
+
+        // Round-trip: index the ContextDocument-derived IndexDocument, then search.
+        let mut idx = DerivedIndex::open_in_memory().unwrap();
+        idx.upsert_document(&idx_doc).unwrap();
+        let hits = idx
+            .search(&ContextQuery {
+                project_id: ctx_doc.project_id.clone(),
+                query: "OpenMesh".into(),
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].document_id, ctx_doc.id);
+        assert_eq!(hits[0].project_id, ctx_doc.project_id);
+        assert_eq!(hits[0].canonical_ref, ctx_doc.canonical_ref);
+        assert_eq!(hits[0].sensitivity, "private");
+    }
+
     // ----- transaction rollback ----
 
     #[test]
@@ -1138,6 +1269,73 @@ mod tests {
             })
             .unwrap();
         assert_eq!(hits.len(), 1);
+    }
+
+    // ----- secret behavior: deterministic per-secret cases ----
+
+    #[test]
+    fn secret_document_behavior_is_deterministic() {
+        let mut idx = DerivedIndex::open_in_memory().unwrap();
+
+        // secret + non-empty text -> validation rejects before index write.
+        let mut bad = sample_doc("p1", "s1", "Secret", "top secret content");
+        bad.sensitivity = Sensitivity::Secret;
+        let err = idx.upsert_document(&bad);
+        assert!(err.is_err());
+
+        // secret + empty text -> validation passes; no FTS row.
+        let mut ok = sample_doc("p1", "s2", "SecMeta", "");
+        ok.sensitivity = Sensitivity::Secret;
+        idx.upsert_document(&ok).unwrap();
+
+        let fts_c: i64 = idx
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM context_documents_fts WHERE document_id='s2'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(fts_c, 0);
+
+        let hits = idx
+            .search(&ContextQuery {
+                project_id: "p1".into(),
+                query: "Secret".into(),
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(hits.len(), 0);
+    }
+
+    #[test]
+    fn mixed_project_batch_succeeds_with_valid_secret() {
+        let mut idx = DerivedIndex::open_in_memory().unwrap();
+        let mut secret_meta = sample_doc("p1", "sec", "Sec", "");
+        secret_meta.sensitivity = Sensitivity::Secret;
+        let docs = vec![
+            sample_doc("p1", "a", "A", "aaa"),
+            sample_doc("p1", "b", "B", "bbb"),
+            secret_meta,
+        ];
+        idx.replace_project_documents("p1", &docs).unwrap();
+
+        let hits_a = idx
+            .search(&ContextQuery {
+                project_id: "p1".into(),
+                query: "aaa".into(),
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(hits_a.len(), 1);
+        let hits_b = idx
+            .search(&ContextQuery {
+                project_id: "p1".into(),
+                query: "bbb".into(),
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(hits_b.len(), 1);
     }
 
     // ----- disposability ----
