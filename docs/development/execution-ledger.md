@@ -315,3 +315,53 @@ Known limitations:
 - WAL sidecar cleanup on Windows may fail if external process holds the connection
 Final status: PASS.
 Dev Track 0.1.2.4 unlocked: YES.
+
+## 2026-07-05 — Dev Track 0.1.2.3 Closure Audit
+
+Status: PASS (after closure)
+Branch: main
+Commit: 7564ecc, 3987a30 (plus original cf9b0ec)
+Objective: Close three review gaps — kind-filter+limit semantics, ContextDocument ↔ IndexDocument contract boundary, and exact full cargo test entry.
+
+Gap 1 — Kind filter + limit:
+- Previous operation order: Model B (incorrect)
+  `FTS query + project filter (SQL) → ORDER BY bm25 → LIMIT ?3 (SQL) → Rust kind filter → Rust limit break`
+- Excluded kinds could consume the LIMIT: if the top-ranked row was of an excluded kind, Rust returned [] even when allowed-kind rows existed.
+- Final operation order: Model A (correct)
+  `FTS query + project filter (SQL) + kind filter (SQL via dynamic placeholders) → ORDER BY bm25 → LIMIT (SQL) → Rust secret filter`
+- Bug found: YES
+- Code changed: YES — kind filter moved into SQL with dynamically-numbered placeholders (`?3..?N`), LIMIT index recomputed as `3 + N`.
+- Adversarial test added: `kind_filter_does_not_consume_limit`
+  Scenario: 5 doc-kind docs + 2 task-kind docs all match "shared keyword"; query asks for `kinds=["task"], limit=1`.
+  Previous result: 0 (all 5 doc-kind rows consumed LIMIT 1, then filtered out).
+  Current result: 1 (the top-ranked task-kind doc returned).
+
+Gap 2 — Domain contract boundary:
+- ContextDocument: upstream domain contract from 0.1.2.2 (`src/domain/context/types.ts` mirrored in `src-tauri/src/context.rs`).
+- IndexDocument: internal derived-index DTO (option B — NOT a competing contract).
+- Relationship: explicit `impl<'a> From<&'a ContextDocument> for IndexDocument` adapter in `src-tauri/src/index.rs`.
+- Duplicate contract found: NO.
+- Adapter path: `ContextDocument → IndexDocument::from(&doc) → DerivedIndex::upsert_document(&idx_doc)` → SQLite.
+- Shared fixture test: `context_document_identity_survives_index_conversion` — loads `tests/fixtures/context/valid-document.json`, deserializes as `ContextDocument`, converts to `IndexDocument`, writes, searches, verifies all identity fields survive.
+- Preserved identity fields: document_id, source_id, project_id, source_kind, canonical_ref, sensitivity. Schema version preserved through explicit constant in writes.
+- Fix applied: `Freshness` struct in `src-tauri/src/context.rs` gained `#[serde(rename_all="camelCase")]` so shared fixtures (`observedAt` JSON field) deserialize into `observed_at`.
+
+Secret-document behavior (for 0.1.2.4 ingestion contract):
+- Non-empty secret text: `IndexDocument::validate()` returns `Err(IndexError::InvalidDocument)` — rejected BEFORE any index write. Mixed batch with one bad secret doc causes the single-doc upsert to fail; `replace_project_documents` would also fail (validation is called before transaction).
+- Empty secret text: validation passes; row stored in `context_documents` (metadata only); NO FTS row inserted; always excluded from search via `hit.sensitivity == "secret"` filter.
+- Implication for 0.1.2.4: ingestion pipeline must either pre-validate or handle single-doc failures gracefully. The current API does NOT support partial-success batch writes.
+
+Gap 3 — Full Rust gate:
+- Exact command: `cargo test`
+- Exact result: `test result: ok. 32 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out` + 0 main tests + 0 doctests. Exit code: 0.
+- Test count before: 4 (context only). After: 32 (28 index + 4 context).
+
+Files changed during closure:
+- src-tauri/src/index.rs (kind filter in SQL; 4 new tests; dynamic placeholder builder)
+- src-tauri/src/context.rs (Freshness serde camelCase; shared fixture compatibility)
+
+Key pre-existing bug also fixed:
+- `mod index;` declaration in lib.rs was missing from the original cf9b0ec committed tree. Added in commit 3987a30.
+
+Final status: PASS.
+Dev Track 0.1.2.4 unlocked: YES.
