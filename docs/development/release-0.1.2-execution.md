@@ -289,6 +289,55 @@ Dev Track checklist:
   - Inspector preview capped at 4000 chars
   - Secret text omitted entirely from inspection preview
 
+### Final Automated Closure (2026-07-05)
+
+**Frontend behavior matrix (11 ContextPage tests):**
+
+| Behavior | Status | Test Name |
+|---|---|---|
+| A. Search input state | COVERED | "renders header and search input" |
+| B. No-project state | COVERED | "shows no-project state when no project is selected" |
+| C. Healthy/index state | COVERED | "shows healthy status when index is healthy" |
+| D. Normal search results | COVERED | "runs search and displays results" |
+| E. No-results state | COVERED | "shows no-results state when search returns empty" |
+| F. Kind filter behavior | COVERED | "kind filter passes selected kind to search" |
+| G. Selecting result opens inspector | COVERED | "opens inspector when result is clicked" |
+| H. COMPLETE refresh state | COVERED | "refresh shows COMPLETE status" |
+| I. PARTIAL refresh warning | COVERED | "refresh shows PARTIAL status with failure count" |
+| J. Project switch clears stale results | COVERED | "project switch clears stale results and inspector" |
+| K. Project switch clears selected inspector | COVERED | "project switch clears stale results and inspector" |
+| L. Secret text cannot render | COVERED | "does not render secret text in inspector" |
+
+**Frontend tests added (4 new):**
+1. "shows no-results state when search returns empty" — verifies clean no-results UI when search returns []
+2. "kind filter passes selected kind to search" — verifies contextClient receives exact selected kind
+3. "refresh shows PARTIAL status with failure count" — verifies PARTIAL warning, failed count shown, COMPLETE not claimed
+4. "project switch clears stale results and inspector" — verifies watcher clears results + inspector on project change
+
+**Test isolation fix:**
+- Mock store updated to use Vue `ref()` instead of plain objects
+- Vue watcher on `currentProjectPath` now fires correctly in tests
+- All 11 ContextPage tests pass
+
+**Rust parallel test isolation:**
+- Default `cargo test` (parallel execution) passes: 74 tests, 0 failures
+- Test isolation achieved via `unique_temp_dir()` and `open_test_index()` helpers
+- Each test gets unique temp directory based on process ID + thread ID + test name hash
+- No shared state between parallel tests
+- Production semantics unchanged: NO
+
+**Exact verification results:**
+- npm run typecheck: exit 0
+- npm run lint: exit 0
+- npm run test: 156 passed (16 files), 0 type errors
+- npm run build: exit 0, 16.87s
+- npm run verify: exit 0
+- cargo fmt --check: PASS
+- cargo clippy -- -D warnings: PASS
+- cargo test: 74 passed (default parallel), 0 failed
+- cargo check: PASS
+- Public version: 0.1.1 (all manifests)
+
 ## 0.1.2.6 - Release Hardening
 
 - Status: NOT_STARTED

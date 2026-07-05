@@ -30,8 +30,8 @@ pub const MAX_JSON_COLLECTION_BYTES: u64 = 4 * 1024 * 1024; // 4 MiB
 const ALLOWED_DOC_EXTS: &[&str] = &["md", "txt", "markdown"];
 const SNAPSHOT_SUBDIR: &str = "snapshots";
 fn unique_temp_dir(name: &str) -> std::path::PathBuf {
-    use std::hash::{Hash, Hasher};
     use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
     let mut h = DefaultHasher::new();
     std::process::id().hash(&mut h);
     std::thread::current().id().hash(&mut h);
@@ -39,9 +39,7 @@ fn unique_temp_dir(name: &str) -> std::path::PathBuf {
     std::env::temp_dir().join(format!("om-{:016x}-{}", h.finish(), name))
 }
 
-
 /// Test-only unique index path to avoid parallel test conflicts.
-
 fn open_test_index(name: &str) -> crate::index::DerivedIndex {
     let path = test_index_path(name);
     if std::path::Path::new(&path).exists() {
@@ -51,17 +49,14 @@ fn open_test_index(name: &str) -> crate::index::DerivedIndex {
 }
 
 fn test_index_path(name: &str) -> std::path::PathBuf {
-    use std::hash::{Hash, Hasher};
     use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
     let mut h = DefaultHasher::new();
     std::process::id().hash(&mut h);
     std::thread::current().id().hash(&mut h);
     name.hash(&mut h);
     std::env::temp_dir().join(format!("om-index-{:016x}", h.finish()))
 }
-
-
-
 
 // ============================================================================
 // Error / Outcome Types

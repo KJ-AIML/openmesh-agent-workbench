@@ -712,3 +712,152 @@ Known limitations:
 
 Final status: CONDITIONAL_PASS (awaiting human desktop QA).
 Dev Track 0.1.2.6 unlocked: NO.
+
+---
+
+## 2026-07-05 — Dev Track 0.1.2.5 Final Automated Closure
+
+**Status:** CONDITIONAL_PASS (automated gaps closed; manual desktop QA remains)
+**Branch:** main
+**Objective:** Close last two automated proof gaps before human desktop QA.
+
+### Frontend gaps found and closed:
+
+**Gap 1: Required ContextPage states not fully evidenced**
+
+Previous state: 7 ContextPage tests covering 8 of 12 required behaviors.
+
+Missing behaviors:
+- E. No-results state (search returns [])
+- F. Kind filter behavior (filter passes correct kind to search)
+- I. PARTIAL refresh warning (status shown, failed count truthful)
+- J+K. Project switch clears stale results and inspector
+
+**Tests added (4 new ContextPage tests):**
+
+1. `shows no-results state when search returns empty`
+   - Mocks searchContext to return []
+   - Verifies "No results for" text appears with query string
+   - Proves clean no-results UI state
+
+2. `kind filter passes selected kind to search`
+   - Clicks "Docs" filter button
+   - Triggers search
+   - Verifies searchContext called with `kinds: ["doc"]`
+   - Verifies result displays correctly
+
+3. `refresh shows PARTIAL status with failure count`
+   - Mocks refreshContext with status: "PARTIAL", failed: 2, indexed: 8
+   - Verifies "PARTIAL" text visible
+   - Verifies "COMPLETE" text NOT present
+   - Verifies "2 failed" and "8 indexed" shown
+   - Proves PARTIAL warning state and truthful failure representation
+
+4. `project switch clears stale results and inspector`
+   - Sets up search results + selected inspector for Project A
+   - Changes currentProjectPath to Project B
+   - Verifies Project A results cleared
+   - Verifies Project A inspector cleared
+   - Verifies Preview section gone
+   - Proves watcher fires and state resets on project change
+
+**Test isolation fix:**
+- Mock store updated to use Vue `ref()` instead of plain objects
+- Vue watcher on `currentProjectPath` now fires correctly in tests
+- All 11 ContextPage tests pass
+
+**Final ContextPage test inventory: 11 tests**
+1. renders header and search input
+2. shows no-project state when no project is selected
+3. shows healthy status when index is healthy
+4. runs search and displays results
+5. opens inspector when result is clicked
+6. does not render secret text in inspector
+7. refresh shows COMPLETE status
+8. shows no-results state when search returns empty
+9. kind filter passes selected kind to search
+10. refresh shows PARTIAL status with failure count
+11. project switch clears stale results and inspector
+
+**Final behavior matrix: 12/12 COVERED**
+
+### Rust parallel test isolation:
+
+**Gap 2: Default `cargo test` fails under parallel execution**
+
+Previous state: Tests required `--test-threads=1` due to shared deterministic index paths.
+
+**Root cause identified:**
+- Multiple tests used same project IDs (e.g., "test-proj-001")
+- Tests wrote to same ~/.openmesh/indexes/ paths
+- Parallel execution caused SQLite lock conflicts and data corruption
+
+**Isolation fix:**
+- `unique_temp_dir()` helper creates unique temp directory per test
+- Hash based on: process ID + thread ID + test name
+- `open_test_index()` creates isolated DerivedIndex in unique temp dir
+- Each test gets completely isolated filesystem state
+- No shared state between parallel tests
+
+**Production semantics changed:** NO
+- Test-only helpers, not used in production code
+- Production index paths unchanged: ~/.openmesh/indexes/proj_<fnv1a(projectId)>/
+- No changes to public API or behavior
+
+**Exact default cargo test result:**
+```
+cargo test
+test result: ok. 74 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out
+```
+
+### Exact verification results:
+
+**Frontend:**
+- npm run typecheck: exit 0
+- npm run lint: exit 0
+- npm run test: 156 passed (16 files), 0 type errors, 5.82s
+- npm run build: exit 0, 16.87s
+- npm run verify: exit 0
+
+**Rust:**
+- cargo fmt --check: PASS
+- cargo clippy -- -D warnings: PASS
+- cargo test: 74 passed (default parallel), 0 failed
+- cargo check: PASS
+
+**Public version:** 0.1.1 (all manifests unchanged)
+
+### Final test counts:
+- Frontend: 156 tests (16 files)
+- Rust: 74 tests (default parallel execution)
+
+### Files changed:
+- tests/pages/ContextPage.test.ts (4 new tests, mock store ref() fix)
+- src-tauri/src/ingestion.rs (test isolation helpers, cargo fmt)
+- src-tauri/src/context_service.rs (cargo fmt)
+
+### User-facing behavior changed: NO
+### Internal production behavior changed: NO
+### Canonical data behavior changed: NO
+
+### Remaining gate:
+**HUMAN DESKTOP QA**
+
+Manual desktop QA cannot be performed in headless CI environment.
+Requires human verification of 12-item checklist on actual desktop.
+
+### Tracker files updated:
+- .heli-harness/state/current-task.md → CONDITIONAL_PASS, AWAITING_MANUAL_DESKTOP_QA
+- docs/development/release-0.1.2-execution.md → 0.1.2.5 = CONDITIONAL_PASS with final automated closure evidence
+- docs/development/execution-ledger.md → append-only entry added
+
+### Final automated status:
+**CONDITIONAL_PASS**
+
+### Is Dev Track 0.1.2.6 unlocked:
+**NO**
+
+### Recommended next action:
+Perform the 12-item human desktop QA checklist.
+
+**STOP. Do not begin Dev Track 0.1.2.6.**

@@ -19,7 +19,14 @@ mod tests {
 
     const MAX_PREVIEW_CHARS: usize = 4000;
 
-    fn make_doc(id: &str, project: &str, kind: &str, title: &str, body: &str, sensitivity: Sensitivity) -> IndexDocument {
+    fn make_doc(
+        id: &str,
+        project: &str,
+        kind: &str,
+        title: &str,
+        body: &str,
+        sensitivity: Sensitivity,
+    ) -> IndexDocument {
         IndexDocument {
             document_id: id.into(),
             source_id: format!("{}-src", id),
@@ -45,12 +52,58 @@ mod tests {
     fn search_project_isolation() {
         let mut idx_a = DerivedIndex::open_in_memory().unwrap();
         let mut idx_b = DerivedIndex::open_in_memory().unwrap();
-        let doc_a = make_doc("a1", "proj-a", "doc", "Only In A", "unique content alpha", Sensitivity::Private);
-        let doc_b = make_doc("b1", "proj-b", "doc", "Only In B", "unique content beta", Sensitivity::Private);
-        idx_a.upsert_if_changed(&doc_a, &fp("doc", "Only In A", "unique content alpha", &Sensitivity::Private)).unwrap();
-        idx_b.upsert_if_changed(&doc_b, &fp("doc", "Only In B", "unique content beta", &Sensitivity::Private)).unwrap();
-        let hits_a = idx_a.search(&ContextQuery { project_id: "proj-a".into(), query: "unique".into(), ..Default::default() }).unwrap();
-        let hits_b = idx_b.search(&ContextQuery { project_id: "proj-b".into(), query: "unique".into(), ..Default::default() }).unwrap();
+        let doc_a = make_doc(
+            "a1",
+            "proj-a",
+            "doc",
+            "Only In A",
+            "unique content alpha",
+            Sensitivity::Private,
+        );
+        let doc_b = make_doc(
+            "b1",
+            "proj-b",
+            "doc",
+            "Only In B",
+            "unique content beta",
+            Sensitivity::Private,
+        );
+        idx_a
+            .upsert_if_changed(
+                &doc_a,
+                &fp(
+                    "doc",
+                    "Only In A",
+                    "unique content alpha",
+                    &Sensitivity::Private,
+                ),
+            )
+            .unwrap();
+        idx_b
+            .upsert_if_changed(
+                &doc_b,
+                &fp(
+                    "doc",
+                    "Only In B",
+                    "unique content beta",
+                    &Sensitivity::Private,
+                ),
+            )
+            .unwrap();
+        let hits_a = idx_a
+            .search(&ContextQuery {
+                project_id: "proj-a".into(),
+                query: "unique".into(),
+                ..Default::default()
+            })
+            .unwrap();
+        let hits_b = idx_b
+            .search(&ContextQuery {
+                project_id: "proj-b".into(),
+                query: "unique".into(),
+                ..Default::default()
+            })
+            .unwrap();
         assert_eq!(hits_a.len(), 1);
         assert_eq!(hits_b.len(), 1);
         assert_eq!(hits_a[0].document_id, "a1");
@@ -62,20 +115,53 @@ mod tests {
     #[test]
     fn inspect_project_isolation() {
         let mut idx = DerivedIndex::open_in_memory().unwrap();
-        let doc = make_doc("doc-x", "proj-x", "doc", "Secret X", "secret body", Sensitivity::Private);
-        idx.upsert_if_changed(&doc, &fp("doc", "Secret X", "secret body", &Sensitivity::Private)).unwrap();
-        let not_found = idx.get_document_for_inspection("other-proj", "doc-x").unwrap();
-        assert!(not_found.is_none(), "cross-project inspection must return None");
+        let doc = make_doc(
+            "doc-x",
+            "proj-x",
+            "doc",
+            "Secret X",
+            "secret body",
+            Sensitivity::Private,
+        );
+        idx.upsert_if_changed(
+            &doc,
+            &fp("doc", "Secret X", "secret body", &Sensitivity::Private),
+        )
+        .unwrap();
+        let not_found = idx
+            .get_document_for_inspection("other-proj", "doc-x")
+            .unwrap();
+        assert!(
+            not_found.is_none(),
+            "cross-project inspection must return None"
+        );
     }
 
     #[test]
     fn inspector_preview_limit() {
         let mut idx = DerivedIndex::open_in_memory().unwrap();
         let long_body = "x".repeat(MAX_PREVIEW_CHARS + 5000);
-        let doc = make_doc("long-doc", "p", "doc", "Long Document", &long_body, Sensitivity::Private);
-        idx.upsert_if_changed(&doc, &fp("doc", "Long Document", &long_body, &Sensitivity::Private)).unwrap();
-        let inspected = idx.get_document_for_inspection("p", "long-doc").unwrap().unwrap();
-        assert!(inspected.text.len() <= MAX_PREVIEW_CHARS, "preview must be bounded");
+        let doc = make_doc(
+            "long-doc",
+            "p",
+            "doc",
+            "Long Document",
+            &long_body,
+            Sensitivity::Private,
+        );
+        idx.upsert_if_changed(
+            &doc,
+            &fp("doc", "Long Document", &long_body, &Sensitivity::Private),
+        )
+        .unwrap();
+        let inspected = idx
+            .get_document_for_inspection("p", "long-doc")
+            .unwrap()
+            .unwrap();
+        assert!(
+            inspected.text.len() <= MAX_PREVIEW_CHARS,
+            "preview must be bounded"
+        );
     }
 
     #[test]
@@ -83,16 +169,39 @@ mod tests {
         // In production, secret docs are never indexed with text. The
         // index layer enforces this via validate(). Test that behavior.
         let mut idx = DerivedIndex::open_in_memory().unwrap();
-        let doc_with_text = make_doc("secret-doc", "p", "doc", "Secret", "TOP SECRET", Sensitivity::Secret);
-        let result = idx.upsert_if_changed(&doc_with_text, &fp("doc", "Secret", "TOP SECRET", &Sensitivity::Secret));
-        assert!(result.is_err(), "secret doc with text must be rejected by validation");
+        let doc_with_text = make_doc(
+            "secret-doc",
+            "p",
+            "doc",
+            "Secret",
+            "TOP SECRET",
+            Sensitivity::Secret,
+        );
+        let result = idx.upsert_if_changed(
+            &doc_with_text,
+            &fp("doc", "Secret", "TOP SECRET", &Sensitivity::Secret),
+        );
+        assert!(
+            result.is_err(),
+            "secret doc with text must be rejected by validation"
+        );
 
         // Insert the same doc with empty text (as production does after secret policy).
         let doc_meta_only = make_doc("secret-meta", "p", "doc", "Secret", "", Sensitivity::Secret);
-        idx.upsert_if_changed(&doc_meta_only, &fp("doc", "Secret", "", &Sensitivity::Secret)).unwrap();
-        let inspection = idx.get_document_for_inspection("p", "secret-meta").unwrap().unwrap();
+        idx.upsert_if_changed(
+            &doc_meta_only,
+            &fp("doc", "Secret", "", &Sensitivity::Secret),
+        )
+        .unwrap();
+        let inspection = idx
+            .get_document_for_inspection("p", "secret-meta")
+            .unwrap()
+            .unwrap();
         assert_eq!(inspection.sensitivity, "secret");
-        assert_eq!(inspection.text, "", "secret text must be empty in inspection");
+        assert_eq!(
+            inspection.text, "",
+            "secret text must be empty in inspection"
+        );
     }
 
     #[test]
@@ -140,11 +249,20 @@ mod tests {
             ("se", "agent-session", "My Session", "my session content"),
         ] {
             let doc = make_doc(id, proj, kind, title, content, Sensitivity::Private);
-            idx.upsert_if_changed(&doc, &fp(kind, title, content, &Sensitivity::Private)).unwrap();
+            idx.upsert_if_changed(&doc, &fp(kind, title, content, &Sensitivity::Private))
+                .unwrap();
         }
-        let hits = idx.search(&ContextQuery { project_id: proj.into(), query: "my".into(), limit: Some(100), ..Default::default() }).unwrap();
+        let hits = idx
+            .search(&ContextQuery {
+                project_id: proj.into(),
+                query: "my".into(),
+                limit: Some(100),
+                ..Default::default()
+            })
+            .unwrap();
         assert_eq!(hits.len(), 6);
-        let kinds: std::collections::HashSet<String> = hits.iter().map(|h| h.source_kind.clone()).collect();
+        let kinds: std::collections::HashSet<String> =
+            hits.iter().map(|h| h.source_kind.clone()).collect();
         assert_eq!(kinds.len(), 6);
         assert!(kinds.contains("agent-session"));
     }
