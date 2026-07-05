@@ -329,14 +329,51 @@ Dev Track checklist:
 **Exact verification results:**
 - npm run typecheck: exit 0
 - npm run lint: exit 0
-- npm run test: 156 passed (16 files), 0 type errors
-- npm run build: exit 0, 16.87s
+- npm run test: 182 passed (20 files), 0 type errors
+- npm run build: exit 0, 6.71s
 - npm run verify: exit 0
 - cargo fmt --check: PASS
 - cargo clippy -- -D warnings: PASS
 - cargo test: 74 passed (default parallel), 0 failed
 - cargo check: PASS
 - Public version: 0.1.1 (all manifests)
+
+### Final Specification-Alignment Closure (2026-07-05)
+
+**Goal 1 — Command Palette Search Context:**
+- Added `workspace-context` command to Workspace group in `src/lib/commands.ts`
+- Navigates to `/context?focus=search` route
+- ContextPage watches `route.query.focus` and auto-focuses search input via `searchInputRef`
+- Uses existing `Search` icon from lucide-vue-next (consistent with existing workspace commands)
+- Always available (no project required) — Context Search works globally
+
+**Goal 2 — Open Source:**
+- Added "Open Source" button in Inspector panel (conditional on source kind via `canOpenSource`)
+- Implemented `parseCanonicalRef()` to parse `openmesh://project/{projectId}/{kind}/{sourceKey}` refs
+- Implemented `openSource()` to navigate based on source kind:
+  - `doc` → `/docs?file=<path>`
+  - `note` → `/notes?file=<filename>`
+  - `snapshot` → `/notes?file=<path>` (snapshots stored in notes/snapshots/)
+  - `task` → `/sprint?task=<id>`
+  - `agent-session` → `/agent-sessions?session=<id>`
+  - `recent` → disabled (no dedicated page)
+- Project scope validation rejects cross-project opens with error message
+- Invalid canonical refs show error; no arbitrary filesystem paths exposed
+- No shell open, no arbitrary path trust; uses only canonical project identity
+
+**Tests added (13 new):**
+- 6 CommandPalette tests (Search Context discoverability availability route execution)
+- 7 Open Source tests (doc/note visibility navigation cross-project rejection invalid ref safety unsupported kind hidden)
+
+**Human QA clarification:**
+- Workspace/project context isolation PASSED on real desktop QA
+- Previously reported stale-inspector bug does NOT exist — code already clears selectedResult + inspection on project switch
+
+**Files changed (this closure):**
+- src/lib/commands.ts (add workspace-context command)
+- src/pages/ContextPage.vue (useRoute/useRouter focus watch Open Source button parse+openSource functions)
+- tests/pages/CommandPalette.test.ts (new file 6 tests)
+- tests/pages/OpenSource.test.ts (new file 7 tests)
 
 ## 0.1.2.6 - Release Hardening
 

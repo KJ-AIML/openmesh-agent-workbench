@@ -861,3 +861,113 @@ Requires human verification of 12-item checklist on actual desktop.
 Perform the 12-item human desktop QA checklist.
 
 **STOP. Do not begin Dev Track 0.1.2.6.**
+
+---
+
+## 2026-07-05 — Dev Track 0.1.2.5 Final Specification-Alignment Closure
+
+**Status:** CONDITIONAL_PASS (awaiting focused GUI QA)
+**Branch:** main
+**Commit:** d21e66e
+
+### Human QA clarification
+
+The previously reported project-switch stale-inspector behavior is NOT a bug:
+- Workspace/project context isolation PASSED on real desktop QA
+- Code correctly clears `selectedResult` and `inspection` on `currentProjectPath` change
+- The automated test that claimed this was a false positive was mistaken in its setup
+- **Human owner has confirmed Context is correctly isolated by workspace/project**
+- **Do not implement any stale-inspector fix.** This issue is closed.
+
+### Gap 1 — Command Palette Search Context
+
+Architecture:
+- Added `workspace-context` command to Workspace group in `src/lib/commands.ts`
+- Command follows existing `workspace-pages` pattern with `route: "/context?focus=search"`
+- Always available (Context Search works globally without project selection)
+
+Behavior:
+- User opens Command Palette (Ctrl+K)
+- Types "context" or navigates Workspace group
+- Selecting "Search Context" calls `ctx.openFolder("/context?focus=search")`
+- Router pushes to `/context?focus=search`
+- ContextPage uses `useRoute()` to watch `route.query.focus`
+- On focus param, `await nextTick()` then `searchInputRef.value?.focus()`
+- Optional initial query support via `?q=<query>` param
+
+Tests (6 new):
+- includes Search Context action in Workspace group
+- always available (no project required)
+- discoverable by title
+- calls openFolder with /context?focus=search when executed
+- uses Search icon
+- placed before Settings in Workspace group
+
+### Gap 2 — Open Source
+
+Implementation:
+- Added "Open Source" button in Inspector panel
+- Only shown for supported source kinds (via `canOpenSource` computed)
+- Implemented `parseCanonicalRef()` parsing `openmesh://project/{projectId}/{kind}/{sourceKey}`
+- Implemented `openSource()` routing:
+  - `doc` → `/docs?file=<relativePath>`
+  - `note` → `/notes?file=<filename>`
+  - `snapshot` → `/notes?file=notes/snapshots/<filename>`
+  - `task` → `/sprint?task=<id>`
+  - `agent-session` → `/agent-sessions?session=<id>`
+  - `recent` → disabled (no dedicated page)
+- Project scope validation: rejects cross-project opens
+- Invalid canonical refs show error gracefully
+
+Unsupported kinds:
+- `recent` — transitional compatibility kind with no dedicated open target
+- Also blocked via `canOpenSource` computed
+
+Tests (7 new):
+- shows Open Source button for doc kind
+- shows Open Source button for note kind
+- does NOT show Open Source for recent kind
+- doc click navigates to /docs with file query param
+- note click navigates to /notes with file query param
+- cross-project open rejected with error message
+- invalid canonical ref does not show button
+
+### Files changed
+
+- `src/lib/commands.ts` — add context Search command
+- `src/pages/ContextPage.vue` — add useRoute/useRouter, focus watcher, Open Source button, parse+openSource functions
+- `tests/pages/CommandPalette.test.ts` — new file, 6 tests
+- `tests/pages/OpenSource.test.ts` — new file, 7 tests
+
+### User-facing behavior changed: YES (Command Palette nav + Open Source button)
+### Internal production behavior changed: YES (router + new functions)
+### Canonical data behavior changed: NO
+### Public version: 0.1.1
+
+### Verification
+
+Frontend:
+- npm run typecheck: exit 0
+- npm run lint: exit 0
+- npm run test: 182 passed (20 files), 0 type errors
+- npm run build: exit 0, 6.71s
+- npm run verify: exit 0
+
+Rust:
+- cargo fmt --check: PASS
+- cargo clippy -- -D warnings: PASS
+- cargo test: 74 passed (default parallel)
+- cargo check: PASS
+
+### Remaining gate
+
+**FOCUSED GUI QA (cannot perform in headless environment)**
+
+Focused retest checklist:
+1. Open Command Palette → Select Search Context → Context page opens, input focused
+2. Search for real Doc → Open Inspector → Click Open Source → correct Doc opens in current workspace
+3. Repeat with Note if supported
+4. Verify source from another workspace cannot be opened accidentally
+
+### Final automated status: CONDITIONAL_PASS
+### Dev Track 0.1.2.6 unlocked: NO
