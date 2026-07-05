@@ -98,16 +98,46 @@ Dev Track checklist:
 
 ## 0.1.2.2 - ContextSource Domain Model
 
-- Status: IN_PROGRESS
+- Status: PASS
 - Started at: 2026-07-05T13:45:00+07:00
-- Completed at: pending
+- Completed at: 2026-07-05T15:30:00+07:00
 - Branch: main
-- Commit(s): pending
+- Commit(s): 27fe09d (0.1.2.1), e7a7ed7 (0.1.2.2)
 - Summary:
+  - Created `src/domain/context/` module with pure domain contracts
+  - `types.ts`: ContextSource, ContextDocument, CONTEXT_SCHEMA_VERSION (1.0.0), sensitivity/freshness enums
+  - `canonicalRef.ts`: pure canonicalRef builder + deterministic FNV-1a sourceId (16 hex chars)
+  - `validators.ts`: pure runtime validators for ContextSource and ContextDocument with structured errors
+  - `mappers.ts`: 6 pure current-source mappers (doc, note, snapshot, task, recent, agent-session)
+  - `documentBuilder.ts`: pure `createContextDocument(source, text, options)` factory (no I/O)
+  - `src-tauri/src/context.rs`: Rust serde mirror with camelCase, tests for valid + reserved + invalid kind
+  - Shared JSON fixtures (tests/fixtures/context/) compatible with both TS and Rust
+  - 72 new TS tests across canonicalRef, validators, mappers, document, fixtures
+  - All privacy defaults conservative (private sensitivity, agent-context fail-closed)
+  - `recent` documented as transitional kind for 2026-07-05T15:30 — RecentItem left untouched
 - Verification:
+  - npm run typecheck: exit 0 (0 type errors)
+  - npm run lint: exit 0 (0 errors)
+  - npm run test: 134/134 tests passed (14 files)
+  - npm run build: exit 0 (7.87s)
+  - npm run verify: exit 0
+  - cargo fmt --check: PASS
+  - cargo clippy -- -D warnings: PASS
+  - cargo test --lib: 4 passed (3 context + 1 storage)
+  - cargo check: PASS
 - Manual QA:
+  - Live desktop manual QA was NOT performed. Not required: no production behavior changed.
 - Known limitations:
+  - Vue SFC typecheck in tests requires tsconfig to exclude vitest.config.ts (Vite 5/6 type clash)
+  - 840 pre-existing ESLint style warnings remain
+  - No SQLite/index/ingestion/search implemented yet
+  - RecentItem model untouched and still in production use
+  - Reserved kinds (work-event, git, connector) have no mappers yet
 - Decision notes:
+  - `recent` kind added as transitional compatibility (Dev Spec requires it for current RecentItem)
+  - FNV-1a chosen for deterministic index-stable IDs (no rebuild/dedup drift)
+  - Rust serde mirror added because 0.1.2.3 derived index will be Rust-side
+  - No new external dependencies added; pure domain-only types with explicit validators
 
 ## 0.1.2.3 - Derived Local Index
 
