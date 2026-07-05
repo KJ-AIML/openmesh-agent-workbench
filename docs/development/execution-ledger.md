@@ -263,3 +263,55 @@ Known limitations:
 
 Final status: PASS.
 
+
+## 2026-07-05 — Dev Track 0.1.2.3
+
+Status: PASS
+Branch: main
+Commit: cf9b0ec
+Objective: Create a disposable, rebuildable SQLite derived index for ContextDocument contracts over the 0.1.2.2 domain model.
+What changed:
+- Added `src-tauri/src/index.rs` (single-module derived index).
+- Added `rusqlite = { version = "0.30", features = ["bundled"] }` to src-tauri/Cargo.toml. Version 0.40 was rejected because it renamed/removed feature flags (`fts5` no longer exists as a feature; version 0.30 bundles SQLite 3.44.0 with FTS5 + JSON1 compiled in).
+- Verified at runtime: `SELECT sqlite_version()` → 3.44.0; `SELECT json_valid('{"openmesh":true}')` → 1; FTS5 MATCH returns correct rows; `PRAGMA journal_mode=wal` returns `wal` on file-backed DB.
+Design:
+- `DerivedIndex` struct owns a `rusqlite::Connection` + `PathBuf`.
+- Open path: `~/.openmesh/indexes/proj_<fnv1a(projectId)>/context.sqlite3` — outside project source tree, project-scoped, safe against path traversal via FNV-1a hashing.
+- Schema: `index_meta` (key/value), `context_documents` (full metadata + text), `context_documents_fts` (FTS5 over title+body with UNINDEXED identity columns).
+- Transactional write API: `upsert_document`, `remove_source`, `replace_project_documents`, `clear_project`. Each opens a transaction, does the work, commits. Rollback on any error.
+- Rebuild boundary: `rebuild_from_documents(project_id, &[IndexDocument])`. NO file-system ingestion — canonical files are never accessed.
+- Search: `search(ContextQuery)` returns `Vec<ContextHit>` ranked by bm25(). Kind filtering done in Rust post-query. Result limit honored. Secret documents excluded from results and from FTS insertion.
+- JSON metadata query: `query_metadata(project_id, json_path)` returns matching `(document_id, json_text)` pairs via `json_extract` + CAST-to-TEXT.
+- Corrupt recovery: close connection, remove DB + `-wal` + `-shm` sidecars, recreate empty schema.
+- Disposability: `purge()` closes + removes all files; `recover_corrupt_index()` is a free function for the same.
+Tests added (24 Rust tests in `index::tests`):
+- `sqlite_version_available`, `json_functions_work`, `fts5_match_works`
+- `index_path_is_deterministic_and_outside_project_tree`, `index_path_project_isolation`, `index_path_rejects_traversal`, `index_path_rejects_empty_project_id`
+- `schema_init_is_idempotent`, `upsert_and_search`, `re_upsert_replaces_stale_search_content`, `remove_source_clears_search`, `replace_project_documents_is_transactional`
+- `search_no_match_returns_empty`, `search_empty_query_returns_empty`, `search_unicode_and_punctuation_safe`, `search_kind_filter`, `search_limit`
+- `metadata_round_trip`, `secret_text_not_indexed`, `forced_failure_rolls_back`, `rebuild_from_documents_produces_equivalent_search`, `purge_removes_index_files`, `recover_corrupt_index_creates_fresh_empty_index`, `health_reports_expected_fields`
+Commands run and exact results:
+- `cargo check` → exit 0 (fixes: dependency version, content vs contentless FTS5, Serialize derive conflicts, manual Default impl, temporary borrows, apply_schema self-borrow)
+- `cargo fmt --check` → PASS
+- `cargo clippy --lib -- -D warnings` → PASS (with `#![cfg_attr(not(test), allow(dead_code))]`)
+- `cargo clippy --lib --tests -- -D warnings` → PASS
+- `cargo test --lib` → 28 passed (24 in index::tests + 4 in context::tests)
+- `npm run typecheck` → exit 0
+- `npm run lint` → exit 0 (--quiet)
+- `npm run test` → 134 passed (14 files), 0 type errors
+- `npm run build` → exit 0 (7.13s)
+- All public versions remain 0.1.1
+Manual desktop QA performed: NOT performed. No UI or Tauri commands added. All behavior validated via 24 Rust tests.
+Architecture decisions:
+- rusqlite 0.30 + bundled (NOT 0.40) — 0.40 removed the `fts5` feature flag
+- Normal (non-contentless) FTS5 table — contentless FTS5 hides UNINDEXED column values
+- FNV-1a hash for project directory naming — prevents traversal
+- WAL mode on file-backed DBs — verified via `PRAGMA journal_mode` readback
+- Rebuild boundary strictly `rebuild_from_documents()` — no canonical file reads
+- `sensitivity_ceiling`, `open`, `path`, `inspect` API methods prepared but test-only; will be consumed in 0.1.2.4
+Known limitations:
+- bm25 scoring is raw; recency/source weighting hooks prepared but not wired
+- No content-chunking; full document text indexed per row
+- WAL sidecar cleanup on Windows may fail if external process holds the connection
+Final status: PASS.
+Dev Track 0.1.2.4 unlocked: YES.
