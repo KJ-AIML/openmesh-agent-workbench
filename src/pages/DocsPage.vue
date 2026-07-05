@@ -407,25 +407,62 @@ function formatBytes(bytes: number | null): string {
 
 onMounted(async () => {
   if (currentProject.value) {
-    await refreshDocs();
+    // Wait for tree to be populated. Use a polling approach with a
+    // bounded wait so that the deep-link works even if refreshDocs()
+    // takes longer than expected (e.g., slow Rust IPC on desktop).
+    let attempts = 0;
+    while (docsTree.value.length === 0 && attempts < 20) {
+      await refreshDocs();
+      if (docsTree.value.length === 0) {
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      attempts++;
+    }
+    // Also try one more refresh after the loop in case the last
+    // attempt populated the tree.
+    if (docsTree.value.length === 0) {
+      await refreshDocs();
+    }
+
     // Handle deep-link from Context Search
     const fileParam = route.query.file;
     if (typeof fileParam === "string" && fileParam) {
-      // Find the node in the tree
-      const node = findNodeByPath(docsTree.value, fileParam);
+      // Normalize the incoming path: decode URL encoding and convert
+      // any Windows-style backslashes to POSIX forward slashes so it
+      // matches the tree node paths returned by the Rust backend.
+      const normalizedParam = normalizeTreePath(fileParam);
+      // Find the node in the tree using normalized path.
+      const node = findNodeByPath(docsTree.value, normalizedParam);
       if (node && node.nodeType === "file") {
-        // Expand parent folders
-        const parts = fileParam.split("/");
+        // Expand parent folders using normalized path segments.
+        const parts = normalizedParam.split("/").filter(Boolean);
         for (let i = 1; i < parts.length; i++) {
           const folderPath = parts.slice(0, i).join("/");
-          expandedFolders.value.add(folderPath || "root");
+          expandedFolders.value.add(folderPath);
         }
-        // Select the file
+        // Select the file.
         await handleSelectDoc(node);
       }
     }
   }
 });
+
+/**
+ * Normalize a path from a route query parameter to match the format
+ * used by Rust's `list_docs_tree_fn` (POSIX forward slashes, no URL
+ * encoding, relative to docs root).
+ */
+function normalizeTreePath(raw: string): string {
+  // Decode any URL encoding (e.g., %20 for spaces, %2F for slashes).
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(raw);
+  } catch {
+    decoded = raw;
+  }
+  // Replace backslashes with forward slashes for Windows compatibility.
+  return decoded.replace(/\\/g, "/");
+}
 watch(() => currentProject.value, async () => {
   if (currentProject.value) {
     await refreshDocs();

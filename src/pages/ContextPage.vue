@@ -245,31 +245,57 @@ const canOpenSource = computed(() => {
   return ["doc", "note"].includes(parsed.kind);
 });
 
-onMounted(async () => {
-  await loadHealth();
-  // Handle initial focus from Command Palette navigation
-  if (route.query.focus === "search") {
-    await nextTick();
-    // Use setTimeout to ensure DOM is fully ready
-    setTimeout(() => {
-      searchInputRef.value?.focus();
-    }, 50);
-  }
-});
-watch(currentProjectPath, () => { loadHealth(); selectedResult.value = null; inspection.value = null; results.value = []; hasExecutedSearch.value = false; });
+// Attempt to focus the search input after the component is mounted
+// and the DOM has settled. Uses requestAnimationFrame to ensure the
+// browser has painted and the input is focusable.
+const focusSearchInput = () => {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      if (searchInputRef.value && document.activeElement !== searchInputRef.value) {
+        searchInputRef.value.focus();
+      }
+    });
+  });
+};
 
-// Focus search input when route changes to focus=search
+// Handle route changes that request focus on the search input.
+// This fires every time route.query.focus changes (not just on mount),
+// which handles repeated Command Palette → Search Context navigation.
 watch(
   () => route.query.focus,
-  async (focus) => {
+  (focus) => {
     if (focus === "search") {
-      await nextTick();
-      setTimeout(() => {
-        searchInputRef.value?.focus();
-      }, 50);
+      focusSearchInput();
     }
   },
 );
+
+// Attempt initial focus on mount (in case the watcher above doesn't fire
+// for the initial route value).
+onMounted(() => {
+  if (route.query.focus === "search") {
+    focusSearchInput();
+  }
+  // Load health data (async, don't block focus)
+  loadHealth();
+});
+watch(currentProjectPath, () => {
+  loadHealth();
+  selectedResult.value = null;
+  inspection.value = null;
+  results.value = [];
+  hasExecutedSearch.value = false;
+});
+
+// Reset executed search state when the user types a new query.
+// This ensures that typing a new query after a previous search
+// shows "Press Enter to search" instead of stale "No results".
+watch(query, (newQuery, oldQuery) => {
+  if (newQuery !== oldQuery) {
+    hasExecutedSearch.value = false;
+    executedQuery.value = "";
+  }
+});
 
 // Optional: preserve initial query from Command Palette
 watch(

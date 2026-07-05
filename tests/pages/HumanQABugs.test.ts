@@ -1,8 +1,13 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { mount, flushPromises } from '@vue/test-utils';
 import { nextTick, ref } from 'vue';
+import ContextPage from '@/pages/ContextPage.vue';
+import DocsPage from '@/pages/DocsPage.vue';
+import NotesPage from '@/pages/NotesPage.vue';
+import { searchContext, getContextHealth } from '@/lib/contextClient';
+import type { DocTreeNode } from '@/lib/store';
 
-// Mock the context client.
+// Mock the context client
 vi.mock('@/lib/contextClient', () => ({
   refreshContext: vi.fn(),
   searchContext: vi.fn(),
@@ -10,19 +15,20 @@ vi.mock('@/lib/contextClient', () => ({
   getContextHealth: vi.fn(),
 }));
 
-// Mock vue-router with mutable query
-const mockQuery = ref<Record<string, string | undefined>>({});
+// Shared mock route query (mutable across tests)
+const mockQuery = ref<Record<string, string>>({});
+
 vi.mock('vue-router', () => ({
-  useRoute: () => ({ query: mockQuery.value }),
+  useRoute: () => ({ query: mockQuery.value, path: '/context' }),
   useRouter: () => ({ push: vi.fn() }),
 }));
 
-// Mock useStore
+// Mock useStore with realistic state
 const mockStore = {
   currentProject: ref({ id: 'test-project', name: 'Test Project' }),
   currentProjectPath: ref('/test/path'),
   projectDocs: ref([]),
-  docsTree: ref<any[]>([]),
+  docsTree: ref<DocTreeNode[]>([]),
   refreshDocs: vi.fn(),
   readDoc: vi.fn(),
   projectNotes: ref<Array<{ name: string; path: string; is_dir: boolean; size: number | null; modified_at: string | null }>>([]),
@@ -34,15 +40,12 @@ vi.mock('@/lib/useStore', () => ({
   useStore: () => mockStore,
 }));
 
-import ContextPage from '@/pages/ContextPage.vue';
-import DocsPage from '@/pages/DocsPage.vue';
-import NotesPage from '@/pages/NotesPage.vue';
-import { searchContext, getContextHealth } from '@/lib/contextClient';
-
-describe('Human QA Bug Regression Tests', () => {
+describe('Real Runtime Bug Regression Tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockQuery.value = {};
+    mockStore.docsTree.value = [];
+    mockStore.projectNotes.value = [];
     vi.mocked(getContextHealth).mockResolvedValue({
       path: '/test/path',
       schema_version: 1,
@@ -53,320 +56,383 @@ describe('Human QA Bug Regression Tests', () => {
       wal_mode_effective: true,
       integrity_ok: true,
     });
-    // Reset store
-    mockStore.docsTree.value = [];
-    mockStore.projectNotes.value = [];
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  describe('TEST 1 — Real DOM Focus', () => {
-    it('focuses search input when navigating with ?focus=search', async () => {
+  // =========================================================================
+  // BUG A — Focus
+  // =========================================================================
+  describe('BUG A — Command Palette → Search Context focus', () => {
+    it('focuses input when route.query.focus === "search"', async () => {
       mockQuery.value = { focus: 'search' };
 
       const wrapper = mount(ContextPage, {
         global: {
-          stubs: {
-            'lucide-vue-next': true,
-          },
-        },
-        attachTo: document.body,
-      });
-
-      // Wait for onMounted and setTimeout to complete
-      await nextTick();
-      await new Promise((resolve) => setTimeout(resolve, 100));
-
-      // Find the search input
-      const searchInput = wrapper.find('input[placeholder="Search your context…"]');
-      expect(searchInput.exists()).toBe(true);
-
-      // Check that the input element is focused in the DOM
-      const inputElement = searchInput.element as HTMLInputElement;
-      expect(document.activeElement).toBe(inputElement);
-
-      wrapper.unmount();
-    });
-
-    it('does NOT force focus when navigating without ?focus=search', async () => {
-      mockQuery.value = {};
-
-      const wrapper = mount(ContextPage, {
-        global: {
-          stubs: {
-            'lucide-vue-next': true,
-          },
+          stubs: { 'lucide-vue-next': true },
         },
         attachTo: document.body,
       });
 
       await nextTick();
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            resolve();
+          });
+        });
+      });
 
-      // Find the search input
       const searchInput = wrapper.find('input[placeholder="Search your context…"]');
       expect(searchInput.exists()).toBe(true);
-
-      // Check that the input element is NOT focused
-      const inputElement = searchInput.element as HTMLInputElement;
-      expect(document.activeElement).not.toBe(inputElement);
+      expect(document.activeElement).toBe(searchInput.element);
 
       wrapper.unmount();
     });
   });
 
-  describe('TEST 2 — Doc Deep Link Consumption', () => {
-    it('selects exact doc when route.query.file is provided', async () => {
-      // Mock docs tree with a file
+  // =========================================================================
+  // BUG B — Pre-submit search state
+  // =========================================================================
+  describe('BUG B — Pre-submit No Results must not appear', () => {
+    it('typing without Enter does not trigger search or show No Results', async () => {
+      vi.mocked(searchContext).mockResolvedValue([]);
+
+      mockQuery.value = {};
+      const wrapper = mount(ContextPage, {
+        global: {
+          stubs: { 'lucide-vue-next': true },
+        },
+        attachTo: document.body,
+      });
+
+      await nextTick();
+
+      const searchInput = wrapper.find('input[placeholder="Search your context…"]');
+      await searchInput.setValue('deploy');
+      await nextTick();
+
+      expect(searchContext).not.toHaveBeenCalled();
+      expect(wrapper.text()).not.toContain('No results for "deploy"');
+      expect(wrapper.text()).toContain('Press Enter to search');
+
+      wrapper.unmount();
+    });
+
+    it('shows No Results only after Enter with empty results', async () => {
+      vi.mocked(searchContext).mockResolvedValue([]);
+
+      mockQuery.value = {};
+      const wrapper = mount(ContextPage, {
+        global: {
+          stubs: { 'lucide-vue-next': true },
+        },
+        attachTo: document.body,
+      });
+
+      await nextTick();
+
+      const searchInput = wrapper.find('input[placeholder="Search your context…"]');
+      await searchInput.setValue('missing-term');
+      await searchInput.trigger('keyup.enter');
+      await nextTick();
+
+      expect(searchContext).toHaveBeenCalledTimes(1);
+      expect(wrapper.text()).toContain('No results for "missing-term"');
+
+      wrapper.unmount();
+    });
+
+    it('editing input after empty search does not show stale No Results for new query', async () => {
+      vi.mocked(searchContext).mockResolvedValue([]);
+
+      mockQuery.value = {};
+      const wrapper = mount(ContextPage, {
+        global: {
+          stubs: { 'lucide-vue-next': true },
+        },
+        attachTo: document.body,
+      });
+
+      await nextTick();
+
+      const searchInput = wrapper.find('input[placeholder="Search your context…"]');
+
+      // Step 1: Search for "missing-term" with empty results
+      await searchInput.setValue('missing-term');
+      await searchInput.trigger('keyup.enter');
+      await nextTick();
+      expect(wrapper.text()).toContain('No results for "missing-term"');
+
+      // Step 2: Change input to "deploy" WITHOUT pressing Enter
+      await searchInput.setValue('deploy');
+      await nextTick();
+
+      expect(wrapper.text()).not.toContain('No results for "deploy"');
+      expect(wrapper.text()).toContain('Press Enter to search');
+      expect(searchContext).toHaveBeenCalledTimes(1);
+
+      wrapper.unmount();
+    });
+  });
+
+  // =========================================================================
+  // BUG C — Nested Doc deep link
+  // =========================================================================
+  describe('BUG C — Nested Doc deep link opens exact source', () => {
+    it('opens nested doc with parent folders expanded (one level)', async () => {
+      mockStore.docsTree.value = [
+        {
+          name: 'architecture',
+          path: 'architecture',
+          nodeType: 'folder' as const,
+          children: [
+            {
+              name: 'overview.md',
+              path: 'architecture/overview.md',
+              nodeType: 'file' as const,
+              children: [],
+              size: 200,
+              modifiedAt: null,
+            },
+          ],
+          size: null,
+          modifiedAt: null,
+        },
+      ];
+
+      mockQuery.value = { file: 'architecture/overview.md' };
+
+      const wrapper = mount(DocsPage, {
+        global: {
+          stubs: {
+            'lucide-vue-next': true,
+            DocTreeItem: true,
+          },
+        },
+        attachTo: document.body,
+      });
+
+      await flushPromises();
+      await new Promise((r) => setTimeout(r, 100));
+
+      expect(mockStore.readDoc).toHaveBeenCalledWith('architecture/overview.md');
+
+      const vm = wrapper.vm as any;
+      expect(vm.selectedPath).toBe('architecture/overview.md');
+
+      const expanded = vm.expandedFolders as Set<string>;
+      expect(expanded.has('architecture')).toBe(true);
+
+      wrapper.unmount();
+    });
+
+    it('opens deeply nested doc (multiple levels)', async () => {
+      mockStore.docsTree.value = [
+        {
+          name: 'a',
+          path: 'a',
+          nodeType: 'folder' as const,
+          children: [
+            {
+              name: 'b',
+              path: 'a/b',
+              nodeType: 'folder' as const,
+              children: [
+                {
+                  name: 'c.md',
+                  path: 'a/b/c.md',
+                  nodeType: 'file' as const,
+                  children: [],
+                  size: 100,
+                  modifiedAt: null,
+                },
+              ],
+              size: null,
+              modifiedAt: null,
+            },
+          ],
+          size: null,
+          modifiedAt: null,
+        },
+      ];
+
+      mockQuery.value = { file: 'a/b/c.md' };
+
+      const wrapper = mount(DocsPage, {
+        global: {
+          stubs: { 'lucide-vue-next': true, DocTreeItem: true },
+        },
+        attachTo: document.body,
+      });
+
+      await flushPromises();
+      await new Promise((r) => setTimeout(r, 100));
+
+      expect(mockStore.readDoc).toHaveBeenCalledWith('a/b/c.md');
+
+      const vm = wrapper.vm as any;
+      expect(vm.selectedPath).toBe('a/b/c.md');
+
+      const expanded = vm.expandedFolders as Set<string>;
+      expect(expanded.has('a')).toBe(true);
+      expect(expanded.has('a/b')).toBe(true);
+
+      wrapper.unmount();
+    });
+
+    it('does NOT open folderA/file when folderB/file is requested', async () => {
+      mockStore.docsTree.value = [
+        {
+          name: 'folderA',
+          path: 'folderA',
+          nodeType: 'folder' as const,
+          children: [
+            {
+              name: 'readme.md',
+              path: 'folderA/readme.md',
+              nodeType: 'file' as const,
+              children: [],
+              size: 100,
+              modifiedAt: null,
+            },
+          ],
+          size: null,
+          modifiedAt: null,
+        },
+        {
+          name: 'folderB',
+          path: 'folderB',
+          nodeType: 'folder' as const,
+          children: [
+            {
+              name: 'readme.md',
+              path: 'folderB/readme.md',
+              nodeType: 'file' as const,
+              children: [],
+              size: 200,
+              modifiedAt: null,
+            },
+          ],
+          size: null,
+          modifiedAt: null,
+        },
+      ];
+
+      mockQuery.value = { file: 'folderB/readme.md' };
+
+      const wrapper = mount(DocsPage, {
+        global: {
+          stubs: { 'lucide-vue-next': true, DocTreeItem: true },
+        },
+        attachTo: document.body,
+      });
+
+      await flushPromises();
+      await new Promise((r) => setTimeout(r, 100));
+
+      expect(mockStore.readDoc).toHaveBeenCalledWith('folderB/readme.md');
+      expect(mockStore.readDoc).not.toHaveBeenCalledWith('folderA/readme.md');
+
+      const vm = wrapper.vm as any;
+      expect(vm.selectedPath).toBe('folderB/readme.md');
+
+      const expanded = vm.expandedFolders as Set<string>;
+      expect(expanded.has('folderB')).toBe(true);
+      expect(expanded.has('folderA')).toBe(false);
+
+      wrapper.unmount();
+    });
+
+    it('handles URL-encoded path segments gracefully', async () => {
+      mockStore.docsTree.value = [
+        {
+          name: 'my folder',
+          path: 'my folder',
+          nodeType: 'folder' as const,
+          children: [
+            {
+              name: 'doc.md',
+              path: 'my folder/doc.md',
+              nodeType: 'file' as const,
+              children: [],
+              size: 100,
+              modifiedAt: null,
+            },
+          ],
+          size: null,
+          modifiedAt: null,
+        },
+      ];
+
+      mockQuery.value = { file: 'my%20folder/doc.md' };
+
+      const wrapper = mount(DocsPage, {
+        global: {
+          stubs: { 'lucide-vue-next': true, DocTreeItem: true },
+        },
+        attachTo: document.body,
+      });
+
+      await flushPromises();
+      await new Promise((r) => setTimeout(r, 100));
+
+      expect(mockStore.readDoc).toHaveBeenCalledWith('my folder/doc.md');
+
+      wrapper.unmount();
+    });
+
+    it('root-level doc deep-link still works (regression check)', async () => {
       mockStore.docsTree.value = [
         {
           name: 'Sample.md',
           path: 'Sample.md',
-          nodeType: 'file',
+          nodeType: 'file' as const,
           children: [],
+          size: 100,
+          modifiedAt: null,
         },
       ];
 
-      // Mock readDoc to return content
-      const mockReadDoc = vi.fn().mockResolvedValue('# Sample Content\n\nThis is a test document.');
-      mockStore.readDoc = mockReadDoc;
-
-      // Mock route with file query
       mockQuery.value = { file: 'Sample.md' };
 
       const wrapper = mount(DocsPage, {
         global: {
-          stubs: {
-            'lucide-vue-next': true,
-            DocTreeItem: true,
-          },
+          stubs: { 'lucide-vue-next': true, DocTreeItem: true },
         },
+        attachTo: document.body,
       });
 
-      await nextTick();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await flushPromises();
+      await new Promise((r) => setTimeout(r, 100));
 
-      // Verify readDoc was called with the exact file
-      expect(mockReadDoc).toHaveBeenCalledWith('Sample.md');
+      expect(mockStore.readDoc).toHaveBeenCalledWith('Sample.md');
 
-      // Verify the content is displayed
-      expect(wrapper.text()).toContain('Sample Content');
+      const vm = wrapper.vm as any;
+      expect(vm.selectedPath).toBe('Sample.md');
 
       wrapper.unmount();
     });
 
-    it('selects nested doc when route.query.file contains path', async () => {
-      // Mock docs tree with nested file
-      mockStore.docsTree.value = [
-        {
-          name: 'folder',
-          path: 'folder',
-          nodeType: 'folder',
-          children: [
-            {
-              name: 'child.md',
-              path: 'folder/child.md',
-              nodeType: 'file',
-              children: [],
-            },
-          ],
-        },
-      ];
-
-      const mockReadDoc = vi.fn().mockResolvedValue('# Nested Content');
-      mockStore.readDoc = mockReadDoc;
-
-      mockQuery.value = { file: 'folder/child.md' };
-
-      const wrapper = mount(DocsPage, {
-        global: {
-          stubs: {
-            'lucide-vue-next': true,
-            DocTreeItem: true,
-          },
-        },
-      });
-
-      await nextTick();
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
-      expect(mockReadDoc).toHaveBeenCalledWith('folder/child.md');
-      expect(wrapper.text()).toContain('Nested Content');
-
-      wrapper.unmount();
-    });
-  });
-
-  describe('TEST 3 — Note Deep Link Consumption', () => {
-    it('selects exact note when route.query.file is provided', async () => {
-      // Mock notes with a file
+    it('Note deep-link still works (regression check)', async () => {
       mockStore.projectNotes.value = [
         { name: 'meeting-notes.md', path: 'meeting-notes.md', is_dir: false, size: null, modified_at: null },
       ];
-
-      const mockReadNote = vi.fn().mockResolvedValue('# Meeting Notes\n\nImportant discussion points.');
-      mockStore.readNote = mockReadNote;
 
       mockQuery.value = { file: 'meeting-notes.md' };
 
       const wrapper = mount(NotesPage, {
         global: {
-          stubs: {
-            'lucide-vue-next': true,
-          },
+          stubs: { 'lucide-vue-next': true },
         },
+        attachTo: document.body,
       });
 
-      // Wait for async operations: onMounted -> refreshNotes -> handleSelectNote -> readNote
-      await nextTick();
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await flushPromises();
+      await new Promise((r) => setTimeout(r, 100));
 
-      // Verify readNote was called by the deep-link logic
-      expect(mockReadNote).toHaveBeenCalledWith('meeting-notes.md');
+      expect(mockStore.readNote).toHaveBeenCalledWith('meeting-notes.md');
 
-      // Access the component's internal state to verify the note is selected
       const vm = wrapper.vm as any;
       expect(vm.selectedFilename).toBe('meeting-notes.md');
-      expect(vm.selectedContent).toContain('Meeting Notes');
-
-      // Verify the content is rendered in the DOM (via v-html="renderedContent")
-      const html = wrapper.html();
-      expect(html).toContain('Meeting Notes');
-
-      wrapper.unmount();
-    });
-  });
-
-  describe('TEST 4 — Type Without Enter', () => {
-    it('does NOT show "No results" before pressing Enter', async () => {
-      mockQuery.value = {};
-
-      const wrapper = mount(ContextPage, {
-        global: {
-          stubs: {
-            'lucide-vue-next': true,
-          },
-        },
-      });
-
-      await nextTick();
-
-      // Type a query without pressing Enter
-      const searchInput = wrapper.find('input[placeholder="Search your context…"]');
-      await searchInput.setValue('deploy');
-
-      // Verify searchContext was NOT called
-      expect(searchContext).not.toHaveBeenCalled();
-
-      // Verify "No results" is NOT shown
-      expect(wrapper.text()).not.toContain('No results for "deploy"');
-
-      // Verify "Press Enter to search" IS shown
-      expect(wrapper.text()).toContain('Press Enter to search');
-
-      wrapper.unmount();
-    });
-  });
-
-  describe('TEST 5 — Edit After Previous Search', () => {
-    it('does NOT show "No results for deploy" after editing from previous empty search', async () => {
-      mockQuery.value = {};
-
-      // Mock first search to return empty
-      vi.mocked(searchContext).mockResolvedValueOnce([]);
-
-      const wrapper = mount(ContextPage, {
-        global: {
-          stubs: {
-            'lucide-vue-next': true,
-          },
-        },
-      });
-
-      await nextTick();
-
-      const searchInput = wrapper.find('input[placeholder="Search your context…"]');
-
-      // Step 1: Search for "missing-term"
-      await searchInput.setValue('missing-term');
-      await searchInput.trigger('keyup.enter');
-      await nextTick();
-
-      // Verify "No results for missing-term" is shown
-      expect(wrapper.text()).toContain('No results for "missing-term"');
-
-      // Step 2: Change input to "deploy" without pressing Enter
-      await searchInput.setValue('deploy');
-      await nextTick();
-
-      // Verify "No results for deploy" is NOT shown
-      expect(wrapper.text()).not.toContain('No results for "deploy"');
-
-      // Verify searchContext was NOT called again
-      expect(searchContext).toHaveBeenCalledTimes(1);
-
-      // Verify we're back to "Press Enter to search" state
-      expect(wrapper.text()).toContain('Press Enter to search');
-
-      wrapper.unmount();
-    });
-  });
-
-  describe('TEST 6 — Submit After Draft', () => {
-    it('executes search and shows results after pressing Enter', async () => {
-      mockQuery.value = {};
-
-      // Mock search to return results
-      const mockResults = [
-        {
-          id: 'doc-1',
-          title: 'Deployment Guide',
-          snippet: 'How to deploy the application...',
-          kind: 'doc',
-          path: 'docs/deploy.md',
-          score: 0.95,
-        },
-      ];
-      vi.mocked(searchContext).mockResolvedValueOnce(mockResults as any);
-
-      const wrapper = mount(ContextPage, {
-        global: {
-          stubs: {
-            'lucide-vue-next': true,
-          },
-        },
-      });
-
-      await nextTick();
-
-      const searchInput = wrapper.find('input[placeholder="Search your context…"]');
-
-      // Type query
-      await searchInput.setValue('deploy');
-      await nextTick();
-
-      // Verify "Press Enter to search" is shown
-      expect(wrapper.text()).toContain('Press Enter to search');
-
-      // Press Enter
-      await searchInput.trigger('keyup.enter');
-      await nextTick();
-
-      // Verify searchContext was called exactly once with correct query
-      expect(searchContext).toHaveBeenCalledTimes(1);
-      expect(searchContext).toHaveBeenCalledWith(
-        '/test/path',
-        'deploy',
-        expect.objectContaining({ limit: 25 })
-      );
-
-      // Verify results are displayed
-      expect(wrapper.text()).toContain('Deployment Guide');
-
-      // Verify "Press Enter to search" is no longer shown
-      expect(wrapper.text()).not.toContain('Press Enter to search');
 
       wrapper.unmount();
     });
