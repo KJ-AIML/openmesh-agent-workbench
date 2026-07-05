@@ -381,9 +381,48 @@ impl DerivedIndex {
         let text_length = searchable.len() as i64;
 
         let tx = self.conn.transaction()?;
-        Self::write_document_tx(&tx, doc, &searchable, text_length)?;
+        Self::write_document_tx(&tx, doc, &searchable, text_length, None)?;
         tx.commit()?;
         Ok(())
+    }
+
+    /// Insert-or-update only if content hash changed.
+    /// Returns true when a write was performed, false when unchanged.
+    pub fn upsert_if_changed(&mut self, doc: &IndexDocument, hash: &str) -> IndexResult<bool> {
+        // Compare against stored hash.
+        let stored: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT content_hash FROM context_documents WHERE document_id = ?1",
+                [&doc.document_id],
+                |r| r.get(0),
+            )
+            .optional()?;
+
+        if stored.as_deref() == Some(hash) {
+            return Ok(false); // unchanged
+        }
+
+        doc.validate()?;
+        let searchable = doc.searchable_text().to_string();
+        let text_length = searchable.len() as i64;
+
+        let tx = self.conn.transaction()?;
+        Self::write_document_tx(&tx, doc, &searchable, text_length, Some(hash))?;
+        tx.commit()?;
+        Ok(true)
+    }
+
+    /// Retrieve the stored content hash for a document, if any.
+    pub fn get_stored_hash(&self, document_id: &str) -> IndexResult<Option<String>> {
+        self.conn
+            .query_row(
+                "SELECT content_hash FROM context_documents WHERE document_id = ?1",
+                [document_id],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(Into::into)
     }
 
     fn write_document_tx(
@@ -391,15 +430,16 @@ impl DerivedIndex {
         doc: &IndexDocument,
         searchable: &str,
         text_length: i64,
+        content_hash: Option<&str>,
     ) -> SqlResult<()> {
         // 1. Upsert canonical document row.
         tx.execute(
             "INSERT INTO context_documents
                 (document_id, source_id, project_id, source_kind,
-                 canonical_ref, title, text, text_length,
+                 canonical_ref, title, text, text_length, content_hash,
                  sensitivity, agent_context_enabled, freshness_state,
                  observed_at, source_updated_at, indexed_at, metadata_json)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
              ON CONFLICT(document_id) DO UPDATE SET
                 source_id = excluded.source_id,
                 project_id = excluded.project_id,
@@ -408,6 +448,7 @@ impl DerivedIndex {
                 title = excluded.title,
                 text = excluded.text,
                 text_length = excluded.text_length,
+                content_hash = excluded.content_hash,
                 sensitivity = excluded.sensitivity,
                 agent_context_enabled = excluded.agent_context_enabled,
                 freshness_state = excluded.freshness_state,
@@ -424,6 +465,7 @@ impl DerivedIndex {
                 &doc.title,
                 &doc.text,
                 text_length,
+                content_hash,
                 format!("{:?}", doc.sensitivity).to_lowercase(),
                 doc.agent_context_enabled as i64,
                 &doc.freshness_state,
@@ -489,7 +531,7 @@ impl DerivedIndex {
         )?;
         for d in docs {
             let searchable = d.searchable_text().to_string();
-            Self::write_document_tx(&tx, d, &searchable, searchable.len() as i64)?;
+            Self::write_document_tx(&tx, d, &searchable, searchable.len() as i64, None)?;
         }
         tx.commit()?;
         Ok(())
