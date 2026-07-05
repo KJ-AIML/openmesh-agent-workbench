@@ -1,6 +1,7 @@
 #[allow(dead_code)]
 mod context;
 mod index;
+mod ingestion;
 mod storage;
 
 use serde::{Deserialize, Serialize};
