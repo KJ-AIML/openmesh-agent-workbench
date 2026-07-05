@@ -199,16 +199,46 @@ Dev Track checklist:
 
 ## 0.1.2.4 - Context Ingestion Pipeline
 
-- Status: NOT_STARTED
-- Started at:
-- Completed at:
-- Branch:
-- Commit(s):
+- Status: PASS
+- Started at: 2026-07-05T20:00:00+07:00
+- Completed at: 2026-07-05T21:00:00+07:00
+- Branch: main
+- Commit(s): 1925da8, 98ffb54
 - Summary:
+  - Created src-tauri/src/ingestion.rs with 18 tests (54 total Rust)
+  - Canonical source inventory completed: 6 families inventoried from code
+  - Bounded reads: 1 MiB per text file, 4 MiB per JSON collection, no silent truncation
+  - Path safety: traversal, symlink, and absolute-path escape blocked
+  - Snapshot/Note decision: snapshots live in notes/snapshots/, explicitly excluded from note harvest
+  - ScannedSession: NOT ingested (not canonical persisted state)
+  - Project identity: project.id from project.json (caller-supplied ID mismatch test)
+  - Stable FNV-1a fingerprint over kind/title/text/sensitivity/agentCtx (versioned prefix)
+  - Secret policy: non-empty secret -> metadata-only (empty text, no FTS)
+  - Ingestion receipts: structured per-source outcomes; no content leakage in errors/receipts
+  - Source-family isolation: malformed JSON in one family does not poison others
 - Verification:
+  - npm run typecheck: exit 0
+  - npm run lint: exit 0 (--quiet)
+  - npm run test: 134 passed (14 files), 0 type errors
+  - npm run build: exit 0
+  - npm run verify: exit 0
+  - cargo fmt --check: PASS
+  - cargo clippy -- -D warnings: PASS
+  - cargo test: 54 passed (exit 0)
+  - cargo check: PASS
+  - public version: 0.1.1 (all manifests)
 - Manual QA:
+  - Desktop manual QA: NOT performed. No UI/runtime changes.
 - Known limitations:
+  - No filesystem watchers (manual trigger only)
+  - No automatic background ingestion
+  - Receipts returned in memory only; not persisted to disposable derived state
+  - Search UI not yet added (0.1.2.5)
 - Decision notes:
+  - Module consolidated to single file for first implementation
+  - FNV-1a chosen for stable fingerprint without adding a dependency
+  - Secret documents converted to metadata-only rather than skipped
+  - Receipts exclude source content (privacy-safe)
 
 ## 0.1.2.5 - Context Search & Inspector
 
