@@ -73,6 +73,7 @@ const workspaceNav = [
   { label: "Home", icon: Home, route: "/" },
   { label: "Docs", icon: FileText, route: "/docs" },
   { label: "Notes", icon: FileEdit, route: "/notes" },
+  { label: "Context", icon: Search, route: "/context" },
   { label: "Sprint", icon: ListTodo, route: "/sprint" },
 ];
 

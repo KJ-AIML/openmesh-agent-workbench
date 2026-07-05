@@ -302,7 +302,7 @@ pub fn reject_symlinks(path: &Path) -> IngestionResult<()> {
 // Harvested Source
 // ============================================================================
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum RawSource {
     Doc {
         rel_path: String,
@@ -873,7 +873,7 @@ pub fn apply_secret_policy(mut doc: ContextDocument) -> Option<ContextDocument> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::index::{ContextQuery, DerivedIndex, IndexDocument, derive_index_path};
+    use crate::index::{derive_index_path, ContextQuery, DerivedIndex, IndexDocument};
     use std::path::PathBuf;
 
     // Helper to create a temporary canonical project layout.
@@ -1264,7 +1264,9 @@ mod tests {
     #[test]
     fn changed_doc_updates_search() {
         let (dir, project_path) = create_test_project("updates");
-        let doc_path = crate::storage::get_project_dir(&project_path).join("docs").join("readme.md");
+        let doc_path = crate::storage::get_project_dir(&project_path)
+            .join("docs")
+            .join("readme.md");
         fs::write(&doc_path, "# Readme\nversion one").unwrap();
 
         // First ingest.
@@ -1272,11 +1274,23 @@ mod tests {
         let raw = srcs["docs"][0].as_ref().unwrap();
         let doc = normalize("test-proj-001", clone_raw(raw)).unwrap();
         let idx_doc = IndexDocument::from(&doc);
-        let fp = compute_fingerprint("doc", &doc.title, &doc.text, &doc.sensitivity, doc.agent_context_enabled);
+        let fp = compute_fingerprint(
+            "doc",
+            &doc.title,
+            &doc.text,
+            &doc.sensitivity,
+            doc.agent_context_enabled,
+        );
 
         let pid = derive_index_path("test-proj-001").unwrap();
         // Purge prior index state from previous test runs sharing this deterministic project ID.
-        if pid.exists() { let _ = std::fs::remove_dir_all(&pid); let p = pid.parent().unwrap(); if p.exists() { let _ = std::fs::remove_dir_all(p); } }
+        if pid.exists() {
+            let _ = std::fs::remove_dir_all(&pid);
+            let p = pid.parent().unwrap();
+            if p.exists() {
+                let _ = std::fs::remove_dir_all(p);
+            }
+        }
         let mut idx = DerivedIndex::open_at(pid).unwrap();
         let wrote = idx.upsert_if_changed(&idx_doc, &fp).unwrap();
         assert!(wrote, "first ingest should write");
@@ -1288,11 +1302,13 @@ mod tests {
         let wrote2 = idx.upsert_if_changed(&idx_doc, &fp).unwrap();
         assert!(!wrote2, "second ingest of same content should be UNCHANGED");
 
-        let hits = idx.search(&ContextQuery {
-            project_id: "test-proj-001".into(),
-            query: "version".into(),
-            ..Default::default()
-        }).unwrap();
+        let hits = idx
+            .search(&ContextQuery {
+                project_id: "test-proj-001".into(),
+                query: "version".into(),
+                ..Default::default()
+            })
+            .unwrap();
         assert_eq!(hits.len(), 1);
 
         // Now change the file.
@@ -1302,22 +1318,32 @@ mod tests {
         let raw2 = srcs2["docs"][0].as_ref().unwrap();
         let doc2 = normalize("test-proj-001", clone_raw(raw2)).unwrap();
         let idx_doc2 = IndexDocument::from(&doc2);
-        let fp2 = compute_fingerprint("doc", &doc2.title, &doc2.text, &doc2.sensitivity, doc2.agent_context_enabled);
+        let fp2 = compute_fingerprint(
+            "doc",
+            &doc2.title,
+            &doc2.text,
+            &doc2.sensitivity,
+            doc2.agent_context_enabled,
+        );
         let wrote3 = idx.upsert_if_changed(&idx_doc2, &fp2).unwrap();
         assert!(wrote3, "changed content should write");
 
-        let hits_old = idx.search(&ContextQuery {
-            project_id: "test-proj-001".into(),
-            query: "one".into(),
-            ..Default::default()
-        }).unwrap();
+        let hits_old = idx
+            .search(&ContextQuery {
+                project_id: "test-proj-001".into(),
+                query: "one".into(),
+                ..Default::default()
+            })
+            .unwrap();
         assert_eq!(hits_old.len(), 0, "old version should not be searchable");
 
-        let hits_new = idx.search(&ContextQuery {
-            project_id: "test-proj-001".into(),
-            query: "two".into(),
-            ..Default::default()
-        }).unwrap();
+        let hits_new = idx
+            .search(&ContextQuery {
+                project_id: "test-proj-001".into(),
+                query: "two".into(),
+                ..Default::default()
+            })
+            .unwrap();
         assert_eq!(hits_new.len(), 1, "new version should be searchable");
 
         let _ = fs::remove_dir_all(&dir);
@@ -1326,20 +1352,44 @@ mod tests {
     #[test]
     fn deleted_doc_removes_search_result() {
         let (dir, project_path) = create_test_project("deletions");
-        let doc_path = crate::storage::get_project_dir(&project_path).join("docs").join("readme.md");
+        let doc_path = crate::storage::get_project_dir(&project_path)
+            .join("docs")
+            .join("readme.md");
         fs::write(&doc_path, "# Readme\npersistent").unwrap();
 
         let pid = derive_index_path("test-proj-001").unwrap();
-        if pid.exists() { let _ = std::fs::remove_dir_all(&pid); let p = pid.parent().unwrap(); if p.exists() { let _ = std::fs::remove_dir_all(p); } }
+        if pid.exists() {
+            let _ = std::fs::remove_dir_all(&pid);
+            let p = pid.parent().unwrap();
+            if p.exists() {
+                let _ = std::fs::remove_dir_all(p);
+            }
+        }
         let mut idx = DerivedIndex::open_at(pid.clone()).unwrap();
 
         let srcs = discover_sources(&project_path).unwrap();
         let raw = srcs["docs"][0].as_ref().unwrap();
         let doc = normalize("test-proj-001", clone_raw(raw)).unwrap();
-        let fp = compute_fingerprint("doc", &doc.title, &doc.text, &doc.sensitivity, doc.agent_context_enabled);
-        idx.upsert_if_changed(&IndexDocument::from(&doc), &fp).unwrap();
+        let fp = compute_fingerprint(
+            "doc",
+            &doc.title,
+            &doc.text,
+            &doc.sensitivity,
+            doc.agent_context_enabled,
+        );
+        idx.upsert_if_changed(&IndexDocument::from(&doc), &fp)
+            .unwrap();
 
-        assert_eq!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "persistent".into(), ..Default::default() }).unwrap().len(), 1);
+        assert_eq!(
+            idx.search(&ContextQuery {
+                project_id: "test-proj-001".into(),
+                query: "persistent".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .len(),
+            1
+        );
 
         // Delete the canonical file.
         fs::remove_file(&doc_path).unwrap();
@@ -1363,7 +1413,11 @@ mod tests {
         // poison other families. The discovery itself returns the error, and
         // the caller decides whether to preserve prior state.
         let (dir, project_path) = create_test_project("malformed");
-        fs::write(crate::storage::get_project_dir(&project_path).join("tasks.json"), "not json {{").unwrap();
+        fs::write(
+            crate::storage::get_project_dir(&project_path).join("tasks.json"),
+            "not json {{",
+        )
+        .unwrap();
 
         let srcs = discover_sources(&project_path).unwrap();
         let task_results = srcs.get("tasks").unwrap();
@@ -1401,8 +1455,22 @@ mod tests {
             },
         ];
 
-        let indexed = receipts.iter().filter(|r| r.outcome == IngestionOutcome::Indexed).count();
-        let failed = receipts.iter().filter(|r| matches!(r.outcome, IngestionOutcome::FailedParse | IngestionOutcome::FailedRead | IngestionOutcome::FailedValidation | IngestionOutcome::FailedIndex)).count();
+        let indexed = receipts
+            .iter()
+            .filter(|r| r.outcome == IngestionOutcome::Indexed)
+            .count();
+        let failed = receipts
+            .iter()
+            .filter(|r| {
+                matches!(
+                    r.outcome,
+                    IngestionOutcome::FailedParse
+                        | IngestionOutcome::FailedRead
+                        | IngestionOutcome::FailedValidation
+                        | IngestionOutcome::FailedIndex
+                )
+            })
+            .count();
 
         assert_eq!(indexed, 1);
         assert_eq!(failed, 1);
@@ -1411,7 +1479,9 @@ mod tests {
     #[test]
     fn canonical_files_remain_unchanged_after_ingestion() {
         let (dir, project_path) = create_test_project("immutable");
-        let doc_path = crate::storage::get_project_dir(&project_path).join("docs").join("file.md");
+        let doc_path = crate::storage::get_project_dir(&project_path)
+            .join("docs")
+            .join("file.md");
         fs::write(&doc_path, "original content").unwrap();
         let original = fs::read_to_string(&doc_path).unwrap();
 
@@ -1430,17 +1500,29 @@ mod tests {
     /// Helper to clone a RawSource (they're not Copy).
     fn clone_raw(src: &RawSource) -> RawSource {
         match src {
-            RawSource::Doc { rel_path, content, modified_at } => RawSource::Doc {
+            RawSource::Doc {
+                rel_path,
+                content,
+                modified_at,
+            } => RawSource::Doc {
                 rel_path: rel_path.clone(),
                 content: content.clone(),
                 modified_at: modified_at.clone(),
             },
-            RawSource::Note { rel_path, content, modified_at } => RawSource::Note {
+            RawSource::Note {
+                rel_path,
+                content,
+                modified_at,
+            } => RawSource::Note {
                 rel_path: rel_path.clone(),
                 content: content.clone(),
                 modified_at: modified_at.clone(),
             },
-            RawSource::Snapshot { rel_path, content, modified_at } => RawSource::Snapshot {
+            RawSource::Snapshot {
+                rel_path,
+                content,
+                modified_at,
+            } => RawSource::Snapshot {
                 rel_path: rel_path.clone(),
                 content: content.clone(),
                 modified_at: modified_at.clone(),
@@ -1460,7 +1542,9 @@ mod tests {
     fn unchanged_source_skips_write_on_second_run() {
         let (dir, project_path) = create_test_project("idempotent");
         fs::write(
-            crate::storage::get_project_dir(&project_path).join("docs").join("readme.md"),
+            crate::storage::get_project_dir(&project_path)
+                .join("docs")
+                .join("readme.md"),
             "# Readme\npersistent content",
         )
         .unwrap();
@@ -1477,14 +1561,30 @@ mod tests {
         let srcs = discover_sources(&project_path).unwrap();
         let doc_raw = srcs["docs"][0].as_ref().unwrap();
         let doc = normalize("test-proj-001", clone_raw(doc_raw)).unwrap();
-        let doc_fp = compute_fingerprint("doc", &doc.title, &doc.text, &doc.sensitivity, doc.agent_context_enabled);
-        let doc_wrote = idx.upsert_if_changed(&IndexDocument::from(&doc), &doc_fp).unwrap();
+        let doc_fp = compute_fingerprint(
+            "doc",
+            &doc.title,
+            &doc.text,
+            &doc.sensitivity,
+            doc.agent_context_enabled,
+        );
+        let doc_wrote = idx
+            .upsert_if_changed(&IndexDocument::from(&doc), &doc_fp)
+            .unwrap();
         assert!(doc_wrote, "first doc ingest should write");
 
         let task_raw = srcs["tasks"][0].as_ref().unwrap();
         let task_doc = normalize("test-proj-001", clone_raw(task_raw)).unwrap();
-        let task_fp = compute_fingerprint("task", &task_doc.title, &task_doc.text, &task_doc.sensitivity, task_doc.agent_context_enabled);
-        let task_wrote = idx.upsert_if_changed(&IndexDocument::from(&task_doc), &task_fp).unwrap();
+        let task_fp = compute_fingerprint(
+            "task",
+            &task_doc.title,
+            &task_doc.text,
+            &task_doc.sensitivity,
+            task_doc.agent_context_enabled,
+        );
+        let task_wrote = idx
+            .upsert_if_changed(&IndexDocument::from(&task_doc), &task_fp)
+            .unwrap();
         assert!(task_wrote, "first task ingest should write");
 
         // Capture stored hashes + FTS state.
@@ -1495,23 +1595,44 @@ mod tests {
         let srcs2 = discover_sources(&project_path).unwrap();
         let doc_raw2 = srcs2["docs"][0].as_ref().unwrap();
         let doc2 = normalize("test-proj-001", clone_raw(doc_raw2)).unwrap();
-        let doc_fp2 = compute_fingerprint("doc", &doc2.title, &doc2.text, &doc2.sensitivity, doc2.agent_context_enabled);
-        let doc_wrote2 = idx.upsert_if_changed(&IndexDocument::from(&doc2), &doc_fp2).unwrap();
+        let doc_fp2 = compute_fingerprint(
+            "doc",
+            &doc2.title,
+            &doc2.text,
+            &doc2.sensitivity,
+            doc2.agent_context_enabled,
+        );
+        let doc_wrote2 = idx
+            .upsert_if_changed(&IndexDocument::from(&doc2), &doc_fp2)
+            .unwrap();
         assert!(!doc_wrote2, "UNCHANGED doc should NOT rewrite");
 
         let task_raw2 = srcs2["tasks"][0].as_ref().unwrap();
         let task_doc2 = normalize("test-proj-001", clone_raw(task_raw2)).unwrap();
-        let task_fp2 = compute_fingerprint("task", &task_doc2.title, &task_doc2.text, &task_doc2.sensitivity, task_doc2.agent_context_enabled);
-        let task_wrote2 = idx.upsert_if_changed(&IndexDocument::from(&task_doc2), &task_fp2).unwrap();
+        let task_fp2 = compute_fingerprint(
+            "task",
+            &task_doc2.title,
+            &task_doc2.text,
+            &task_doc2.sensitivity,
+            task_doc2.agent_context_enabled,
+        );
+        let task_wrote2 = idx
+            .upsert_if_changed(&IndexDocument::from(&task_doc2), &task_fp2)
+            .unwrap();
         assert!(!task_wrote2, "UNCHANGED task should NOT rewrite");
 
         // Hashes must be unchanged.
         assert_eq!(idx.get_stored_hash(&doc.id).unwrap(), doc_hash_after_first);
-        assert_eq!(idx.get_stored_hash(&task_doc.id).unwrap(), task_hash_after_first);
+        assert_eq!(
+            idx.get_stored_hash(&task_doc.id).unwrap(),
+            task_hash_after_first
+        );
 
         // Change only the doc.
         fs::write(
-            crate::storage::get_project_dir(&project_path).join("docs").join("readme.md"),
+            crate::storage::get_project_dir(&project_path)
+                .join("docs")
+                .join("readme.md"),
             "# Readme\nCHANGED content",
         )
         .unwrap();
@@ -1519,18 +1640,55 @@ mod tests {
         let srcs3 = discover_sources(&project_path).unwrap();
         let doc_raw3 = srcs3["docs"][0].as_ref().unwrap();
         let doc3 = normalize("test-proj-001", clone_raw(doc_raw3)).unwrap();
-        let doc_fp3 = compute_fingerprint("doc", &doc3.title, &doc3.text, &doc3.sensitivity, doc3.agent_context_enabled);
-        let doc_wrote3 = idx.upsert_if_changed(&IndexDocument::from(&doc3), &doc_fp3).unwrap();
+        let doc_fp3 = compute_fingerprint(
+            "doc",
+            &doc3.title,
+            &doc3.text,
+            &doc3.sensitivity,
+            doc3.agent_context_enabled,
+        );
+        let doc_wrote3 = idx
+            .upsert_if_changed(&IndexDocument::from(&doc3), &doc_fp3)
+            .unwrap();
         assert!(doc_wrote3, "changed doc should rewrite");
 
-        let task_wrote3 = idx.upsert_if_changed(&IndexDocument::from(&task_doc2), &task_fp2).unwrap();
+        let task_wrote3 = idx
+            .upsert_if_changed(&IndexDocument::from(&task_doc2), &task_fp2)
+            .unwrap();
         assert!(!task_wrote3, "unchanged task should NOT rewrite");
 
         // Search should show new doc content, old gone.
-        assert!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "CHANGED".into(), ..Default::default() }).unwrap().len() == 1);
-        assert!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "persistent".into(), ..Default::default() }).unwrap().len() == 0);
+        assert!(
+            idx.search(&ContextQuery {
+                project_id: "test-proj-001".into(),
+                query: "CHANGED".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .len()
+                == 1
+        );
+        assert!(
+            idx.search(&ContextQuery {
+                project_id: "test-proj-001".into(),
+                query: "persistent".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .len()
+                == 0
+        );
         // Task should still be searchable.
-        assert!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "Task".into(), ..Default::default() }).unwrap().len() == 1);
+        assert!(
+            idx.search(&ContextQuery {
+                project_id: "test-proj-001".into(),
+                query: "Task".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .len()
+                == 1
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -1539,7 +1697,9 @@ mod tests {
     #[test]
     fn malformed_tasks_json_preserves_doc_and_prior_task_state() {
         let (dir, project_path) = create_test_project("partial-fail");
-        let doc_path = crate::storage::get_project_dir(&project_path).join("docs").join("readme.md");
+        let doc_path = crate::storage::get_project_dir(&project_path)
+            .join("docs")
+            .join("readme.md");
         fs::write(&doc_path, "# Readme\nimportant doc").unwrap();
         fs::write(
             crate::storage::get_project_dir(&project_path).join("tasks.json"),
@@ -1548,54 +1708,172 @@ mod tests {
         .unwrap();
 
         let pid = derive_index_path("test-proj-001").unwrap();
-        if pid.exists() { let _ = std::fs::remove_dir_all(&pid); let p = pid.parent().unwrap(); if p.exists() { let _ = std::fs::remove_dir_all(p); } }
+        if pid.exists() {
+            let _ = std::fs::remove_dir_all(&pid);
+            let p = pid.parent().unwrap();
+            if p.exists() {
+                let _ = std::fs::remove_dir_all(p);
+            }
+        }
         let mut idx = DerivedIndex::open_at(pid.clone()).unwrap();
 
         // First ingest: both doc and task.
         let srcs = discover_sources(&project_path).unwrap();
-        let doc = normalize("test-proj-001", clone_raw(srcs["docs"][0].as_ref().unwrap())).unwrap();
-        let task = normalize("test-proj-001", clone_raw(srcs["tasks"][0].as_ref().unwrap())).unwrap();
-        idx.upsert_if_changed(&IndexDocument::from(&doc), &compute_fingerprint("doc", &doc.title, &doc.text, &doc.sensitivity, doc.agent_context_enabled)).unwrap();
-        idx.upsert_if_changed(&IndexDocument::from(&task), &compute_fingerprint("task", &task.title, &task.text, &task.sensitivity, task.agent_context_enabled)).unwrap();
+        let doc = normalize(
+            "test-proj-001",
+            clone_raw(srcs["docs"][0].as_ref().unwrap()),
+        )
+        .unwrap();
+        let task = normalize(
+            "test-proj-001",
+            clone_raw(srcs["tasks"][0].as_ref().unwrap()),
+        )
+        .unwrap();
+        idx.upsert_if_changed(
+            &IndexDocument::from(&doc),
+            &compute_fingerprint(
+                "doc",
+                &doc.title,
+                &doc.text,
+                &doc.sensitivity,
+                doc.agent_context_enabled,
+            ),
+        )
+        .unwrap();
+        idx.upsert_if_changed(
+            &IndexDocument::from(&task),
+            &compute_fingerprint(
+                "task",
+                &task.title,
+                &task.text,
+                &task.sensitivity,
+                task.agent_context_enabled,
+            ),
+        )
+        .unwrap();
 
-        assert_eq!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "important".into(), ..Default::default() }).unwrap().len(), 1);
-        assert_eq!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "Original Task".into(), ..Default::default() }).unwrap().len(), 1);
+        assert_eq!(
+            idx.search(&ContextQuery {
+                project_id: "test-proj-001".into(),
+                query: "important".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .len(),
+            1
+        );
+        assert_eq!(
+            idx.search(&ContextQuery {
+                project_id: "test-proj-001".into(),
+                query: "Original Task".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .len(),
+            1
+        );
 
         // Now: modify the doc AND corrupt tasks.json.
         fs::write(&doc_path, "# Readme\nUPDATED doc").unwrap();
-        fs::write(crate::storage::get_project_dir(&project_path).join("tasks.json"), "not valid json {{").unwrap();
+        fs::write(
+            crate::storage::get_project_dir(&project_path).join("tasks.json"),
+            "not valid json {{",
+        )
+        .unwrap();
 
         let srcs2 = discover_sources(&project_path).unwrap();
 
         // Doc should succeed.
         let doc2_raw = srcs2["docs"][0].as_ref().unwrap();
         let doc2 = normalize("test-proj-001", clone_raw(doc2_raw)).unwrap();
-        let doc2_fp = compute_fingerprint("doc", &doc2.title, &doc2.text, &doc2.sensitivity, doc2.agent_context_enabled);
-        let doc2_wrote = idx.upsert_if_changed(&IndexDocument::from(&doc2), &doc2_fp).unwrap();
+        let doc2_fp = compute_fingerprint(
+            "doc",
+            &doc2.title,
+            &doc2.text,
+            &doc2.sensitivity,
+            doc2.agent_context_enabled,
+        );
+        let doc2_wrote = idx
+            .upsert_if_changed(&IndexDocument::from(&doc2), &doc2_fp)
+            .unwrap();
         assert!(doc2_wrote, "changed doc should update");
 
         // Tasks family should have failed (not poisoned).
         let task_results = srcs2.get("tasks").unwrap();
         assert_eq!(task_results.len(), 1);
-        assert!(task_results[0].is_err(), "malformed tasks should fail discovery");
+        assert!(
+            task_results[0].is_err(),
+            "malformed tasks should fail discovery"
+        );
 
         // Original task should STILL be searchable (preserved).
-        assert_eq!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "Original Task".into(), ..Default::default() }).unwrap().len(), 1);
+        assert_eq!(
+            idx.search(&ContextQuery {
+                project_id: "test-proj-001".into(),
+                query: "Original Task".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .len(),
+            1
+        );
         // Updated doc should be searchable.
-        assert_eq!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "UPDATED".into(), ..Default::default() }).unwrap().len(), 1);
+        assert_eq!(
+            idx.search(&ContextQuery {
+                project_id: "test-proj-001".into(),
+                query: "UPDATED".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .len(),
+            1
+        );
         // Old doc content gone.
-        assert_eq!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "important".into(), ..Default::default() }).unwrap().len(), 0);
+        assert_eq!(
+            idx.search(&ContextQuery {
+                project_id: "test-proj-001".into(),
+                query: "important".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .len(),
+            0
+        );
 
         // Now restore tasks.json as valid empty array — old task should be removed.
-        fs::write(crate::storage::get_project_dir(&project_path).join("tasks.json"), "[]").unwrap();
+        fs::write(
+            crate::storage::get_project_dir(&project_path).join("tasks.json"),
+            "[]",
+        )
+        .unwrap();
         let srcs3 = discover_sources(&project_path).unwrap();
         assert_eq!(srcs3["tasks"].len(), 0, "empty array = no task sources");
 
         // Production pipeline: successful empty discovery removes only that family.
         idx.remove_source_kind("test-proj-001", "task").unwrap();
-        assert_eq!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "Original Task".into(), ..Default::default() }).unwrap().len(), 0, "removed task should be gone");
+        assert_eq!(
+            idx.search(&ContextQuery {
+                project_id: "test-proj-001".into(),
+                query: "Original Task".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .len(),
+            0,
+            "removed task should be gone"
+        );
         // Other families survive.
-        assert_eq!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "UPDATED".into(), ..Default::default() }).unwrap().len(), 1, "doc family survives task deletion");
+        assert_eq!(
+            idx.search(&ContextQuery {
+                project_id: "test-proj-001".into(),
+                query: "UPDATED".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .len(),
+            1,
+            "doc family survives task deletion"
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -1606,16 +1884,34 @@ mod tests {
         let (dir, project_path) = create_test_project("six-e2e");
         let root = crate::storage::get_project_dir(&project_path);
 
-        fs::write(root.join("docs").join("guide.md"), "# User Guide\nOpenMesh helps teams").unwrap();
-        fs::write(root.join("notes").join("daily.md"), "# Daily Notes\nprogress today").unwrap();
-        fs::write(root.join("notes").join("snapshots").join("snap.md"), "# Snapshot\nv0.1.0 state").unwrap();
+        fs::write(
+            root.join("docs").join("guide.md"),
+            "# User Guide\nOpenMesh helps teams",
+        )
+        .unwrap();
+        fs::write(
+            root.join("notes").join("daily.md"),
+            "# Daily Notes\nprogress today",
+        )
+        .unwrap();
+        fs::write(
+            root.join("notes").join("snapshots").join("snap.md"),
+            "# Snapshot\nv0.1.0 state",
+        )
+        .unwrap();
         fs::write(root.join("tasks.json"), serde_json::json!([{"id":"task-1","projectId":"test-proj-001","title":"Build feature","description":"implement search","status":"in-progress","priority":"P1","sprintId":"","owner":"ter","linkedDocIds":[],"linkedSessionIds":[],"createdAt":"2026-01-01","updatedAt":"2026-07-05"}]).to_string()).unwrap();
         fs::write(root.join("recent.json"), serde_json::json!([{"id":"rec-1","type":"doc","title":"Recent doc","projectId":"test-proj-001","sourceId":"d1","lastOpenedAt":"2026-07-05","pinned":false}]).to_string()).unwrap();
         fs::write(root.join("sessions.json"), serde_json::json!([{"id":"sess-1","tool":"codex","title":"Work session","projectId":"test-proj-001","summary":"did work","status":"completed","startedAt":"2026-01-01","lastActiveAt":"2026-07-05","isImportant":false,"createdAt":"2026-01-01","updatedAt":"2026-07-05"}]).to_string()).unwrap();
 
         let pid = derive_index_path("test-proj-001").unwrap();
         // Purge prior index state from previous test runs sharing this deterministic project ID.
-        if pid.exists() { let _ = std::fs::remove_dir_all(&pid); let p = pid.parent().unwrap(); if p.exists() { let _ = std::fs::remove_dir_all(p); } }
+        if pid.exists() {
+            let _ = std::fs::remove_dir_all(&pid);
+            let p = pid.parent().unwrap();
+            if p.exists() {
+                let _ = std::fs::remove_dir_all(p);
+            }
+        }
         let mut idx = DerivedIndex::open_at(pid).unwrap();
 
         // Ingest everything.
@@ -1631,24 +1927,74 @@ mod tests {
                     &doc.sensitivity,
                     doc.agent_context_enabled,
                 );
-                if idx.upsert_if_changed(&IndexDocument::from(&doc), &fp).unwrap() {
+                if idx
+                    .upsert_if_changed(&IndexDocument::from(&doc), &fp)
+                    .unwrap()
+                {
                     count += 1;
                 }
             }
         }
-        assert!(count >= 6, "expected at least 6 sources ingested, got {}", count);
+        assert!(
+            count >= 6,
+            "expected at least 6 sources ingested, got {}",
+            count
+        );
 
         // Doc searchable.
-        assert!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "User Guide".into(), ..Default::default() }).unwrap().len() >= 1);
+        assert!(
+            idx.search(&ContextQuery {
+                project_id: "test-proj-001".into(),
+                query: "User Guide".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .len()
+                >= 1
+        );
         // Note searchable.
-        assert!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "Daily Notes".into(), ..Default::default() }).unwrap().len() >= 1);
+        assert!(
+            idx.search(&ContextQuery {
+                project_id: "test-proj-001".into(),
+                query: "Daily Notes".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .len()
+                >= 1
+        );
         // Snapshot searchable as snapshot.
-        let snap_hits = idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "Snapshot".into(), kinds: Some(vec!["snapshot".into()]), ..Default::default() }).unwrap();
+        let snap_hits = idx
+            .search(&ContextQuery {
+                project_id: "test-proj-001".into(),
+                query: "Snapshot".into(),
+                kinds: Some(vec!["snapshot".into()]),
+                ..Default::default()
+            })
+            .unwrap();
         assert_eq!(snap_hits.len(), 1);
         // Task searchable.
-        assert!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "Build feature".into(), ..Default::default() }).unwrap().len() >= 1);
+        assert!(
+            idx.search(&ContextQuery {
+                project_id: "test-proj-001".into(),
+                query: "Build feature".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .len()
+                >= 1
+        );
         // Session summary searchable.
-        assert!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "did work".into(), ..Default::default() }).unwrap().len() >= 1);
+        assert!(
+            idx.search(&ContextQuery {
+                project_id: "test-proj-001".into(),
+                query: "did work".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .len()
+                >= 1
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -1719,7 +2065,11 @@ mod tests {
         // Populate all six kinds.
         fs::write(root.join("docs").join("d.md"), "# Doc\ndoc alpha").unwrap();
         fs::write(root.join("notes").join("n.md"), "# Note\nnote beta").unwrap();
-        fs::write(root.join("notes").join("snapshots").join("s.md"), "# Snap\nsnap gamma").unwrap();
+        fs::write(
+            root.join("notes").join("snapshots").join("s.md"),
+            "# Snap\nsnap gamma",
+        )
+        .unwrap();
         fs::write(root.join("tasks.json"), serde_json::json!([{"id":"t1","projectId":"test-proj-001","title":"Task one","description":"","status":"pending","priority":"P1","sprintId":"","linkedDocIds":[],"linkedSessionIds":[],"createdAt":"2026-01-01","updatedAt":"2026-07-05"}]).to_string()).unwrap();
         fs::write(root.join("recent.json"), serde_json::json!([{"id":"r1","type":"doc","title":"Recent one","projectId":"test-proj-001","sourceId":"d1","lastOpenedAt":"2026-07-05","pinned":false}]).to_string()).unwrap();
         fs::write(root.join("sessions.json"), serde_json::json!([{"id":"s1","tool":"codex","title":"Session one","projectId":"test-proj-001","summary":"summary","status":"completed","startedAt":"2026-01-01","lastActiveAt":"2026-07-05","isImportant":false,"createdAt":"2026-01-01","updatedAt":"2026-07-05"}]).to_string()).unwrap();
@@ -1730,18 +2080,79 @@ mod tests {
         for (_family, results) in &sources {
             for r in results.iter().flatten() {
                 let doc = normalize("test-proj-001", clone_raw(r)).unwrap();
-                let fp = compute_fingerprint(&format!("{:?}", doc.kind).to_lowercase(), &doc.title, &doc.text, &doc.sensitivity, doc.agent_context_enabled);
-                idx.upsert_if_changed(&IndexDocument::from(&doc), &fp).unwrap();
+                let fp = compute_fingerprint(
+                    &format!("{:?}", doc.kind).to_lowercase(),
+                    &doc.title,
+                    &doc.text,
+                    &doc.sensitivity,
+                    doc.agent_context_enabled,
+                );
+                idx.upsert_if_changed(&IndexDocument::from(&doc), &fp)
+                    .unwrap();
             }
         }
 
         // All six searchable.
-        assert!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "doc alpha".into(), ..Default::default() }).unwrap().len() >= 1);
-        assert!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "note beta".into(), ..Default::default() }).unwrap().len() >= 1);
-        assert!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "snap gamma".into(), ..Default::default() }).unwrap().len() >= 1);
-        assert!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "Task one".into(), ..Default::default() }).unwrap().len() >= 1);
-        assert!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "Recent one".into(), ..Default::default() }).unwrap().len() >= 1);
-        assert!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "summary".into(), ..Default::default() }).unwrap().len() >= 1);
+        assert!(
+            idx.search(&ContextQuery {
+                project_id: "test-proj-001".into(),
+                query: "doc alpha".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .len()
+                >= 1
+        );
+        assert!(
+            idx.search(&ContextQuery {
+                project_id: "test-proj-001".into(),
+                query: "note beta".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .len()
+                >= 1
+        );
+        assert!(
+            idx.search(&ContextQuery {
+                project_id: "test-proj-001".into(),
+                query: "snap gamma".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .len()
+                >= 1
+        );
+        assert!(
+            idx.search(&ContextQuery {
+                project_id: "test-proj-001".into(),
+                query: "Task one".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .len()
+                >= 1
+        );
+        assert!(
+            idx.search(&ContextQuery {
+                project_id: "test-proj-001".into(),
+                query: "Recent one".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .len()
+                >= 1
+        );
+        assert!(
+            idx.search(&ContextQuery {
+                project_id: "test-proj-001".into(),
+                query: "summary".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .len()
+                >= 1
+        );
 
         // Empty the Tasks family only.
         fs::write(root.join("tasks.json"), "[]").unwrap();
@@ -1751,16 +2162,79 @@ mod tests {
         assert_eq!(srcs2["tasks"].len(), 0, "task family empty");
 
         // Family-scoped deletion: only "task" kind removed.
-        idx.remove_source_kind("test-proj-001", "task").unwrap();
+        match idx.remove_source_kind("test-proj-001", "task") {
+            Ok(n) => eprintln!("empty_family test: removed {} task rows", n),
+            Err(e) => panic!("empty_family remove failed: {:?}", e),
+        }
 
         // Task gone.
-        assert_eq!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "Task one".into(), ..Default::default() }).unwrap().len(), 0);
+        assert_eq!(
+            idx.search(&ContextQuery {
+                project_id: "test-proj-001".into(),
+                query: "Task one".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .len(),
+            0,
+            "task should be gone"
+        );
         // All other kinds survive.
-        assert!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "doc alpha".into(), ..Default::default() }).unwrap().len() >= 1, "doc survives");
-        assert!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "note beta".into(), ..Default::default() }).unwrap().len() >= 1, "note survives");
-        assert!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "snap gamma".into(), ..Default::default() }).unwrap().len() >= 1, "snapshot survives");
-        assert!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "Recent one".into(), ..Default::default() }).unwrap().len() >= 1, "recent survives");
-        assert!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "summary".into(), ..Default::default() }).unwrap().len() >= 1, "session survives");
+        assert!(
+            idx.search(&ContextQuery {
+                project_id: "test-proj-001".into(),
+                query: "doc alpha".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .len()
+                >= 1,
+            "doc survives"
+        );
+        assert!(
+            idx.search(&ContextQuery {
+                project_id: "test-proj-001".into(),
+                query: "note beta".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .len()
+                >= 1,
+            "note survives"
+        );
+        assert!(
+            idx.search(&ContextQuery {
+                project_id: "test-proj-001".into(),
+                query: "snap gamma".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .len()
+                >= 1,
+            "snapshot survives"
+        );
+        assert!(
+            idx.search(&ContextQuery {
+                project_id: "test-proj-001".into(),
+                query: "Recent one".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .len()
+                >= 1,
+            "recent survives"
+        );
+        assert!(
+            idx.search(&ContextQuery {
+                project_id: "test-proj-001".into(),
+                query: "summary".into(),
+                ..Default::default()
+            })
+            .unwrap()
+            .len()
+                >= 1,
+            "session survives"
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -1799,7 +2273,13 @@ mod tests {
 
         // Verify initial state searchable.
         for i in 0..3 {
-            let hits = idx.search(&ContextQuery { project_id: "p-atomic".into(), query: format!("original content {}", i), ..Default::default() }).unwrap();
+            let hits = idx
+                .search(&ContextQuery {
+                    project_id: "p-atomic".into(),
+                    query: format!("original content {}", i),
+                    ..Default::default()
+                })
+                .unwrap();
             assert_eq!(hits.len(), 1, "initial doc {} should be searchable", i);
         }
 
@@ -1807,7 +2287,11 @@ mod tests {
         // by including one invalid document (empty document_id causes validation rejection).
         let replacement: Vec<ID> = (0..3)
             .map(|i| ID {
-                document_id: if i == 1 { String::new() } else { format!("doc-{}", i) },
+                document_id: if i == 1 {
+                    String::new()
+                } else {
+                    format!("doc-{}", i)
+                },
                 source_id: format!("doc-src-{}", i),
                 project_id: "p-atomic".into(),
                 source_kind: "doc".into(),
@@ -1824,17 +2308,42 @@ mod tests {
             .collect();
 
         let result = idx.replace_project_kind_documents("p-atomic", "doc", &replacement);
-        assert!(result.is_err(), "family replacement with invalid doc should fail");
+        assert!(
+            result.is_err(),
+            "family replacement with invalid doc should fail"
+        );
 
         // Verify rollback: original state fully preserved.
         for i in 0..3 {
-            let hits = idx.search(&ContextQuery { project_id: "p-atomic".into(), query: format!("original content {}", i), ..Default::default() }).unwrap();
-            assert_eq!(hits.len(), 1, "doc {} should still have original content after rollback", i);
+            let hits = idx
+                .search(&ContextQuery {
+                    project_id: "p-atomic".into(),
+                    query: format!("original content {}", i),
+                    ..Default::default()
+                })
+                .unwrap();
+            assert_eq!(
+                hits.len(),
+                1,
+                "doc {} should still have original content after rollback",
+                i
+            );
         }
         // No partial new content should be searchable.
         for i in 0..3 {
-            let hits = idx.search(&ContextQuery { project_id: "p-atomic".into(), query: format!("new content {}", i), ..Default::default() }).unwrap();
-            assert_eq!(hits.len(), 0, "new content {} must not exist after rollback", i);
+            let hits = idx
+                .search(&ContextQuery {
+                    project_id: "p-atomic".into(),
+                    query: format!("new content {}", i),
+                    ..Default::default()
+                })
+                .unwrap();
+            assert_eq!(
+                hits.len(),
+                0,
+                "new content {} must not exist after rollback",
+                i
+            );
         }
     }
 
@@ -1851,7 +2360,10 @@ mod tests {
         let link = dir.join("link.md");
         if std::os::unix::fs::symlink(&target, &link).is_ok() {
             let result = reject_symlinks(&link);
-            assert!(matches!(result, Err(IngestionError::SymlinkSkipped(_))), "symlinked file should be rejected");
+            assert!(
+                matches!(result, Err(IngestionError::SymlinkSkipped(_))),
+                "symlinked file should be rejected"
+            );
         }
         let _ = fs::remove_dir_all(&dir);
     }
@@ -1866,7 +2378,10 @@ mod tests {
         let link_dir = dir.join("link_dir");
         if std::os::unix::fs::symlink(&target_dir, &link_dir).is_ok() {
             let result = reject_symlinks(&link_dir);
-            assert!(matches!(result, Err(IngestionError::SymlinkSkipped(_))), "symlinked directory should be rejected");
+            assert!(
+                matches!(result, Err(IngestionError::SymlinkSkipped(_))),
+                "symlinked directory should be rejected"
+            );
         }
         let _ = fs::remove_dir_all(&dir);
     }
@@ -1905,7 +2420,8 @@ mod tests {
     /// Cross-platform deterministic policy-proof test.
     #[test]
     fn rejection_policy_proves_symlink_detection_logic() {
-        let dir = std::env::temp_dir().join(format!("openmesh-policy-proof-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("openmesh-policy-proof-{}", std::process::id()));
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("normal.md");
         fs::write(&path, "content").unwrap();

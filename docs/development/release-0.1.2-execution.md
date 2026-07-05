@@ -243,7 +243,9 @@ Dev Track checklist:
 
 ## 0.1.2.5 - Context Search & Inspector
 
-- Status: NOT_STARTED
+- Status: IN_PROGRESS
+- Started at: 2026-07-05T22:00:00+07:00
+- Completed at: pending
 - Started at:
 - Completed at:
 - Branch:
