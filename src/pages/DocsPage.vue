@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from "vue";
+import { useRoute } from "vue-router";
 import { marked } from "marked";
 import { useStore } from "../lib/useStore";
 import type { DocTreeNode } from "../lib/store";
@@ -18,6 +19,8 @@ import {
   X,
   Pencil,
 } from "lucide-vue-next";
+
+const route = useRoute();
 
 const {
   currentProject,
@@ -402,7 +405,27 @@ function formatBytes(bytes: number | null): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-onMounted(async () => { if (currentProject.value) await refreshDocs(); });
+onMounted(async () => {
+  if (currentProject.value) {
+    await refreshDocs();
+    // Handle deep-link from Context Search
+    const fileParam = route.query.file;
+    if (typeof fileParam === "string" && fileParam) {
+      // Find the node in the tree
+      const node = findNodeByPath(docsTree.value, fileParam);
+      if (node && node.nodeType === "file") {
+        // Expand parent folders
+        const parts = fileParam.split("/");
+        for (let i = 1; i < parts.length; i++) {
+          const folderPath = parts.slice(0, i).join("/");
+          expandedFolders.value.add(folderPath || "root");
+        }
+        // Select the file
+        await handleSelectDoc(node);
+      }
+    }
+  }
+});
 watch(() => currentProject.value, async () => {
   if (currentProject.value) {
     await refreshDocs();

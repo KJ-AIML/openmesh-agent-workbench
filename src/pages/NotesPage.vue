@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from "vue";
+import { useRoute } from "vue-router";
 import { marked } from "marked";
 import { useStore } from "../lib/useStore";
 import { Plus, Trash2, Edit, Eye, FileEdit, FolderOpen } from "lucide-vue-next";
+
+const route = useRoute();
 
 const {
   currentProject,
@@ -51,6 +54,15 @@ const renderedContent = computed(() => {
 onMounted(async () => {
   if (currentProject.value) {
     await refreshNotes();
+    // Handle deep-link from Context Search
+    const fileParam = route.query.file;
+    if (typeof fileParam === "string" && fileParam) {
+      // Check if the note exists
+      const noteExists = projectNotes.value.some((n) => n.name === fileParam);
+      if (noteExists) {
+        await handleSelectNote(fileParam);
+      }
+    }
   }
 });
 
