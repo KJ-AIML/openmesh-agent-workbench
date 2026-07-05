@@ -1,5 +1,6 @@
 #[allow(dead_code)]
 mod context;
+mod context_service;
 mod index;
 mod ingestion;
 mod storage;
@@ -1466,7 +1467,42 @@ pub fn run() {
             export_project,
             reset_all_data_cmd,
             write_snapshot,
+            // Context Search & Inspector (0.1.2.5)
+            context_search,
+            context_inspect,
+            context_health,
+            context_refresh,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[tauri::command]
+fn context_refresh(project_path: String) -> Result<context_service::RefreshResult, String> {
+    context_service::refresh_project_context(&project_path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn context_search(
+    project_path: String,
+    query: String,
+    kinds: Option<Vec<String>>,
+    limit: Option<usize>,
+) -> Result<Vec<context_service::ContextSearchResult>, String> {
+    context_service::search_project_context(&project_path, &query, kinds, limit)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn context_inspect(
+    project_path: String,
+    document_id: String,
+) -> Result<Option<context_service::ContextInspection>, String> {
+    context_service::inspect_context_document(&project_path, &document_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn context_health(project_path: String) -> Result<context_service::ContextHealth, String> {
+    context_service::get_context_index_health(&project_path).map_err(|e| e.to_string())
 }

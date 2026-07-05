@@ -90,6 +90,25 @@ pub struct IndexDocument {
     pub metadata_json: Option<String>,
 }
 
+/// Safe read-only model for UI inspection.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StorableDocument {
+    pub document_id: String,
+    pub source_id: String,
+    pub project_id: String,
+    pub source_kind: String,
+    pub canonical_ref: String,
+    pub title: String,
+    pub text: String,
+    pub sensitivity: String,
+    pub agent_context_enabled: bool,
+    pub freshness_state: String,
+    pub observed_at: String,
+    pub source_updated_at: Option<String>,
+    pub indexed_at: String,
+    pub metadata_json: Option<String>,
+}
+
 impl IndexDocument {
     /// Validate required fields. Secret-level text is never indexed.
     fn validate(&self) -> IndexResult<()> {
@@ -425,6 +444,44 @@ impl DerivedIndex {
             .map_err(Into::into)
     }
 
+    /// Read one document for safe UI inspection.
+    /// Returns None if not found or belongs to another project.
+    /// Secret text is always omitted (empty string returned).
+    pub fn get_document_for_inspection(
+        &self,
+        project_id: &str,
+        document_id: &str,
+    ) -> IndexResult<Option<StorableDocument>> {
+        let result = self.conn.query_row(
+            "SELECT document_id, source_id, project_id, source_kind, canonical_ref, title,              text, sensitivity, agent_context_enabled, freshness_state, observed_at,              source_updated_at, indexed_at, metadata_json              FROM context_documents WHERE project_id = ?1 AND document_id = ?2",
+            [project_id, document_id],
+            |r| {
+                Ok(StorableDocument {
+                    document_id: r.get(0)?,
+                    source_id: r.get(1)?,
+                    project_id: r.get(2)?,
+                    source_kind: r.get(3)?,
+                    canonical_ref: r.get(4)?,
+                    title: r.get(5)?,
+                    text: r.get(6)?,
+                    sensitivity: r.get(7)?,
+                    agent_context_enabled: r.get(8)?,
+                    freshness_state: r.get(9)?,
+                    observed_at: r.get(10)?,
+                    source_updated_at: r.get(11)?,
+                    indexed_at: r.get(12)?,
+                    metadata_json: r.get(13)?,
+                })
+            },
+        ).optional().map_err(IndexError::Sql)?;
+        Ok(result.map(|mut doc| {
+            if doc.sensitivity == "secret" {
+                doc.text.clear();
+            }
+            doc
+        }))
+    }
+
     fn write_document_tx(
         tx: &Transaction<'_>,
         doc: &IndexDocument,
@@ -568,30 +625,27 @@ impl DerivedIndex {
     }
 
     /// Remove all derived index rows for one source kind within a project.
-    pub fn remove_source_kind(&mut self, project_id: &str, kind: &str) -> IndexResult<()> {
+    pub fn remove_source_kind(&mut self, project_id: &str, kind: &str) -> IndexResult<usize> {
         let tx = self.conn.transaction()?;
-        // Collect document_ids to remove.
-        let doc_ids: Vec<String> = {
-            let mut stmt = tx.prepare(
-                "SELECT document_id FROM context_documents WHERE project_id = ?1 AND source_kind = ?2",
-            )?;
-            let rows = stmt.query_map([project_id, kind], |r| r.get(0))?;
-            rows.collect::<Result<Vec<_>, _>>()?
-        };
-        // Delete from FTS for each document_id.
-        for id in &doc_ids {
-            tx.execute(
-                "DELETE FROM context_documents_fts WHERE document_id = ?1",
-                [id.as_str()],
-            )?;
-        }
-        // Delete from documents table.
+        let count: i64 = tx.query_row(
+            "SELECT COUNT(*) FROM context_documents WHERE project_id = ?1 AND source_kind = ?2",
+            [project_id, kind],
+            |r| r.get(0),
+        )?;
+        let n = count as usize;
+        // Delete from FTS first.
+        tx.execute(
+            "DELETE FROM context_documents_fts WHERE document_id IN (\
+                SELECT document_id FROM context_documents                 WHERE project_id = ?1 AND source_kind = ?2\
+            )",
+            params![project_id, kind],
+        )?;
         tx.execute(
             "DELETE FROM context_documents WHERE project_id = ?1 AND source_kind = ?2",
             params![project_id, kind],
         )?;
         tx.commit()?;
-        Ok(())
+        Ok(n)
     }
 
     /// Replace all documents of a single source kind for a project in one transaction.
@@ -607,8 +661,7 @@ impl DerivedIndex {
         let tx = self.conn.transaction()?;
         tx.execute(
             "DELETE FROM context_documents_fts WHERE document_id IN (\
-                SELECT document_id FROM context_documents\
-                WHERE project_id = ?1 AND source_kind = ?2\
+                SELECT document_id FROM context_documents                 WHERE project_id = ?1 AND source_kind = ?2\
             )",
             params![project_id, kind],
         )?;
