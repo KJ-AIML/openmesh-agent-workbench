@@ -123,7 +123,7 @@ Next recommended track: `0.1.2.2 - ContextSource Domain Model`.
 
 Status: PASS (after closure)
 Branch: main
-Commit: pending (closure additions uncommitted)
+Commit: 27fe09d (0.1.2.1 + closure audit checkpointed together)
 Objective: Close two acceptance gaps — missing production Vue test and missing explicit npm run build evidence.
 Why closure audit was required:
 - Original report claimed PASS but had no production Vue/component/composable test.
@@ -164,4 +164,102 @@ Known limitations (closure):
 - No Rust tests.
 Final status: PASS.
 Dev Track 0.1.2.2 unlocked: YES.
+
+## 2026-07-05 — Dev Track 0.1.2.2
+
+Status: PASS
+Branch: main
+Commit: e7a7ed7
+Objective: Create the versioned common domain contract (ContextSource + ContextDocument) for OpenMesh work-context sources, with pure mappers, runtime validators, fixtures, and a Rust serde mirror.
+
+Specification conflict found:
+- Dev Track 0.1.2.2 lists required mappings: Docs, Notes, Snapshots, Tasks, Recent, Sessions.
+- Canonical Blueprint 17.1 lists kinds: doc, note, snapshot, task, work-event, agent-session, git, connector (excludes `recent`).
+- Conflict: Dev Track requires `recent`; blueprint omits it.
+
+Conflict resolution:
+- Treat `recent` as a TRANSITIONAL current-source kind bridging current RecentItem data until OpenMesh 0.1.3 introduces WorkEvent.
+- RecentItem model left untouched in this track; no production behavior change.
+- Reserved kinds (work-event, git, connector) get ContextSourceKind enum slots and serde support but no mappers.
+- Decision recorded in .heli-harness/state/current-task.md and here.
+
+ContextSourceKind values:
+- Current (with mappers): doc, note, snapshot, task, recent, agent-session
+- Reserved (types/serde only): work-event, git, connector
+
+Implementations:
+- `src/domain/context/types.ts` — enums, ContextSource, ContextDocument, Freshness, CONTEXT_SCHEMA_VERSION = "1.0.0"
+- `src/domain/context/canonicalRef.ts` — pure canonicalRef builder (openmesh://project/<projectId>/<kind>/<encoded-key>) + FNV-1a deterministic sourceId (16 hex chars)
+- `src/domain/context/validators.ts` — pure runtime validators for ContextSource and ContextDocument with structured errors
+- `src/domain/context/mappers.ts` — 6 pure current-source mappers: doc, note, snapshot, task, recent, agent-session
+- `src/domain/context/documentBuilder.ts` — pure `createContextDocument(source, text, options)` factory (zero I/O)
+- `src/domain/context/index.ts` — barrel
+- `src-tauri/src/context.rs` — Rust serde mirror with camelCase renames, 3 contract tests
+
+Tests added (72 TS tests + 4 Rust tests):
+- tests/domain/canonicalRef.test.ts — 9 tests: determinism, project/kind isolation, nested paths, Windows separators, Unicode, idempotency, error cases
+- tests/domain/validators.test.ts — 16 tests: valid+invalid ContextSource + ContextDocument, timestamp/JSON/metadata helpers
+- tests/domain/mappers.test.ts — 15 tests: all 6 mappers, deterministic IDs, injected clock, privacy defaults, optional owner, input validation
+- tests/domain/document.test.ts — 3 tests: source+text builder, JSON serialization, sensitivity preservation
+- tests/domain/fixtures.test.ts — 4 tests: valid/invalid JSON fixtures (shared with Rust)
+- src-tauri/src/context.rs tests — 4 tests: valid source, reserved kind, invalid kind, storage regression
+
+Rust mirror decision:
+- IMPLEMENTED in src-tauri/src/context.rs.
+- Reason: Dev Track 0.1.2.3 (Derived Local Index) will consume these contracts in the Rust/Tauri derived index layer. Deserializing shared JSON fixtures in Rust requires a serde mirror now.
+- No mapping logic duplication in Rust — mapping stays a TS domain concern.
+
+Fixtures added:
+- tests/fixtures/context/valid-source.json
+- tests/fixtures/context/valid-document.json
+- tests/fixtures/context/invalid-source.json
+- tests/fixtures/context/invalid-document.json
+
+Canonical identity format:
+- openmesh://project/<projectId>/<kind>/<encoded-source-key>
+- Nested paths preserved as `/` (not percent-encoded as %2F) for readability.
+- Source key separators normalized (`\` → `/`).
+- Deterministic 16-hex-char sourceId via FNV-1a of canonicalRef.
+
+Privacy defaults:
+- Sensitivity default: private (conservative)
+- agentContextEnabled default: false (fail closed)
+- ownerPersonId: optional, never fabricated (person model does not exist yet)
+
+Freshness model:
+- FreshnessState: fresh | aging | stale | unknown
+- Freshness metadata carries { state, observedAt, sourceUpdatedAt? }.
+- NO aging thresholds defined in this track (policy belongs to later tracks).
+
+Commands run with exact results:
+- `npm run typecheck` → exit 0 (0 type errors)
+- `npm run lint` → exit 0 (0 errors)
+- `npm run test` → 134/134 passed (14 test files)
+- `npm run build` → exit 0 (7.87s)
+- `npm run verify` → exit 0
+- `cargo fmt --check` → exit 0
+- `cargo clippy -- -D warnings` → exit 0
+- `cargo test --lib` → 4 passed
+- `cargo check` → exit 0
+- Public versions: package.json 0.1.1, Cargo.toml 0.1.1, tauri.conf.json 0.1.1 (unchanged)
+
+Manual QA actually performed:
+- Live desktop manual QA was NOT performed. Not required: this is a domain-contract-only track with no production UI/runtime changes.
+
+Persistent data/schema migration:
+- Not required. No existing storage format changed. RecentItem model left untouched.
+
+Security/privacy impact:
+- Positive: conservative privacy defaults (private sensitivity, agent-context fail-closed, owner optional, absolute path never used for identity).
+- No regression: existing docs/notes/snapshots/tasks/recent/sessions storage formats unchanged.
+
+Production behavior changed: NO.
+
+Known limitations:
+- Vue SFC typecheck requires tsconfig to exclude vitest.config.ts (Vite 5/6 type clash with Vitest 2.x).
+- 840 pre-existing ESLint style warnings remain.
+- Reserved kinds (work-event, git, connector) have types/serde but no mappers yet.
+- No SQLite/index/ingestion/search implementation yet.
+
+Final status: PASS.
 
