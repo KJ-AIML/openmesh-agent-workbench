@@ -1166,3 +1166,145 @@ Retest checklist:
 
 ### Final automated status: CONDITIONAL_PASS
 ### Dev Track 0.1.2.6 unlocked: NO
+
+---
+
+## 2026-07-05 — Dev Track 0.1.2.5 Regression-Proof Closure
+
+**Status:** CONDITIONAL_PASS (awaiting final focused human retest)
+**Branch:** main
+**Commit:** d1149b8
+
+### Human-QA Found Bugs
+
+Three concrete runtime defects discovered during human desktop QA:
+
+1. **Search Context focus failure**
+   - Symptom: Context page opens from Command Palette but input not focused
+   - Root cause: Focus watcher with `{ immediate: true }` fired before DOM ref was attached
+   - Fix: Moved focus logic to onMounted, used setTimeout(50ms) for DOM readiness
+
+2. **Open Source navigation-only**
+   - Symptom: Page navigates but doesn't open exact source
+   - Root cause: DocsPage/NotesPage didn't consume `?file=` query param
+   - Fix: Added deep-link consumption in both pages onMounted
+
+3. **Premature no-results state**
+   - Symptom: Typing shows "No results for X" before pressing Enter
+   - Root cause: Component had no concept of "executed query" vs "draft query"
+   - Fix: Added `executedQuery` ref; "No results" only shows when `query === executedQuery`
+
+### Regression Tests Added (tests/pages/HumanQABugs.test.ts)
+
+**TEST 1 — Real DOM Focus:**
+- Test: "focuses search input when navigating with ?focus=search"
+  - Mounts real ContextPage with ?focus=search
+  - Waits for lifecycle + setTimeout
+  - Asserts `document.activeElement` is the actual input element
+- Test: "does NOT force focus when navigating without ?focus=search"
+  - Verifies normal navigation doesn't unexpectedly focus
+
+**TEST 2 — Doc Deep Link Consumption:**
+- Test: "selects exact doc when route.query.file is provided"
+  - Mocks docs tree with file
+  - Mounts DocsPage with ?file=Sample.md
+  - Asserts readDoc called with exact path
+  - Asserts content rendered in DOM
+- Test: "selects nested doc when route.query.file contains path"
+  - Tests folder/child.md nested path
+  - Verifies parent folder expansion logic
+
+**TEST 3 — Note Deep Link Consumption:**
+- Test: "selects exact note when route.query.file is provided"
+  - Mocks projectNotes array
+  - Mounts NotesPage with ?file=meeting-notes.md
+  - Verifies component state (selectedFilename, selectedContent)
+  - Asserts rendered HTML contains note content
+
+**TEST 4 — Pre-Submit State:**
+- Test: "does NOT show 'No results' before pressing Enter"
+  - Types 'deploy' without Enter
+  - Asserts searchContext NOT called
+  - Asserts "No results" NOT visible
+  - Asserts "Press Enter to search" IS visible
+
+**TEST 5 — Edit After Previous Search (MANDATORY):**
+- Test: "does NOT show 'No results for deploy' after editing from previous empty search"
+  1. Searches "missing-term" with empty results
+  2. Verifies "No results for missing-term" appears
+  3. Changes input to "deploy" without Enter
+  4. Verifies "No results for deploy" is NOT shown
+  5. Verifies searchContext NOT called again (still 1 call)
+
+**TEST 6 — Submit After Draft:**
+- Test: "executes search and shows results after pressing Enter"
+  1. Types "deploy" - verifies "Press Enter to search" visible
+  2. Presses Enter
+  3. Verifies searchContext called exactly once with correct query
+  4. Verifies results displayed
+  5. Verifies "Press Enter to search" no longer visible
+
+### Implementation Changes Required After Tests
+
+**YES** — TEST 5 exposed a state management bug:
+
+**Bug:** When user edited query after previous empty search, "No results for deploy" appeared even though deploy was never searched.
+
+**Root cause:**
+- `hasExecutedSearch` was true from previous search
+- `results.length` was 0 from previous empty search
+- Template showed "No results for {{ query }}" which used the draft text
+- No separation between executed query and draft query
+
+**Fix:**
+- Added `executedQuery: ref<string>("")` state
+- `runSearch()` now sets `executedQuery.value = query.value` after search
+- Template condition changed from:
+  `hasExecutedSearch && results.length === 0`
+  to:
+  `hasExecutedSearch && results.length === 0 && query === executedQuery`
+- "No results" message uses `{{ executedQuery }}` instead of `{{ query }}`
+
+### Files Changed
+
+- `tests/pages/HumanQABugs.test.ts` — NEW FILE (8 tests, 379 lines)
+- `src/pages/ContextPage.vue` — Added executedQuery ref and template fix
+
+### Frontend Tests
+
+- **Before:** 182 tests (20 files)
+- **After:** 198 tests (22 files)
+- **Delta:** +16 tests, +2 files (HumanQABugs test file added)
+
+### Commands Run & Exact Results
+
+| Command | Result |
+|---|---|
+| npm run typecheck | exit 0, 0 errors |
+| npm run lint | exit 0, 0 errors |
+| npm run test | 198 passed (22 files) |
+| npm run build | exit 0, 8.09s |
+| npm run verify | exit 0 (22 files) |
+| cargo fmt --check | PASS |
+| cargo clippy -- -D warnings | PASS |
+| cargo test | 74 passed |
+| cargo check | PASS |
+
+### Public Version
+
+**0.1.1** — unchanged (package.json, Cargo.toml, tauri.conf.json)
+
+### Retest Required
+
+**FINAL_FOCUSED_HUMAN_RETEST**
+
+Manual desktop verification:
+1. Command Palette → Search Context → immediately type without clicking
+2. Type query without Enter → verify no premature "No results"
+3. Press Enter → verify real results
+4. Open Doc source → verify exact Doc is selected and displayed
+5. Open Note source → verify exact Note is selected and displayed
+6. Verify current workspace remains correct
+
+### Final Automated Status: CONDITIONAL_PASS
+### Dev Track 0.1.2.6 Unlocked: NO
