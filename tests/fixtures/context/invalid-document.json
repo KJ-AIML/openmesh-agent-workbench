@@ -1,0 +1,17 @@
+{
+  "id": "01J9X3v2example00000000000003",
+  "schemaVersion": "1.0.0",
+  "sourceId": "01J9X3v2example00000000000001",
+  "kind": "doc",
+  "projectId": "openmesh-project-001",
+  "canonicalRef": "openmesh://project/openmesh-project-001/doc/foo.md",
+  "title": "Bad Document",
+  "text": "ok",
+  "sensitivity": "private",
+  "agentContextEnabled": false,
+  "observedAt": "2026-07-05T03:00:00.000Z",
+  "freshness": {
+    "state": "not-a-state",
+    "observedAt": "2026-07-05T03:00:00.000Z"
+  }
+}

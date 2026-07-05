@@ -12,6 +12,14 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "happy-dom",
-    include: ["tests/**/*.test.ts", "tests/**/*.spec.ts"],
+    include: [
+      "tests/**/*.test.ts",
+      "tests/**/*.spec.ts",
+    ],
+    typecheck: {
+      enabled: true,
+      checker: "vue-tsc",
+      include: ["tests/**/*.test.ts"],
+    },
   },
 });

@@ -1,0 +1,12 @@
+{
+  "id": "",
+  "schemaVersion": "1.0.0",
+  "kind": "doc",
+  "projectId": "openmesh-project-001",
+  "canonicalRef": "openmesh://project/openmesh-project-001/doc/foo.md",
+  "title": "Bad Source",
+  "sensitivity": "invalid-sensitivity",
+  "agentContextEnabled": false,
+  "createdAt": "not-a-timestamp",
+  "updatedAt": "2026-07-05T03:00:00.000Z"
+}

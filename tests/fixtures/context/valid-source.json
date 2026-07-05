@@ -1,0 +1,15 @@
+{
+  "id": "01J9X3v2example00000000000001",
+  "schemaVersion": "1.0.0",
+  "kind": "doc",
+  "projectId": "openmesh-project-001",
+  "ownerPersonId": "person-ter",
+  "canonicalRef": "openmesh://project/openmesh-project-001/doc/architecture/overview.md",
+  "title": "Architecture Overview",
+  "sensitivity": "private",
+  "agentContextEnabled": true,
+  "createdAt": "2026-06-15T08:30:00.000Z",
+  "updatedAt": "2026-07-04T14:22:00.000Z",
+  "indexedAt": "2026-07-05T03:00:00.000Z",
+  "contentHash": "sha256:abc123def456"
+}
