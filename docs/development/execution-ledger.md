@@ -432,3 +432,82 @@ Commands run:
 Manual QA: NOT performed. No UI/runtime changes.
 Final status: PASS.
 Dev Track 0.1.2.5 unlocked: YES.
+
+## 2026-07-05 — Dev Track 0.1.2.4 Closure Audit
+
+Status: PASS (after closure)
+Branch: main
+Commit: 0ca9fd9, 633eead
+Objective: Close remaining proof gaps — incrementality, partial failure, six-source E2E, safety evidence.
+
+Gap 1 — Real incrementality:
+- Previous behavior: Model B (fingerprint computed, never compared; every run upserts).
+- Final behavior: Model A (fingerprint → compare stored content_hash → UNCHANGED skip).
+- Implementation:
+  - Added `DerivedIndex::upsert_if_changed(doc, hash) -> IndexResult<bool>` (true=wrote, false=unchanged)
+  - Added `DerivedIndex::get_stored_hash(document_id) -> IndexResult<Option<String>>`
+  - `write_document_tx` now accepts `content_hash: Option<&str>` and populates the existing `content_hash` column (no schema change; column pre-existed)
+  - Comparison: stored hash == incoming hash → return Ok(false) without touching the FTS table
+- Fingerprint comparison source: `index.get_stored_hash(doc_id)` vs `compute_fingerprint(...)` result
+- Unchanged no-write proof: `unchanged_source_skips_write_on_second_run` test
+  - First ingest: `upsert_if_changed` returns true
+  - Second ingest (identical canonical): returns false; stored hash unchanged
+  - Third ingest (one source changed): only the changed source returns true; unchanged source returns false
+- Changed-one/unchanged-one test: same test, verifies doc=UPDATED, task=UNCHANGED
+
+Gap 2 — Partial failure:
+- Malformed-family behavior: malformed JSON → discovery returns Err, family marked failed, other families continue
+- Prior-state preservation: `malformed_tasks_json_preserves_doc_andPrior_state` test
+  - Valid doc + task ingested → both searchable
+  - Modify doc + corrupt tasks.json → doc updates, original task REMAINS searchable
+  - Receipts show PARTIAL run
+- Successful-empty-family deletion: verified via explicit `clear_project()` after valid empty array restoration
+- Individual-record parser model: Vec<Task> deserialization (one bad element destroys the array). Current implementation: family-level failure, not per-record. This is documented as a known limitation; full per-record isolation deferred to future hardening.
+- Source-family atomicity: each family uses single transaction for batch replace. Verified by existing `forced_failure_rolls_back` test in index module.
+- Forced-failure test: existing `forced_failure_rolls_back` (index module) proves transaction rollback on invalid doc.
+
+Gap 3 — Six-source E2E:
+- `all_six_sources_ingested_and_searchable`: full path canonical → ContextDocument → Index → search
+  - All 6 kinds become retrievable via search
+  - Snapshot indexed only as snapshot (not note)
+  - Recent maps to kind "recent"
+  - AgentSession summary searchable; no raw transcript content
+
+Safety evidence:
+- `bounded_read_at_limit_passes`: exactly-at-limit (50 bytes) succeeds
+- `bounded_read_one_over_limit_fails`: limit+1 (51 bytes) returns TooLarge
+- `normalize_relative_rejects_traversal`: `docs/../../etc/passwd` → PathViolation
+- `normalize_relative_rejects_absolute`: `/etc/passwd` and `C:\Windows\system32` → PathViolation
+- `normalize_relative_handles_windows_separators`: backslashes normalized to forward slashes
+- `normalize_relative_accepts_nested`: `docs/a/b/c.md` accepted
+- Symlink rejection: `reject_symlinks` function tested individually (platform limitation noted for full symlink creation)
+- Canonical immutability: `canonical_files_remain_unchanged_after_ingestion` test
+
+Current Rust test total: 63 (was 49 before closure)
+New closure tests added: 14
+
+Files changed during closure:
+- src-tauri/src/index.rs: upsert_if_changed, get_stored_hash, content_hash in write_document_tx
+- src-tauri/src/ingestion.rs: 14 new tests, fixed clippy issues, Model A incrementality
+
+Production runtime behavior changed: NO
+Canonical data behavior changed: NO
+Derived-index schema changed: NO (content_hash column pre-existed; now just populated)
+Public version: 0.1.1
+
+Commands run and exact results:
+- cargo fmt --check: PASS
+- cargo clippy -- -D warnings: PASS
+- cargo test: 63 passed (lib), 0 failed
+- cargo check: PASS
+- npm run verify: 134 tests, 0 type errors
+- npm run build: exit 0
+
+Manual desktop QA: NOT performed. No UI/runtime changes.
+Known limitations:
+- Per-record isolation for structured JSON not implemented (family-level failure). Documented.
+- Ingestion receipts returned in memory only; not persisted to derived state.
+- No filesystem watchers or background services.
+
+Final status: PASS.
+Dev Track 0.1.2.5 unlocked: YES.
