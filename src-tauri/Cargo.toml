@@ -19,3 +19,5 @@ open = "5"
 git2 = "0.19"
 chrono = { version = "0.4", features = ["serde"] }
 dirs = "5"
+rusqlite = { version = "0.30", features = ["bundled"] }
+thiserror = "1"
