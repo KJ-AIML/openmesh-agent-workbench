@@ -141,25 +141,25 @@ Dev Track checklist:
 
 ## 0.1.2.3 - Derived Local Index
 
-- Status: PASS
+- Status: PASS (after closure audit)
+- Closure reason resolved: filter-before-limit semantics now correct (SQL-side); ContextDocument → IndexDocument boundary proven (adapter + shared fixture); exact cargo test gate passes (32 tests)
 - Started at: 2026-07-05T15:45:00+07:00
-- Completed at: 2026-07-05T17:30:00+07:00
+- Completed at: 2026-07-05T18:00:00+07:00
 - Branch: main
-- Commit(s): cf9b0ec
+- Commit(s): cf9b0ec, 7564ecc, 3987a30
 - Summary:
   - Added `src-tauri/src/index.rs` — disposable, rebuildable SQLite derived index for ContextDocument contracts
   - rusqlite 0.30 + bundled feature; SQLite 3.44.0 with FTS5 + JSON1 enabled
   - Deterministic project-scoped path: ~/.openmesh/indexes/proj_<fnv1a(projectId)>/context.sqlite3
-  - FTS5 lexical search with bm25() scoring, kind filtering (post-filter in Rust), result limit
+  - FTS5 lexical search with bm25() scoring, kind filtering (SQL-side before LIMIT), result limit
   - JSON1 metadata query via json_extract with CAST to TEXT for type safety
   - WAL mode enabled for file-backed DBs (verified at runtime); in-memory for tests
   - Transactional write API: upsert_document, remove_source, replace_project_documents, clear_project
   - Rebuild boundary: rebuild_from_documents(project_id, &[IndexDocument]) — NO canonical file access
   - Secret documents excluded from searchable content (validated + FTS skipped)
   - Corrupt-index recovery: detect, close, remove DB + WAL + SHM sidecars, recreate empty index
-  - dispose() method removes all index files for a project
-  - 24 Rust tests covering: path policy (determinism, project isolation, traversal rejection), schema idempotency, upsert/search/replace/remove, FTS5 MATCH (incl. Unicode, punctuation), JSON round-trip, kind filter, secret privacy, forced rollback, rebuild equivalence, purge file removal, corrupt recovery, health inspection
-  - Runtime capability proofs: SQLite 3.44.0 version, json_valid('{"openmesh":true}')=1, FTS5 MATCH returns 1 row, WAL_MODE=wal on file-backed DB
+  - 32 Rust tests (24 original + closure audit additions): adversarial kind-filter+limit, contract-boundary shared-fixture test, secret determinism, mixed-batch commit
+  - Runtime capability proofs: SQLite 3.44.0, json_valid()=1, FTS5 MATCH=1 row, WAL_MODE=wal on file-backed DB
 - Verification:
   - npm run typecheck: exit 0
   - npm run lint: exit 0 (--quiet)
@@ -167,25 +167,30 @@ Dev Track checklist:
   - npm run build: exit 0, 7.13s
   - npm run verify: exit 0
   - cargo fmt --check: PASS
-  - cargo clippy -- -D warnings: PASS (--lib and --tests)
-  - cargo test --lib: 28 passed (24 index + 4 context)
+  - cargo clippy --lib -- -D warnings: PASS
+  - cargo clippy --lib --tests -- -D warnings: PASS
+  - cargo test: 32 passed (exact `cargo test`, not --lib), exit 0
   - cargo check: PASS
-  - public version remains 0.1.1 (package.json, Cargo.toml, tauri.conf.json)
+  - public version remains 0.1.1
 - Manual QA:
-  - Desktop manual QA: NOT performed (no UI change; no Tauri commands added). Required invariant is purely the index module behavior, validated by 24 Rust tests.
+  - Desktop manual QA: NOT performed (no UI change; no Tauri commands added). All behavior validated via 32 Rust tests.
 - Known limitations:
   - WAL sidecar cleanup on Windows may fail if a connection is still held by another process
-  - No content-chunking; full text indexed per document (future work)
-  - kind filtering done in Rust post-query (works correctly, not yet SQL-pushed)
-  - bm25 scoring is raw; recency/source weighting hooks prepared but not yet wired (future policy)
+  - No content-chunking; full text indexed per document
+  - bm25 scoring is raw; recency/source weighting hooks prepared but not yet wired
+- Closure audit findings:
+  - Bug found: SQL LIMIT was applied before Rust kind filter (Model B). Adversarial test `kind_filter_does_not_consume_limit` exposed 0 results when excluded kind ranked highest.
+  - Fixed: kind filter moved into SQL with dynamic placeholders, applied BEFORE LIMIT (Model A). Dynamic placeholder numbering computed at query-build time.
+  - IndexDocument proven to be internal derived-index DTO (option B), not competing domain contract. Explicit `From<&ContextDocument>` adapter. Identity fields survive: document_id, source_id, project_id, canonical_ref, source_kind, sensitivity.
+  - Shared ContextDocument fixture (tests/fixtures/context/valid-document.json) crosses index boundary via `context_document_identity_survives_index_conversion` test.
+  - `Freshness` struct updated with `#[serde(rename_all="camelCase")]` so shared fixtures deserialize.
+  - `mod index;` declaration in lib.rs was missing from original cf9b0ec commit tree — fixed in 3987a30.
+  - Secret document behavior: non-empty secret text → validation rejection (Err); empty secret text → stored as metadata-only, no FTS row, excluded from search.
 - Decision notes:
-  - Chose rusqlite 0.30 + `bundled` (NOT 0.40 which lacked `fts5` feature). 0.40 bundles FTS5 by default but its feature set changed completely.
-  - Chose normal FTS5 table (NOT contentless) because contentless FTS5 hides UNINDEXED column values
-  - Normal FTS5 duplicates text in the derived layer — acceptable because the index is disposable/rebuildable and canonical files remain untouched
-  - `rebuild_from_documents()` is the ONLY rebuild API — intentionally no `rebuild_from_files()` ingestion in this track
-  - secret documents: validated upstream (reject non-empty text), and explicitly skipped in FTS insert
-  - Production API methods (`open`, `open_at`, `path`, `inspect`) exist but are test-only callsites for now; they will be consumed by 0.1.2.4 ingestion pipeline
-  - `#![cfg_attr(not(test), allow(dead_code))]` suppresses production dead-code warnings; safe because all index code is consumed by tests in this track and will be consumed by 0.1.2.4
+  - rusqlite 0.30 + `bundled` (NOT 0.40) — 0.40 changed feature flags completely
+  - Normal FTS5 table (NOT contentless) — contentless FTS5 hides UNINDEXED columns
+  - `rebuild_from_documents()` only rebuild API — no canonical file reads in this track
+  - `#![cfg_attr(not(test), allow(dead_code))]` — production dead-code warnings suppressed; code consumed by 0.1.2.4
 
 ## 0.1.2.4 - Context Ingestion Pipeline
 
