@@ -351,6 +351,12 @@ export function getCommands(ctx: CommandContext): Command[] {
       icon: "bot",
       route: "/agent-sessions",
     },
+    {
+      id: "workspace-context",
+      title: "Search Context",
+      icon: "search",
+      route: "/context?focus=search",
+    },
     { id: "workspace-settings", title: "Open Settings", icon: "settings", route: "/settings" },
   ];
 

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from "vue";
+import { ref, computed, onMounted, watch, nextTick } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import {
   RefreshCw,
   Search,
@@ -16,6 +17,7 @@ import {
   Loader2,
   ChevronDown,
   X,
+  ExternalLink,
 } from "lucide-vue-next";
 import { useStore } from "../lib/useStore";
 import {
@@ -30,6 +32,8 @@ import {
 } from "../lib/contextClient";
 
 const { currentProject, currentProjectPath } = useStore();
+const route = useRoute();
+const router = useRouter();
 
 // --- State ---
 const query = ref("");
@@ -45,6 +49,7 @@ const searching = ref(false);
 const refreshing = ref(false);
 const error = ref<string | null>(null);
 const expandedSections = ref<Set<string>>(new Set(["results"]));
+const searchInputRef = ref<HTMLInputElement | null>(null);
 
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 100;
@@ -163,8 +168,102 @@ function previewText(doc: ContextInspection | null): string {
   return doc.text;
 }
 
+/**
+ * Parse a canonical_ref and return its components.
+ * Format: openmesh://project/{projectId}/{kind}/{sourceKey}
+ */
+function parseCanonicalRef(ref: string): { projectId: string; kind: string; sourceKey: string } | null {
+  try {
+    if (!ref.startsWith("openmesh://project/")) return null;
+    const rest = ref.slice("openmesh://project/".length);
+    const parts = rest.split("/");
+    if (parts.length < 3) return null;
+    const projectId = decodeURIComponent(parts[0]);
+    const kind = decodeURIComponent(parts[1]);
+    const sourceKey = parts.slice(2).join("/");
+    return { projectId, kind, sourceKey };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Open the source document for the selected context result.
+ * Navigates to the appropriate page in the current workspace.
+ */
+function openSource(): void {
+  if (!selectedResult.value) return;
+  const parsed = parseCanonicalRef(selectedResult.value.canonical_ref);
+  if (!parsed) {
+    error.value = "Invalid canonical reference.";
+    return;
+  }
+  // Project scope check: must match current project.
+  if (currentProject.value && parsed.projectId !== currentProject.value.id) {
+    error.value = "Cannot open source from another project.";
+    return;
+  }
+  switch (parsed.kind) {
+    case "doc":
+      router.push({ path: "/docs", query: { file: parsed.sourceKey } });
+      break;
+    case "note":
+      router.push({ path: "/notes", query: { file: parsed.sourceKey } });
+      break;
+    case "snapshot":
+      // Snapshots live in notes/snapshots/ folder; navigate to notes.
+      router.push({ path: "/notes", query: { file: parsed.sourceKey } });
+      break;
+    case "task":
+      router.push({ path: "/sprint", query: { task: parsed.sourceKey } });
+      break;
+    case "agent-session":
+      router.push({ path: "/agent-sessions", query: { session: parsed.sourceKey } });
+      break;
+    case "recent":
+      // No dedicated page for RecentItem source opening.
+      error.value = "Open Source not supported for recent items.";
+      break;
+    default:
+      error.value = `Open Source not supported for kind: ${parsed.kind}`;
+  }
+}
+
+/**
+ * Whether Open Source is available for the selected result.
+ */
+const canOpenSource = computed(() => {
+  if (!selectedResult.value) return false;
+  const parsed = parseCanonicalRef(selectedResult.value.canonical_ref);
+  if (!parsed) return false;
+  return ["doc", "note", "snapshot", "task", "agent-session"].includes(parsed.kind);
+});
+
 onMounted(loadHealth);
 watch(currentProjectPath, () => { loadHealth(); selectedResult.value = null; inspection.value = null; results.value = []; });
+
+// Focus search input when navigated from Command Palette
+watch(
+  () => route.query.focus,
+  async (focus) => {
+    if (focus === "search") {
+      await nextTick();
+      searchInputRef.value?.focus();
+    }
+  },
+  { immediate: true },
+);
+
+// Optional: preserve initial query from Command Palette
+watch(
+  () => route.query.q,
+  (q) => {
+    if (typeof q === "string" && q.length > 0 && query.value === "") {
+      query.value = q;
+    }
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
@@ -205,6 +304,7 @@ watch(currentProjectPath, () => { loadHealth(); selectedResult.value = null; ins
         <div class="flex items-center gap-2" style="background: var(--surface-highlight); border: 1px solid var(--border); border-radius: 6px; padding: 6px 10px;">
           <Search class="h-3.5 w-3.5 flex-shrink-0" style="color: var(--muted-foreground)" />
           <input
+            ref="searchInputRef"
             v-model="query"
             type="text"
             placeholder="Search your context…"
@@ -352,6 +452,14 @@ watch(currentProjectPath, () => { loadHealth(); selectedResult.value = null; ins
             </div>
 
             <hr style="border-color: var(--divider)" />
+
+            <!-- Open Source -->
+            <div v-if="canOpenSource" class="mt-3">
+              <button class="btn-sm w-full justify-center" @click="openSource">
+                <ExternalLink class="h-3 w-3" />
+                <span class="text-[11px]">Open Source</span>
+              </button>
+            </div>
 
             <!-- Preview -->
             <div>
