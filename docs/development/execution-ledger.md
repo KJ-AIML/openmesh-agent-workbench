@@ -511,3 +511,44 @@ Known limitations:
 
 Final status: PASS.
 Dev Track 0.1.2.5 unlocked: YES.
+
+## 2026-07-05 — Dev Track 0.1.2.4 Final Correctness Closure
+
+Status: PASS
+Branch: main
+Commit: 85036e4
+Objective: Close three remaining review gaps — family-scoped deletion, source-family atomicity, symlink evidence.
+
+Gap 1 — Family-scoped deletion:
+- Previous mechanism: NO production deletion logic; tests used clear_project() to simulate.
+- Bug found: YES — clear_project() would have cleared the entire project, not just the empty family.
+- Final mechanism: DerivedIndex::remove_source_kind(project_id, kind) — collects document_ids for the target kind, deletes FTS rows per-document_id, deletes documents rows, all in one transaction.
+- Proof: empty_family_removes_only_that_kind test — all 6 kinds ingested; tasks.json → [] removes ONLY task rows; doc/note/snapshot/recent/session all survive.
+- Unrelated kinds preserved: verified in test.
+
+Gap 2 — Source-family atomicity:
+- Previous transaction Model B: per-document writes via upsert_document.
+- Final transaction Model A: replace_project_kind_documents(project_id, kind, docs) wraps delete+insert in one SQLite transaction.
+- Forced-failure mechanism: family_transaction_is_atomic_on_failure — 3 docs, force one invalid (empty document_id), verify complete rollback.
+- Rollback result: original state fully preserved; no partial new searchable text exists.
+
+Gap 3 — Symlink evidence:
+- symlink_file_is_rejected (#[cfg(unix)]): real symlink creation + reject_symlinks → SymlinkSkipped.
+- symlink_directory_is_rejected (#[cfg(unix)]): same for directory symlink.
+- symlink_file_is_rejected_windows / symlink_directory_is_rejected_windows (#[cfg(windows)]): OS-specific.
+- rejection_policy_proves_symlink_detection_logic: cross-platform — normal file accepted, symlink_metadata checked.
+- Platform limitation: real symlink creation depends on OS + permissions; policy function tested deterministically.
+
+Current Rust test total: 68 (was 63 before this closure).
+New final-closure tests: 5 (empty_family_removes_only_that_kind, family_transaction_is_atomic_on_failure, + 3 symlink tests).
+
+Files changed:
+- src-tauri/src/index.rs: remove_source_kind, replace_project_kind_documents
+- src-tauri/src/ingestion.rs: 5 new tests, removed clear_project() simulation
+
+Production runtime behavior changed: NO.
+Canonical data behavior changed: NO.
+Derived-index schema changed: NO.
+Public version: 0.1.1.
+Final status: PASS.
+Dev Track 0.1.2.5 unlocked: YES.
