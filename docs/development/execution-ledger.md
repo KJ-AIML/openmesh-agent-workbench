@@ -385,3 +385,50 @@ Follow-up verification:
 - `cargo check` -> clean, exit 0
 Public versions: 0.1.1 across package.json, Cargo.toml, tauri.conf.json.
 Final status: PASS.
+
+## 2026-07-05 — Dev Track 0.1.2.4
+
+Status: PASS
+Branch: main
+Commit: 1925da8, 98ffb54, 29ee5f3
+Objective: Create a safe incremental ingestion pipeline that reads canonical OpenMesh sources, normalizes into ContextDocument, and updates the disposable local index.
+Canonical source inventory:
+- Docs: <project>/.openmesh/docs/**/*.md (recursive, file-backed)
+- Notes: <project>/.openmesh/notes/*.{md,txt} (flat, file-backed)
+- Snapshots: <project>/.openmesh/notes/snapshots/*.md (flat subdirectory)
+- Tasks: <project>/.openmesh/tasks.json (JSON array)
+- Recent: <project>/.openmesh/recent.json (JSON array)
+- Sessions: <project>/.openmesh/sessions.json (JSON array)
+Decisions:
+- Snapshots explicitly excluded from note discovery to prevent double-ingestion.
+- ScannedSession NOT ingested (not canonical persisted state).
+- Project identity from project.json id field.
+- Bounded reads: 1 MiB text, 4 MiB JSON, no silent truncation.
+- Path safety: traversal, symlink, absolute-path escape all rejected.
+- FNV-1a fingerprint (versioned prefix) over kind/title/text/sensitivity/agentCtx.
+- Secret documents converted to metadata-only (empty text, no FTS) rather than skipped.
+- Receipts exclude source content (privacy-safe).
+- Module: single file src-tauri/src/ingestion.rs.
+Tests added (18 → total 54 Rust):
+- discover_all_six_source_families
+- snapshot_not_double_ingested_as_note
+- bounded_read_within_limit, bounded_read_over_limit_rejected
+- reject_symlinks_detects_symlink_metadata
+- compute_fingerprint_stable, _changes_on_content, _changes_on_sensitivity
+- context_document_identity_survives
+- get_project_id_from_metadata, project_id_mismatch_detected
+- secret_document_text_dropped_by_policy, apply_secret_preserves_public_docs
+- normalize_task_contains_title_and_description, normalize_session_no_transcript
+- index_schema_version_is_explicit
+- changed_doc_updates_search, deleted_doc_removes_search_result
+- malformed_json_preserves_no_state, receipt_counts_are_consistent
+- canonical_files_remain_unchanged_after_ingestion
+Commands run:
+- cargo check: exit 0
+- cargo fmt --check: PASS
+- cargo clippy -- -D warnings: PASS
+- cargo test: 54 passed, exit 0
+- npm run verify: 134 tests, 0 type errors
+Manual QA: NOT performed. No UI/runtime changes.
+Final status: PASS.
+Dev Track 0.1.2.5 unlocked: YES.
