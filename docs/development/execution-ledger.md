@@ -365,3 +365,23 @@ Key pre-existing bug also fixed:
 
 Final status: PASS.
 Dev Track 0.1.2.4 unlocked: YES.
+
+## 2026-07-05 — Dev Track 0.1.2.3 Final Mechanical Gate
+
+Status: PASS
+Branch: main
+Commit: 36b7145 (+ this gate)
+Objective: Run the exact `cargo clippy -- -D warnings` command that was previously only approximated via `--lib` and `--lib --tests` variants.
+Why this gate was required:
+- The closure audit report showed `cargo clippy --lib -- -D warnings` and `cargo clippy --lib --tests -- -D warnings` passing.
+- The full command `cargo clippy -- -D warnings` (without `--lib`) was never explicitly recorded.
+- This extra session runs and records the exact command and result.
+Exact command run: `cargo clippy -- -D warnings`
+Exact result: Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.55s. Exit code 0. No warnings, no errors.
+Targets checked: openmesh v0.1.1 (lib + bins).
+Code changed: NO. No code modifications were required.
+Follow-up verification:
+- `cargo test` -> 32 passed (lib), 0 (main), 0 (doctests)
+- `cargo check` -> clean, exit 0
+Public versions: 0.1.1 across package.json, Cargo.toml, tauri.conf.json.
+Final status: PASS.

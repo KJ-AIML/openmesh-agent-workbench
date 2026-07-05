@@ -141,12 +141,17 @@ Dev Track checklist:
 
 ## 0.1.2.3 - Derived Local Index
 
-- Status: PASS (after closure audit)
+- Status: PASS (after closure audit + final mechanical gate)
 - Closure reason resolved: filter-before-limit semantics now correct (SQL-side); ContextDocument → IndexDocument boundary proven (adapter + shared fixture); exact cargo test gate passes (32 tests)
+- Final mechanical gate resolved: exact `cargo clippy -- -D warnings` confirmed passing (exit 0)
 - Started at: 2026-07-05T15:45:00+07:00
-- Completed at: 2026-07-05T18:00:00+07:00
+- Completed at: 2026-07-05T18:15:00+07:00
 - Branch: main
-- Commit(s): cf9b0ec, 7564ecc, 3987a30
+- Commit(s): cf9b0ec, 7564ecc, 3987a30, afd253f, 36b7145
+- Final closure-gate evidence:
+  - Exact command: `cargo clippy -- -D warnings`
+  - Exact result: exit 0, no warnings or errors, no targets skipped
+  - Targets checked: openmesh v0.1.1 (lib + bins)
 - Summary:
   - Added `src-tauri/src/index.rs` — disposable, rebuildable SQLite derived index for ContextDocument contracts
   - rusqlite 0.30 + bundled feature; SQLite 3.44.0 with FTS5 + JSON1 enabled
