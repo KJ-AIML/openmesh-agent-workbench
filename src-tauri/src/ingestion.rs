@@ -29,6 +29,39 @@ pub const MAX_TEXT_FILE_BYTES: u64 = 1024 * 1024; // 1 MiB
 pub const MAX_JSON_COLLECTION_BYTES: u64 = 4 * 1024 * 1024; // 4 MiB
 const ALLOWED_DOC_EXTS: &[&str] = &["md", "txt", "markdown"];
 const SNAPSHOT_SUBDIR: &str = "snapshots";
+fn unique_temp_dir(name: &str) -> std::path::PathBuf {
+    use std::hash::{Hash, Hasher};
+    use std::collections::hash_map::DefaultHasher;
+    let mut h = DefaultHasher::new();
+    std::process::id().hash(&mut h);
+    std::thread::current().id().hash(&mut h);
+    name.hash(&mut h);
+    std::env::temp_dir().join(format!("om-{:016x}-{}", h.finish(), name))
+}
+
+
+/// Test-only unique index path to avoid parallel test conflicts.
+
+fn open_test_index(name: &str) -> crate::index::DerivedIndex {
+    let path = test_index_path(name);
+    if std::path::Path::new(&path).exists() {
+        let _ = std::fs::remove_dir_all(&path);
+    }
+    crate::index::DerivedIndex::open_at(path).expect("open test index")
+}
+
+fn test_index_path(name: &str) -> std::path::PathBuf {
+    use std::hash::{Hash, Hasher};
+    use std::collections::hash_map::DefaultHasher;
+    let mut h = DefaultHasher::new();
+    std::process::id().hash(&mut h);
+    std::thread::current().id().hash(&mut h);
+    name.hash(&mut h);
+    std::env::temp_dir().join(format!("om-index-{:016x}", h.finish()))
+}
+
+
+
 
 // ============================================================================
 // Error / Outcome Types
@@ -1058,7 +1091,7 @@ mod tests {
 
     #[test]
     fn bounded_read_within_limit() {
-        let dir = std::env::temp_dir().join(format!("openmesh-bounded-{}", std::process::id()));
+        let dir = unique_temp_dir("b1");
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("within.md");
         fs::write(&path, "a".repeat(100)).unwrap();
@@ -1070,7 +1103,7 @@ mod tests {
 
     #[test]
     fn bounded_read_over_limit_rejected() {
-        let dir = std::env::temp_dir().join(format!("openmesh-bounded-{}", std::process::id()));
+        let dir = unique_temp_dir("b2");
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("over.md");
         fs::write(&path, "x".repeat(200)).unwrap();
@@ -1096,7 +1129,7 @@ mod tests {
     fn reject_symlinks_detects_symlink_metadata() {
         // We can't always create symlinks in CI, so we just test that a regular
         // file is accepted by the policy.
-        let dir = std::env::temp_dir().join(format!("openmesh-policy-{}", std::process::id()));
+        let dir = unique_temp_dir("p1");
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("regular.md");
         fs::write(&path, "content").unwrap();
@@ -2002,7 +2035,7 @@ mod tests {
     /// Safety: bounded read at-limit vs over-limit.
     #[test]
     fn bounded_read_at_limit_passes() {
-        let dir = std::env::temp_dir().join(format!("clippy-bounded-{}", std::process::id()));
+        let dir = unique_temp_dir("b3");
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("exact.md");
         let limit = 50u64;
@@ -2015,7 +2048,7 @@ mod tests {
 
     #[test]
     fn bounded_read_one_over_limit_fails() {
-        let dir = std::env::temp_dir().join(format!("clippy-bounded-{}", std::process::id()));
+        let dir = unique_temp_dir("b4");
         fs::create_dir_all(&dir).unwrap();
         let path = dir.join("over.md");
         let limit = 50u64;
@@ -2371,7 +2404,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn symlink_directory_is_rejected() {
-        let dir = std::env::temp_dir().join(format!("openmesh-symdir-{}", std::process::id()));
+        let dir = unique_temp_dir("s2");
         fs::create_dir_all(&dir).unwrap();
         let target_dir = dir.join("real_dir");
         fs::create_dir_all(&target_dir).unwrap();

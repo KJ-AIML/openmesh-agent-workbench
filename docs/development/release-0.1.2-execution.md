@@ -243,9 +243,9 @@ Dev Track checklist:
 
 ## 0.1.2.5 - Context Search & Inspector
 
-- Status: PASS
+- Status: CONDITIONAL_PASS (awaiting manual desktop QA)
 - Started at: 2026-07-05T22:00:00+07:00
-- Completed at: 2026-07-05T23:30:00+07:00
+- Completed at: pending
 - Branch: main
 - Commit(s): 489351d
 - Summary:

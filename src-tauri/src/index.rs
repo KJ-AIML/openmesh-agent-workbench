@@ -36,6 +36,9 @@ const FTS_TOKENIZER: &str = "unicode61";
 /// Default FTS query limit.
 const DEFAULT_LIMIT: usize = 25;
 
+/// Maximum characters returned in an inspection preview.
+const MAX_PREVIEW_CHARS: usize = 4000;
+
 // ---------------------------------------------------------------------------
 // Errors
 // ---------------------------------------------------------------------------
@@ -477,6 +480,8 @@ impl DerivedIndex {
         Ok(result.map(|mut doc| {
             if doc.sensitivity == "secret" {
                 doc.text.clear();
+            } else if doc.text.len() > MAX_PREVIEW_CHARS {
+                doc.text = doc.text.chars().take(MAX_PREVIEW_CHARS).collect();
             }
             doc
         }))
