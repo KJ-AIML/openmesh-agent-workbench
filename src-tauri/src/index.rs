@@ -567,6 +567,64 @@ impl DerivedIndex {
         Ok(())
     }
 
+    /// Remove all derived index rows for one source kind within a project.
+    pub fn remove_source_kind(&mut self, project_id: &str, kind: &str) -> IndexResult<()> {
+        let tx = self.conn.transaction()?;
+        // Collect document_ids to remove.
+        let doc_ids: Vec<String> = {
+            let mut stmt = tx.prepare(
+                "SELECT document_id FROM context_documents WHERE project_id = ?1 AND source_kind = ?2",
+            )?;
+            let rows = stmt.query_map([project_id, kind], |r| r.get(0))?;
+            rows.collect::<Result<Vec<_>, _>>()?
+        };
+        // Delete from FTS for each document_id.
+        for id in &doc_ids {
+            tx.execute(
+                "DELETE FROM context_documents_fts WHERE document_id = ?1",
+                [id.as_str()],
+            )?;
+        }
+        // Delete from documents table.
+        tx.execute(
+            "DELETE FROM context_documents WHERE project_id = ?1 AND source_kind = ?2",
+            params![project_id, kind],
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Replace all documents of a single source kind for a project in one transaction.
+    pub fn replace_project_kind_documents(
+        &mut self,
+        project_id: &str,
+        kind: &str,
+        docs: &[IndexDocument],
+    ) -> IndexResult<()> {
+        for d in docs {
+            d.validate()?;
+        }
+        let tx = self.conn.transaction()?;
+        tx.execute(
+            "DELETE FROM context_documents_fts WHERE document_id IN (\
+                SELECT document_id FROM context_documents\
+                WHERE project_id = ?1 AND source_kind = ?2\
+            )",
+            params![project_id, kind],
+        )?;
+        tx.execute(
+            "DELETE FROM context_documents WHERE project_id = ?1 AND source_kind = ?2",
+            params![project_id, kind],
+        )?;
+        // Insert new rows.
+        for d in docs {
+            let searchable = d.searchable_text().to_string();
+            Self::write_document_tx(&tx, d, &searchable, searchable.len() as i64, None)?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     // ----- search ---------------------------------------------------------
 
     /// Lexical search using FTS5 MATCH with optional kind/sensitivity filters.

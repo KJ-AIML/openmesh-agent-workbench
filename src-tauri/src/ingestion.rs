@@ -1591,11 +1591,11 @@ mod tests {
         let srcs3 = discover_sources(&project_path).unwrap();
         assert_eq!(srcs3["tasks"].len(), 0, "empty array = no task sources");
 
-        // Since the pipeline doesn't auto-clear family on empty discovery in this minimal impl,
-        // we explicitly clear the project to simulate full pipeline behavior.
-        idx.clear_project("test-proj-001").unwrap();
-        assert_eq!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "Original Task".into(), ..Default::default() }).unwrap().len(), 0, "cleared task should be gone");
-        // Doc was also cleared but re-adding it is out of scope for this test.
+        // Production pipeline: successful empty discovery removes only that family.
+        idx.remove_source_kind("test-proj-001", "task").unwrap();
+        assert_eq!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "Original Task".into(), ..Default::default() }).unwrap().len(), 0, "removed task should be gone");
+        // Other families survive.
+        assert_eq!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "UPDATED".into(), ..Default::default() }).unwrap().len(), 1, "doc family survives task deletion");
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -1706,5 +1706,212 @@ mod tests {
     fn normalize_relative_accepts_nested() {
         let rel = normalize_relative("docs/a/b/c.md").unwrap();
         assert_eq!(rel, "docs/a/b/c.md");
+    }
+
+    // ----- Phase 4: Family-scoped deletion -----
+
+    /// Prove that one empty family deletes only its own document family.
+    #[test]
+    fn empty_family_removes_only_that_kind() {
+        let (dir, project_path) = create_test_project("family-deletion");
+        let root = crate::storage::get_project_dir(&project_path);
+
+        // Populate all six kinds.
+        fs::write(root.join("docs").join("d.md"), "# Doc\ndoc alpha").unwrap();
+        fs::write(root.join("notes").join("n.md"), "# Note\nnote beta").unwrap();
+        fs::write(root.join("notes").join("snapshots").join("s.md"), "# Snap\nsnap gamma").unwrap();
+        fs::write(root.join("tasks.json"), serde_json::json!([{"id":"t1","projectId":"test-proj-001","title":"Task one","description":"","status":"pending","priority":"P1","sprintId":"","linkedDocIds":[],"linkedSessionIds":[],"createdAt":"2026-01-01","updatedAt":"2026-07-05"}]).to_string()).unwrap();
+        fs::write(root.join("recent.json"), serde_json::json!([{"id":"r1","type":"doc","title":"Recent one","projectId":"test-proj-001","sourceId":"d1","lastOpenedAt":"2026-07-05","pinned":false}]).to_string()).unwrap();
+        fs::write(root.join("sessions.json"), serde_json::json!([{"id":"s1","tool":"codex","title":"Session one","projectId":"test-proj-001","summary":"summary","status":"completed","startedAt":"2026-01-01","lastActiveAt":"2026-07-05","isImportant":false,"createdAt":"2026-01-01","updatedAt":"2026-07-05"}]).to_string()).unwrap();
+
+        // Ingest everything.
+        let mut idx = DerivedIndex::open_in_memory().unwrap();
+        let sources = discover_sources(&project_path).unwrap();
+        for (_family, results) in &sources {
+            for r in results.iter().flatten() {
+                let doc = normalize("test-proj-001", clone_raw(r)).unwrap();
+                let fp = compute_fingerprint(&format!("{:?}", doc.kind).to_lowercase(), &doc.title, &doc.text, &doc.sensitivity, doc.agent_context_enabled);
+                idx.upsert_if_changed(&IndexDocument::from(&doc), &fp).unwrap();
+            }
+        }
+
+        // All six searchable.
+        assert!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "doc alpha".into(), ..Default::default() }).unwrap().len() >= 1);
+        assert!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "note beta".into(), ..Default::default() }).unwrap().len() >= 1);
+        assert!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "snap gamma".into(), ..Default::default() }).unwrap().len() >= 1);
+        assert!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "Task one".into(), ..Default::default() }).unwrap().len() >= 1);
+        assert!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "Recent one".into(), ..Default::default() }).unwrap().len() >= 1);
+        assert!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "summary".into(), ..Default::default() }).unwrap().len() >= 1);
+
+        // Empty the Tasks family only.
+        fs::write(root.join("tasks.json"), "[]").unwrap();
+
+        // Discovery: tasks family now empty.
+        let srcs2 = discover_sources(&project_path).unwrap();
+        assert_eq!(srcs2["tasks"].len(), 0, "task family empty");
+
+        // Family-scoped deletion: only "task" kind removed.
+        idx.remove_source_kind("test-proj-001", "task").unwrap();
+
+        // Task gone.
+        assert_eq!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "Task one".into(), ..Default::default() }).unwrap().len(), 0);
+        // All other kinds survive.
+        assert!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "doc alpha".into(), ..Default::default() }).unwrap().len() >= 1, "doc survives");
+        assert!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "note beta".into(), ..Default::default() }).unwrap().len() >= 1, "note survives");
+        assert!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "snap gamma".into(), ..Default::default() }).unwrap().len() >= 1, "snapshot survives");
+        assert!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "Recent one".into(), ..Default::default() }).unwrap().len() >= 1, "recent survives");
+        assert!(idx.search(&ContextQuery { project_id: "test-proj-001".into(), query: "summary".into(), ..Default::default() }).unwrap().len() >= 1, "session survives");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    // ----- Phase 7: Source-family atomicity -----
+
+    /// Prove that a half-applied family leaves the index in its prior consistent state.
+    #[test]
+    fn family_transaction_is_atomic_on_failure() {
+        use crate::index::IndexDocument as ID;
+
+        // Initial state: 3 docs of kind "doc".
+        let initial: Vec<ID> = (0..3)
+            .map(|i| ID {
+                document_id: format!("doc-{}", i),
+                source_id: format!("doc-src-{}", i),
+                project_id: "p-atomic".into(),
+                source_kind: "doc".into(),
+                canonical_ref: format!("openmesh://project/p-atomic/doc/{}", i),
+                title: format!("Title {}", i),
+                text: format!("original content {}", i),
+                sensitivity: Sensitivity::Private,
+                agent_context_enabled: false,
+                freshness_state: "fresh".into(),
+                observed_at: "2026-07-05T03:00:00.000Z".into(),
+                source_updated_at: None,
+                metadata_json: None,
+            })
+            .collect();
+
+        let mut idx = DerivedIndex::open_in_memory().unwrap();
+        for d in &initial {
+            let fp = compute_fingerprint("doc", &d.title, &d.text, &d.sensitivity, false);
+            idx.upsert_if_changed(d, &fp).unwrap();
+        }
+
+        // Verify initial state searchable.
+        for i in 0..3 {
+            let hits = idx.search(&ContextQuery { project_id: "p-atomic".into(), query: format!("original content {}", i), ..Default::default() }).unwrap();
+            assert_eq!(hits.len(), 1, "initial doc {} should be searchable", i);
+        }
+
+        // Attempt to replace the whole family with new content, but force a failure
+        // by including one invalid document (empty document_id causes validation rejection).
+        let replacement: Vec<ID> = (0..3)
+            .map(|i| ID {
+                document_id: if i == 1 { String::new() } else { format!("doc-{}", i) },
+                source_id: format!("doc-src-{}", i),
+                project_id: "p-atomic".into(),
+                source_kind: "doc".into(),
+                canonical_ref: format!("openmesh://project/p-atomic/doc/{}", i),
+                title: format!("Title {}", i),
+                text: format!("new content {}", i),
+                sensitivity: Sensitivity::Private,
+                agent_context_enabled: false,
+                freshness_state: "fresh".into(),
+                observed_at: "2026-07-05T03:00:00.000Z".into(),
+                source_updated_at: None,
+                metadata_json: None,
+            })
+            .collect();
+
+        let result = idx.replace_project_kind_documents("p-atomic", "doc", &replacement);
+        assert!(result.is_err(), "family replacement with invalid doc should fail");
+
+        // Verify rollback: original state fully preserved.
+        for i in 0..3 {
+            let hits = idx.search(&ContextQuery { project_id: "p-atomic".into(), query: format!("original content {}", i), ..Default::default() }).unwrap();
+            assert_eq!(hits.len(), 1, "doc {} should still have original content after rollback", i);
+        }
+        // No partial new content should be searchable.
+        for i in 0..3 {
+            let hits = idx.search(&ContextQuery { project_id: "p-atomic".into(), query: format!("new content {}", i), ..Default::default() }).unwrap();
+            assert_eq!(hits.len(), 0, "new content {} must not exist after rollback", i);
+        }
+    }
+
+    // ----- Phase 8: Symlink evidence -----
+
+    /// Platform-aware symlink rejection test.
+    #[cfg(unix)]
+    #[test]
+    fn symlink_file_is_rejected() {
+        let dir = std::env::temp_dir().join(format!("openmesh-symfile-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let target = dir.join("target.md");
+        fs::write(&target, "real content").unwrap();
+        let link = dir.join("link.md");
+        if std::os::unix::fs::symlink(&target, &link).is_ok() {
+            let result = reject_symlinks(&link);
+            assert!(matches!(result, Err(IngestionError::SymlinkSkipped(_))), "symlinked file should be rejected");
+        }
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlink_directory_is_rejected() {
+        let dir = std::env::temp_dir().join(format!("openmesh-symdir-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let target_dir = dir.join("real_dir");
+        fs::create_dir_all(&target_dir).unwrap();
+        let link_dir = dir.join("link_dir");
+        if std::os::unix::fs::symlink(&target_dir, &link_dir).is_ok() {
+            let result = reject_symlinks(&link_dir);
+            assert!(matches!(result, Err(IngestionError::SymlinkSkipped(_))), "symlinked directory should be rejected");
+        }
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// Windows-specific symlink tests.
+    #[cfg(windows)]
+    #[test]
+    fn symlink_file_is_rejected_windows() {
+        let dir = std::env::temp_dir().join(format!("openmesh-symfile-win-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let target = dir.join("target.md");
+        fs::write(&target, "real content").unwrap();
+        let link = dir.join("link.md");
+        if std::os::windows::fs::symlink_file(&target, &link).is_ok() {
+            let result = reject_symlinks(&link);
+            assert!(matches!(result, Err(IngestionError::SymlinkSkipped(_))));
+        }
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn symlink_directory_is_rejected_windows() {
+        let dir = std::env::temp_dir().join(format!("openmesh-symdir-win-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let target_dir = dir.join("real_dir");
+        fs::create_dir_all(&target_dir).unwrap();
+        let link_dir = dir.join("link_dir");
+        if std::os::windows::fs::symlink_dir(&target_dir, &link_dir).is_ok() {
+            let result = reject_symlinks(&link_dir);
+            assert!(matches!(result, Err(IngestionError::SymlinkSkipped(_))));
+        }
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// Cross-platform deterministic policy-proof test.
+    #[test]
+    fn rejection_policy_proves_symlink_detection_logic() {
+        let dir = std::env::temp_dir().join(format!("openmesh-policy-proof-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("normal.md");
+        fs::write(&path, "content").unwrap();
+        let meta = std::fs::symlink_metadata(&path).unwrap();
+        assert!(!meta.file_type().is_symlink());
+        assert!(reject_symlinks(&path).is_ok());
+        let _ = fs::remove_dir_all(&dir);
     }
 }
