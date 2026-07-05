@@ -428,23 +428,38 @@ fn open_agent_cli(tool: String, cwd: String, cli_path: Option<String>) -> AgentC
 
         if wt_result.is_ok() {
             if cfg!(debug_assertions) {
-                eprintln!("[open_agent_cli] Windows Terminal launched: {} in {}", command, cwd);
+                eprintln!(
+                    "[open_agent_cli] Windows Terminal launched: {} in {}",
+                    command, cwd
+                );
             }
-            return AgentCliLaunchResult { success: true, error: None };
+            return AgentCliLaunchResult {
+                success: true,
+                error: None,
+            };
         }
 
         // 2. Fallback to PowerShell: powershell -NoExit -Command "Set-Location '<cwd>'; & '<command>'"
         let ps_result = Command::new("powershell")
             .arg("-NoExit")
             .arg("-Command")
-            .arg(format!("Set-Location '{}'; & '{}'", cwd_escaped, escaped_command))
+            .arg(format!(
+                "Set-Location '{}'; & '{}'",
+                cwd_escaped, escaped_command
+            ))
             .spawn();
 
         if ps_result.is_ok() {
             if cfg!(debug_assertions) {
-                eprintln!("[open_agent_cli] PowerShell launched: {} in {}", command, cwd);
+                eprintln!(
+                    "[open_agent_cli] PowerShell launched: {} in {}",
+                    command, cwd
+                );
             }
-            return AgentCliLaunchResult { success: true, error: None };
+            return AgentCliLaunchResult {
+                success: true,
+                error: None,
+            };
         }
 
         // 3. Final fallback to cmd.exe: cmd /K "cd /d "<cwd>" && <command>"
@@ -461,7 +476,10 @@ fn open_agent_cli(tool: String, cwd: String, cli_path: Option<String>) -> AgentC
                 if cfg!(debug_assertions) {
                     eprintln!("[open_agent_cli] cmd.exe launched: {} in {}", command, cwd);
                 }
-                AgentCliLaunchResult { success: true, error: None }
+                AgentCliLaunchResult {
+                    success: true,
+                    error: None,
+                }
             }
             Err(e) => {
                 let msg = format!(
@@ -471,7 +489,10 @@ fn open_agent_cli(tool: String, cwd: String, cli_path: Option<String>) -> AgentC
                 if cfg!(debug_assertions) {
                     eprintln!("[open_agent_cli] All terminal launchers failed: {}", msg);
                 }
-                AgentCliLaunchResult { success: false, error: Some(msg) }
+                AgentCliLaunchResult {
+                    success: false,
+                    error: Some(msg),
+                }
             }
         }
     }
@@ -489,16 +510,25 @@ fn open_agent_cli(tool: String, cwd: String, cli_path: Option<String>) -> AgentC
         match Command::new("osascript").arg("-e").arg(&script).spawn() {
             Ok(_) => {
                 if cfg!(debug_assertions) {
-                    eprintln!("[open_agent_cli] Terminal.app launched: {} in {}", command, cwd);
+                    eprintln!(
+                        "[open_agent_cli] Terminal.app launched: {} in {}",
+                        command, cwd
+                    );
                 }
-                AgentCliLaunchResult { success: true, error: None }
+                AgentCliLaunchResult {
+                    success: true,
+                    error: None,
+                }
             }
             Err(e) => {
                 let msg = format!(
                     "Could not launch {} using `{}`. (Error: {})",
                     canonical_tool, command, e
                 );
-                AgentCliLaunchResult { success: false, error: Some(msg) }
+                AgentCliLaunchResult {
+                    success: false,
+                    error: Some(msg),
+                }
             }
         }
     }
@@ -507,12 +537,19 @@ fn open_agent_cli(tool: String, cwd: String, cli_path: Option<String>) -> AgentC
     {
         // Try common Linux terminals. Each runs the command in cwd and keeps the shell open.
         let terminals: &[(&str, &[&str])] = &[
-            ("gnome-terminal", &["--working-directory", "--", "bash", "-c"]),
+            (
+                "gnome-terminal",
+                &["--working-directory", "--", "bash", "-c"],
+            ),
             ("konsole", &["--workdir", "--", "bash", "-c"]),
             ("xterm", &["-e", "bash", "-c"]),
         ];
 
-        let keep_open_cmd = format!("cd '{}' && {}; exec bash", cwd.replace('\'', "'\\''"), command.replace('\'', "'\\''"));
+        let keep_open_cmd = format!(
+            "cd '{}' && {}; exec bash",
+            cwd.replace('\'', "'\\''"),
+            command.replace('\'', "'\\''")
+        );
 
         for (terminal, prefix_args) in terminals.iter() {
             let mut cmd = Command::new(terminal);
@@ -524,9 +561,15 @@ fn open_agent_cli(tool: String, cwd: String, cli_path: Option<String>) -> AgentC
 
             if cmd.spawn().is_ok() {
                 if cfg!(debug_assertions) {
-                    eprintln!("[open_agent_cli] {} launched: {} in {}", terminal, command, cwd);
+                    eprintln!(
+                        "[open_agent_cli] {} launched: {} in {}",
+                        terminal, command, cwd
+                    );
                 }
-                return AgentCliLaunchResult { success: true, error: None };
+                return AgentCliLaunchResult {
+                    success: true,
+                    error: None,
+                };
             }
         }
 
@@ -534,7 +577,10 @@ fn open_agent_cli(tool: String, cwd: String, cli_path: Option<String>) -> AgentC
             "Could not launch {} using `{}`. No supported terminal found. Install gnome-terminal, konsole, or xterm.",
             canonical_tool, command
         );
-        AgentCliLaunchResult { success: false, error: Some(msg) }
+        AgentCliLaunchResult {
+            success: false,
+            error: Some(msg),
+        }
     }
 
     #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
@@ -668,11 +714,9 @@ fn scan_agent_sessions(
             // Read first 500 bytes for preview, then redact common secret patterns
             // so tokens are not surfaced in the UI. This is best-effort, not a
             // security boundary; the files are local and user-owned.
-            let preview = std::fs::read_to_string(&path)
-                .ok()
-                .map(|content| {
-                    redact_secrets(content.chars().take(500).collect::<String>().as_str())
-                });
+            let preview = std::fs::read_to_string(&path).ok().map(|content| {
+                redact_secrets(content.chars().take(500).collect::<String>().as_str())
+            });
 
             // Generate title from filename
             let title = path
@@ -690,12 +734,9 @@ fn scan_agent_sessions(
                 created_at: chrono::DateTime::<chrono::Utc>::from_timestamp(created as i64, 0)
                     .map(|dt| dt.to_rfc3339())
                     .unwrap_or_else(|| "unknown".to_string()),
-                last_active_at: chrono::DateTime::<chrono::Utc>::from_timestamp(
-                    modified as i64,
-                    0,
-                )
-                .map(|dt| dt.to_rfc3339())
-                .unwrap_or_else(|| "unknown".to_string()),
+                last_active_at: chrono::DateTime::<chrono::Utc>::from_timestamp(modified as i64, 0)
+                    .map(|dt| dt.to_rfc3339())
+                    .unwrap_or_else(|| "unknown".to_string()),
                 file_size_bytes: file_size,
                 summary_preview: preview,
                 project_hint: None,
@@ -755,9 +796,7 @@ fn try_redact_at(chars: &[char], start: usize, out: &mut Vec<char>) -> usize {
 
     // Assignable token prefixes (sk-, ghp_, gho_, ghu_, ghs_, gpat_, github_pat_,
     // AKIA..., AIza...). Redact the token run that follows.
-    let value_prefixes: &[&[u8]] = &[
-        b"sk-", b"ghp_", b"gho_", b"ghu_", b"ghs_", b"ghr_", b"aiza",
-    ];
+    let value_prefixes: &[&[u8]] = &[b"sk-", b"ghp_", b"gho_", b"ghu_", b"ghs_", b"ghr_", b"aiza"];
     for &prefix in value_prefixes {
         if starts(start, prefix) {
             // Consume the prefix plus a run of token chars.
@@ -1177,7 +1216,11 @@ fn create_doc_folder(project_path: String, folder_name: String) -> Result<(), St
 }
 
 #[tauri::command]
-fn rename_doc_folder(project_path: String, old_name: String, new_name: String) -> Result<(), String> {
+fn rename_doc_folder(
+    project_path: String,
+    old_name: String,
+    new_name: String,
+) -> Result<(), String> {
     rename_docs_folder(&project_path, &old_name, &new_name)
 }
 
@@ -1192,7 +1235,11 @@ fn move_doc(project_path: String, filename: String, target_folder: String) -> Re
 }
 
 #[tauri::command]
-fn rename_doc(project_path: String, old_filename: String, new_filename: String) -> Result<(), String> {
+fn rename_doc(
+    project_path: String,
+    old_filename: String,
+    new_filename: String,
+) -> Result<(), String> {
     storage::rename_doc_fn(&project_path, &old_filename, &new_filename)
 }
 
@@ -1223,12 +1270,21 @@ fn delete_note(project_path: String, filename: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn rename_note(project_path: String, old_filename: String, new_filename: String) -> Result<(), String> {
+fn rename_note(
+    project_path: String,
+    old_filename: String,
+    new_filename: String,
+) -> Result<(), String> {
     storage::rename_note_fn(&project_path, &old_filename, &new_filename)
 }
 
 #[tauri::command]
-fn import_file(project_path: String, folder: String, filename: String, content: String) -> Result<(), String> {
+fn import_file(
+    project_path: String,
+    folder: String,
+    filename: String,
+    content: String,
+) -> Result<(), String> {
     if folder != "docs" && folder != "notes" {
         return Err("Invalid import folder".to_string());
     }
@@ -1294,10 +1350,7 @@ struct WriteSnapshotResult {
 #[tauri::command]
 fn write_snapshot(project_path: String, filename: String, content: String) -> WriteSnapshotResult {
     // Sanitize filename to prevent path traversal
-    let safe_filename = filename
-        .replace("..", "")
-        .replace('/', "")
-        .replace('\\', "");
+    let safe_filename = filename.replace("..", "").replace(['/', '\\'], "");
 
     if safe_filename.is_empty() {
         return WriteSnapshotResult {

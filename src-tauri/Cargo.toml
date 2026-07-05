@@ -1,6 +1,7 @@
 [package]
 name = "openmesh"
 version = "0.1.1"
+rust-version = "1.92.0"
 description = "Personal workbench for resuming work"
 authors = ["Openmesh Team"]
 edition = "2021"

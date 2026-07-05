@@ -15,11 +15,17 @@
     "allowImportingTsExtensions": false,
     "useDefineForClassFields": true,
     "baseUrl": ".",
+    "types": ["node", "vitest/globals", "vite/client"],
     "paths": {
       "@/*": ["./src/*"]
-    },
-    "types": ["node", "vite/client"]
+    }
   },
-  "include": ["src/**/*.ts", "src/**/*.d.ts", "src/**/*.vue", "vite.config.ts"],
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.d.ts",
+    "src/**/*.vue",
+    "vite.config.ts",
+    "tests/**/*.ts"
+  ],
   "exclude": ["node_modules", "dist"]
 }

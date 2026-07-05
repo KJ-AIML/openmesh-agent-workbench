@@ -195,7 +195,7 @@ onUnmounted(() => {
                 {{ group.group }}
               </div>
               <button
-                v-for="(cmd, idx) in group.commands"
+                v-for="cmd in group.commands"
                 :key="cmd.id"
                 class="command-palette-item"
                 :class="{

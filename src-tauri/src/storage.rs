@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::{Component, Path, PathBuf};
 use std::io::Write;
+use std::path::{Component, Path, PathBuf};
 
 // ============================================================================
 // Constants
@@ -33,6 +33,7 @@ pub struct Project {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 pub struct DocSource {
     pub id: String,
     pub project_id: String,
@@ -128,6 +129,7 @@ pub struct CommandPreset {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 pub struct Note {
     pub id: String,
     pub project_id: Option<String>,
@@ -390,10 +392,7 @@ pub fn list_files(dir_path: &Path, extensions: &[&str]) -> Vec<FileEntry> {
                 Err(_) => continue,
             };
 
-            let name = entry
-                .file_name()
-                .to_string_lossy()
-                .to_string();
+            let name = entry.file_name().to_string_lossy().to_string();
 
             // Filter by extension if specified
             if !extensions.is_empty() {
@@ -406,18 +405,13 @@ pub fn list_files(dir_path: &Path, extensions: &[&str]) -> Vec<FileEntry> {
                 }
             }
 
-            let modified_at = metadata
-                .modified()
-                .ok()
-                .and_then(|t| {
-                    chrono::DateTime::<chrono::Utc>::from_timestamp(
-                        t.duration_since(std::time::UNIX_EPOCH)
-                            .ok()?
-                            .as_secs() as i64,
-                        0,
-                    )
-                    .map(|dt| dt.to_rfc3339())
-                });
+            let modified_at = metadata.modified().ok().and_then(|t| {
+                chrono::DateTime::<chrono::Utc>::from_timestamp(
+                    t.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs() as i64,
+                    0,
+                )
+                .map(|dt| dt.to_rfc3339())
+            });
 
             entries.push(FileEntry {
                 name,
@@ -517,18 +511,13 @@ pub fn list_docs_tree_fn(dir_path: &Path, base_path: &str) -> Vec<DocTreeNode> {
             Err(_) => continue,
         };
 
-        let modified_at = metadata
-            .modified()
-            .ok()
-            .and_then(|t| {
-                chrono::DateTime::<chrono::Utc>::from_timestamp(
-                    t.duration_since(std::time::UNIX_EPOCH)
-                        .ok()?
-                        .as_secs() as i64,
-                    0,
-                )
-                .map(|dt| dt.to_rfc3339())
-            });
+        let modified_at = metadata.modified().ok().and_then(|t| {
+            chrono::DateTime::<chrono::Utc>::from_timestamp(
+                t.duration_since(std::time::UNIX_EPOCH).ok()?.as_secs() as i64,
+                0,
+            )
+            .map(|dt| dt.to_rfc3339())
+        });
 
         if metadata.is_dir() {
             let child_base = if base_path.is_empty() {
@@ -594,7 +583,11 @@ pub fn create_docs_folder(project_path: &str, folder_name: &str) -> Result<(), S
 }
 
 /// Rename a folder inside docs/.
-pub fn rename_docs_folder(project_path: &str, old_name: &str, new_name: &str) -> Result<(), String> {
+pub fn rename_docs_folder(
+    project_path: &str,
+    old_name: &str,
+    new_name: &str,
+) -> Result<(), String> {
     let docs_dir = get_project_dir(project_path).join("docs");
     let old_path = safe_child_path(&docs_dir, old_name)?;
     let new_path = safe_child_path(&docs_dir, new_name)?;
@@ -653,7 +646,11 @@ pub fn move_doc_fn(project_path: &str, filename: &str, target_folder: &str) -> R
 }
 
 /// Rename a doc file within docs/.
-pub fn rename_doc_fn(project_path: &str, old_filename: &str, new_filename: &str) -> Result<(), String> {
+pub fn rename_doc_fn(
+    project_path: &str,
+    old_filename: &str,
+    new_filename: &str,
+) -> Result<(), String> {
     if new_filename.trim().is_empty() {
         return Err("Filename cannot be empty".to_string());
     }
@@ -673,7 +670,11 @@ pub fn rename_doc_fn(project_path: &str, old_filename: &str, new_filename: &str)
     Ok(())
 }
 
-pub fn rename_note_fn(project_path: &str, old_filename: &str, new_filename: &str) -> Result<(), String> {
+pub fn rename_note_fn(
+    project_path: &str,
+    old_filename: &str,
+    new_filename: &str,
+) -> Result<(), String> {
     if new_filename.trim().is_empty() {
         return Err("Filename cannot be empty".to_string());
     }
@@ -715,6 +716,7 @@ fn rand_suffix() -> String {
     format!("{:x}", seed % 0xFFFFFF)
 }
 
+#[allow(dead_code)]
 pub fn now_iso() -> String {
     chrono::Utc::now().to_rfc3339()
 }
@@ -727,19 +729,18 @@ pub fn now_iso() -> String {
 /// This prevents corruption if the app crashes mid-write.
 pub fn atomic_write(path: &Path, content: &str) -> Result<(), String> {
     let temp_path = path.with_extension("tmp");
-    
+
     // Write to temp file
-    let mut file = fs::File::create(&temp_path)
-        .map_err(|e| format!("Failed to create temp file: {}", e))?;
+    let mut file =
+        fs::File::create(&temp_path).map_err(|e| format!("Failed to create temp file: {}", e))?;
     file.write_all(content.as_bytes())
         .map_err(|e| format!("Failed to write temp file: {}", e))?;
     file.flush()
         .map_err(|e| format!("Failed to flush temp file: {}", e))?;
-    
+
     // Rename temp file to final path (atomic on most filesystems)
-    fs::rename(&temp_path, path)
-        .map_err(|e| format!("Failed to rename temp file: {}", e))?;
-    
+    fs::rename(&temp_path, path).map_err(|e| format!("Failed to rename temp file: {}", e))?;
+
     Ok(())
 }
 
@@ -753,7 +754,7 @@ pub fn read_with_recovery<T: serde::de::DeserializeOwned>(path: &Path) -> Option
     if !path.exists() {
         return None;
     }
-    
+
     let content = match fs::read_to_string(path) {
         Ok(c) => c,
         Err(e) => {
@@ -762,7 +763,7 @@ pub fn read_with_recovery<T: serde::de::DeserializeOwned>(path: &Path) -> Option
             return None;
         }
     };
-    
+
     match serde_json::from_str::<T>(&content) {
         Ok(data) => Some(data),
         Err(e) => {
@@ -777,7 +778,7 @@ pub fn read_with_recovery<T: serde::de::DeserializeOwned>(path: &Path) -> Option
 fn backup_corrupt_file(path: &Path) {
     let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
     let backup_path = path.with_extension(format!("corrupt-{}.bak", timestamp));
-    
+
     if let Err(e) = fs::rename(path, &backup_path) {
         eprintln!("Failed to backup corrupt file {}: {}", path.display(), e);
     } else {
@@ -793,40 +794,42 @@ fn backup_corrupt_file(path: &Path) {
 /// This prevents accidental commits of Openmesh metadata.
 pub fn add_to_git_exclude(project_path: &str) -> Result<(), String> {
     let git_dir = PathBuf::from(project_path).join(".git");
-    
+
     // Only proceed if this is a Git repository
     if !git_dir.exists() {
         return Ok(()); // Not a Git repo, nothing to do
     }
-    
+
     let exclude_file = git_dir.join("info").join("exclude");
-    
+
     // Create .git/info directory if it doesn't exist
     if let Some(parent) = exclude_file.parent() {
         fs::create_dir_all(parent)
             .map_err(|e| format!("Failed to create .git/info directory: {}", e))?;
     }
-    
+
     // Read existing exclude file
     let existing_content = fs::read_to_string(&exclude_file).unwrap_or_default();
-    
+
     // Check if .openmesh/ is already excluded
-    if existing_content.lines().any(|line| line.trim() == ".openmesh/") {
+    if existing_content
+        .lines()
+        .any(|line| line.trim() == ".openmesh/")
+    {
         return Ok(()); // Already excluded
     }
-    
+
     // Append .openmesh/ to exclude file
     let mut file = fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(&exclude_file)
         .map_err(|e| format!("Failed to open exclude file: {}", e))?;
-    
+
     writeln!(file, "\n# Openmesh metadata (auto-added by Openmesh app)")
         .map_err(|e| format!("Failed to write to exclude file: {}", e))?;
-    writeln!(file, ".openmesh/")
-        .map_err(|e| format!("Failed to write to exclude file: {}", e))?;
-    
+    writeln!(file, ".openmesh/").map_err(|e| format!("Failed to write to exclude file: {}", e))?;
+
     Ok(())
 }
 
@@ -911,7 +914,10 @@ pub fn reset_all_data(project_paths: &[String]) -> Result<(), String> {
         let project_dir = get_project_dir(project_path);
         if project_dir.exists() {
             if let Err(e) = fs::remove_dir_all(&project_dir) {
-                eprintln!("Warning: Failed to delete project directory {}: {}", project_path, e);
+                eprintln!(
+                    "Warning: Failed to delete project directory {}: {}",
+                    project_path, e
+                );
             }
         }
     }
@@ -938,7 +944,11 @@ mod tests {
     fn rename_doc_keeps_nested_relative_path_inside_docs() {
         let project = temp_project("rename-doc");
         fs::write(
-            project.join(".openmesh").join("docs").join("folder").join("old.md"),
+            project
+                .join(".openmesh")
+                .join("docs")
+                .join("folder")
+                .join("old.md"),
             "hello",
         )
         .unwrap();

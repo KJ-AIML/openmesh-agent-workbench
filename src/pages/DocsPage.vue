@@ -502,7 +502,7 @@ watch(() => currentProject.value, async () => {
         <!-- Breadcrumbs -->
         <div class="flex items-center gap-1 px-5 py-2 flex-shrink-0 text-[11px]" style="border-bottom: 1px solid var(--divider); color: var(--muted-foreground)">
           <span class="cursor-pointer hover:underline" @click="selectedPath = null">docs</span>
-          <template v-for="(crumb, i) in breadcrumbs">
+          <template v-for="(crumb, i) in breadcrumbs" :key="i">
             <ChevronRight class="h-3 w-3" />
             <span v-if="i < breadcrumbs.length - 1" class="cursor-pointer hover:underline">{{ crumb.label }}</span>
             <span v-else class="font-medium" style="color: var(--foreground)">{{ crumb.label }}</span>
