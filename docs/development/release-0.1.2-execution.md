@@ -199,7 +199,8 @@ Dev Track checklist:
 
 ## 0.1.2.4 - Context Ingestion Pipeline
 
-- Status: PASS
+- Status: PASS (after closure audit)
+- Closure reason resolved: fingerprint → stored hash comparison → UNCHANGED skip; adversarial partial-failure and six-source E2E tests added; path/bounded-read safety evidenced
 - Started at: 2026-07-05T20:00:00+07:00
 - Completed at: 2026-07-05T21:00:00+07:00
 - Branch: main
