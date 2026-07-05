@@ -37,6 +37,7 @@ const router = useRouter();
 
 // --- State ---
 const query = ref("");
+const executedQuery = ref("");
 const limit = ref(25);
 const activeKinds = ref<Set<string>>(new Set());
 const results = ref<ContextSearchResult[]>([]);
@@ -121,6 +122,7 @@ async function runSearch() {
   try {
     const kinds = activeKinds.value.size > 0 ? [...activeKinds.value] : undefined;
     results.value = await searchContext(currentProjectPath.value, query.value, { kinds, limit: limit.value });
+    executedQuery.value = query.value;
     hasExecutedSearch.value = true;
   } catch (e: any) {
     error.value = `Search failed: ${String(e)}`;
@@ -398,13 +400,13 @@ watch(
               <p class="text-[11px]">your context across docs, notes, snapshots, tasks, sessions, and recent work</p>
             </div>
           </div>
-          <div v-else-if="hasExecutedSearch && results.length === 0" class="flex-1 flex items-center justify-center p-8 text-[12px]" style="color: var(--muted-foreground)">
+          <div v-else-if="hasExecutedSearch && results.length === 0 && query === executedQuery" class="flex-1 flex items-center justify-center p-8 text-[12px]" style="color: var(--muted-foreground)">
             <div class="text-center">
               <AlertCircle class="h-8 w-8 mx-auto mb-3 opacity-40" />
-              <p>No results for "{{ query }}"</p>
+              <p>No results for "{{ executedQuery }}"</p>
             </div>
           </div>
-          <div v-else-if="query.trim() && !hasExecutedSearch && results.length === 0" class="flex-1 flex items-center justify-center p-8 text-[12px]" style="color: var(--muted-foreground)">
+          <div v-else-if="query.trim() && (!hasExecutedSearch || query !== executedQuery) && results.length === 0" class="flex-1 flex items-center justify-center p-8 text-[12px]" style="color: var(--muted-foreground)">
             <div class="text-center">
               <Search class="h-8 w-8 mx-auto mb-3 opacity-40" />
               <p class="font-medium mb-1">Press Enter to search</p>
