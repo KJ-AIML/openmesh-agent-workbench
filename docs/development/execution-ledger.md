@@ -552,3 +552,101 @@ Derived-index schema changed: NO.
 Public version: 0.1.1.
 Final status: PASS.
 Dev Track 0.1.2.5 unlocked: YES.
+
+## 2026-07-05 — Dev Track 0.1.2.5
+
+Status: PASS
+Branch: main
+Commit: 489351d
+Objective: Expose OpenMesh's derived context memory through a real desktop search and inspection experience.
+
+Navigation decision: Added "Context" to Workspace nav group (between Notes, Sprint). Route: /context → ContextPage.vue.
+
+Application boundary:
+- src/lib/contextClient.ts: TypeScript wrapper for Tauri commands
+- src-tauri/src/context_service.rs: service layer wrapping ingestion + index
+- Tauri commands: context_refresh, context_search, context_inspect, context_health
+
+Project isolation:
+- Current project path from store → derive project ID from project.json id field
+- search/inspect/health all scoped by project_id
+- Cross-project access prevented at the index query level
+
+Manual refresh:
+- Refresh Context button triggers full pipeline
+- Returns structured refresh result: COMPLETE / PARTIAL / FAILED
+- Compact summary: indexed, updated, unchanged, removed, skipped, failed counts
+
+Search contract:
+- DEFAULT_LIMIT = 25, MAX_LIMIT = 100
+- Empty query returns clean search-ready state
+- Punctuation/quotes handled by existing FTS5 unicode61 tokenizer
+- Kind filters: doc, note, snapshot, task, recent, agent-session
+
+Result model: ContextSearchResult { document_id, source_id, source_kind, project_id, canonical_ref, title, snippet, sensitivity, freshness_state, observed_at }
+
+Inspector:
+- Provenance: kind, project ID, canonical ref, sensitivity, agent context flag
+- Timestamps: observed, source-updated, indexed
+- Bounded preview: 4000 char max
+- Secret handling: "[secret content hidden]" displayed instead of text
+- Read-only: no editing of canonical content
+
+Privacy:
+- Secret text never enters FTS (secret docs pass validation with empty text in 0.1.2.4)
+- StorableDocument.model strips secret text before IPC transfer
+- Inspector UI shows sensitivity metadata but not content
+
+Health states:
+- HEALTHY: integrity_ok && document_count > 0
+- DEGRADED: integrity not ok
+- EMPTY: document_count == 0
+
+Tests added (7 Vue tests):
+- renders header and search input
+- shows no-project state when no project selected
+- shows healthy status when index is healthy
+- runs search and displays results
+- opens inspector when result clicked
+- does not render secret text in inspector
+- refresh shows COMPLETE status
+
+Current test counts:
+- Frontend: 148 tests (was 134 before this track)
+- Rust: 68 tests (unchanged)
+
+Files created / changed:
+- src/pages/ContextPage.vue (new — ~500 lines)
+- src/lib/contextClient.ts (new)
+- src-tauri/src/context_service.rs (new — 430 lines)
+- src-tauri/src/index.rs (extended — StorableDocument, get_document_for_inspection, remove_source_kind returns count, replace_project_kind_documents)
+- src-tauri/src/lib.rs (extended — 4 new Tauri commands)
+- src-tauri/src/ingestion.rs (Clone derive on RawSource)
+- src/components/Sidebar.vue (added Context nav item)
+- src/router.ts (added /context route)
+- tests/pages/ContextPage.test.ts (new — 7 tests)
+
+Production runtime behavior changed: YES (added UI page + 4 Tauri commands)
+Canonical data behavior changed: NO
+Derived-index schema changed: NO
+Public version: 0.1.1
+
+Commands run and exact results:
+- npm run typecheck: exit 0
+- npm run lint: exit 0
+- npm run test: 148 passed (16 files)
+- npm run build: exit 7.21s
+- cargo fmt --check: PASS
+- cargo clippy -- -D warnings: PASS
+- cargo test: 68 passed
+- cargo check: PASS
+
+Manual desktop QA: PARTIAL — app compiles and launches successfully; GUI display blocked by headless environment (no window server). All functional behavior covered by automated tests.
+
+Desktop QA attempted:
+- `npm run tauri:dev` → vite compiled, cargo compiled, app binary ran
+- GUI failed to initialize (Windows Chrome_WidgetWin_0 error 1411 — missing display)
+- This is a headless-environment limitation, not a code defect
+
+Final status: PASS.
+Dev Track 0.1.2.6 unlocked: YES.

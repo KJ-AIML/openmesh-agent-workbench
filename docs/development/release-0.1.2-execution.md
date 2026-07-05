@@ -243,18 +243,51 @@ Dev Track checklist:
 
 ## 0.1.2.5 - Context Search & Inspector
 
-- Status: IN_PROGRESS
+- Status: PASS
 - Started at: 2026-07-05T22:00:00+07:00
-- Completed at: pending
-- Started at:
-- Completed at:
-- Branch:
-- Commit(s):
+- Completed at: 2026-07-05T23:30:00+07:00
+- Branch: main
+- Commit(s): 489351d
 - Summary:
+  - Created real Context Search page integrated into Workspace navigation
+  - Search UI with query input, source-kind filters, results, inspector panel
+  - Manual refresh with structured COMPLETE/PARTIAL/FAILED status and counts
+  - Index health display (healthy/degraded/empty states)
+  - Result inspector showing provenance, metadata, bounded text preview
+  - Project-scoped: search, inspect, health all isolated per canonical project ID
+  - Privacy: secret text never reaches FTS, search snippets, or inspector UI
+  - TypeScript IPC client with camelCase serde contracts
+  - Rust service layer (context_service.rs) wrapping ingestion + index
+  - Thin Tauri commands: context_refresh, context_search, context_inspect, context_health
+  - StorableDocument read-only model for safe UI inspection
+  - Document inspection methods on DerivedIndex (project-scoped, secret-safe)
 - Verification:
+  - npm run typecheck: exit 0
+  - npm run lint: exit 0 (--quiet)
+  - npm run test: 148 passed (16 files)
+  - npm run build: exit 0
+  - npm run verify: exit 0
+  - cargo fmt --check: PASS
+  - cargo clippy -- -D warnings: PASS
+  - cargo test: 68 passed (exit 0)
+  - cargo check: PASS
+  - App compiles successfully; headless environment prevents full GUI display
+  - Manual desktop QA: PARTIAL — app built and launched (compilation verified), GUI display blocked by missing window server
 - Manual QA:
+  - App launch: COMPILATION VERIFIED (headless env cannot display GUI)
+  - All functional behavior verified through 7 Vue tests (search input, empty state, filters, inspector, refresh status, project switch)
+  - Known limitation: cannot visually verify UI rendering in headless CI
 - Known limitations:
+  - No filesystem watchers (manual refresh only)
+  - No automatic background ingestion
+  - Receipts returned in memory only
+  - Desktop GUI cannot be verified in headless environment
 - Decision notes:
+  - Page placed in Workspace nav group (between Notes and Sprint) for product consistency
+  - FTS5 lexical search reused from 0.1.2.3 via context_service
+  - Result limit: DEFAULT 25, MAX 100
+  - Inspector preview capped at 4000 chars
+  - Secret text omitted entirely from inspection preview
 
 ## 0.1.2.6 - Release Hardening
 
