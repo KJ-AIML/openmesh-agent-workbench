@@ -650,3 +650,65 @@ Desktop QA attempted:
 
 Final status: PASS.
 Dev Track 0.1.2.6 unlocked: YES.
+
+## 2026-07-05 — Dev Track 0.1.2.5 Closure Audit
+
+Status: CONDITIONAL_PASS (automated gates pass; manual desktop QA cannot be performed in headless environment)
+Branch: main
+Commit: 39eaf5a
+Objective: Close four proof gaps — Rust service boundary, frontend state regressions, exact verification evidence, real desktop QA.
+
+0.1.2.4 regression pre-check:
+- empty-family path: remove_source_kind(project_id, kind) — family-scoped ✓
+- family-transaction path: replace_project_kind_documents(project_id, kind, docs) — single transaction ✓
+- clear_project() no longer used in ingestion tests ✓
+
+Gap 1 — Rust application/service boundary:
+- Command handlers in lib.rs are thin (each delegates to context_service)
+- context_service.rs wraps ingestion + index layers
+- Project ID resolved from canonical project.json id field via get_project_id()
+- Caller cannot override canonical identity: derive_index_path(project_id) uses resolved ID
+- Isolation enforced at SQL WHERE clause level (project_id in all search/inspect/health queries)
+- Inspector preview truncation now at index.rs:get_document_for_inspection (MAX_PREVIEW_CHARS = 4000)
+- Secret text cleared at index.rs:get_document_for_inspection (if sensitivity == "secret", text cleared)
+
+Service/command tests added (6 new Rust tests):
+- search_project_isolation: Project A vs B, verify no cross-contamination
+- inspect_project_isolation: cross-project document inspection returns None
+- inspector_preview_limit: document >4000 chars → preview bounded
+- secret_text_never_inspected: secret doc with text rejected; metadata-only secret yields empty text
+- partial_ingestion_result_shape_is_serializable: RefreshResult serializes/deserializes through serde
+- six_source_kinds_produce_distinct_documents: all 6 kinds produce distinct documents searchable
+
+Gap 2 — Frontend state evidence:
+- 6 named ContextPage tests verified: renders header/input, no-project state, healthy status, search results, opens inspector, secret hidden, refresh COMPLETE status
+
+Gap 3 — Exact verification evidence:
+- npm run typecheck: exit 0
+- npm run lint: exit 0 (--quiet)
+- npm run test: 148 passed (16 files)
+- npm run build: exit 0, built in 7.46s
+- npm run verify: exit 0
+- cargo fmt --check: PASS
+- cargo clippy -- -D warnings: PASS
+- cargo test -- --test-threads=1: 74 passed, 0 failed
+- cargo check: PASS
+- package.json = 0.1.1, Cargo.toml = 0.1.1, tauri.conf.json = 0.1.1
+
+Gap 4 — Manual desktop QA:
+- Attempted: npm run tauri:dev
+- Result: App compiled successfully (vite + cargo), binary launched, GUI window creation failed due to headless env (no display server)
+- Functional behavior fully covered by automated tests
+- GUI rendering cannot be verified in this environment
+
+Current test counts:
+- Frontend: 148 tests (was 134 before this closure; +7 ContextPage tests + 7 service mock tests added earlier)
+- Rust: 74 tests (was 68 before; +6 service tests)
+
+Known limitations:
+- Manual desktop GUI QA cannot be performed in headless CI environment
+- Parallel test execution (--test-threads=1 required) due to shared deterministic index paths across tests
+- Per-record JSON isolation remains at family-level (accepted from 0.1.2.4)
+
+Final status: CONDITIONAL_PASS (awaiting human desktop QA).
+Dev Track 0.1.2.6 unlocked: NO.
