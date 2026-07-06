@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch, nextTick } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
   RefreshCw,
@@ -37,7 +37,6 @@ const router = useRouter();
 
 // --- State ---
 const query = ref("");
-const executedQuery = ref("");
 const limit = ref(25);
 const activeKinds = ref<Set<string>>(new Set());
 const results = ref<ContextSearchResult[]>([]);
@@ -51,7 +50,8 @@ const refreshing = ref(false);
 const error = ref<string | null>(null);
 const expandedSections = ref<Set<string>>(new Set(["results"]));
 const searchInputRef = ref<HTMLInputElement | null>(null);
-const hasExecutedSearch = ref(false);
+const hasSearched = ref(false);
+let searchDebounce: ReturnType<typeof setTimeout> | null = null;
 
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 100;
@@ -115,15 +115,15 @@ function toggleKind(kind: string) {
 }
 
 async function runSearch() {
-  if (!currentProjectPath.value) { error.value = "No project selected."; return; }
-  if (!query.value.trim()) { results.value = []; return; }
+  if (searchDebounce) { clearTimeout(searchDebounce); searchDebounce = null; }
+  if (!currentProjectPath.value) { error.value = "No project selected."; searching.value = false; return; }
+  if (!query.value.trim()) { results.value = []; hasSearched.value = false; searching.value = false; return; }
   searching.value = true;
   error.value = null;
   try {
     const kinds = activeKinds.value.size > 0 ? [...activeKinds.value] : undefined;
     results.value = await searchContext(currentProjectPath.value, query.value, { kinds, limit: limit.value });
-    executedQuery.value = query.value;
-    hasExecutedSearch.value = true;
+    hasSearched.value = true;
   } catch (e: any) {
     error.value = `Search failed: ${String(e)}`;
   } finally {
@@ -245,38 +245,88 @@ const canOpenSource = computed(() => {
   return ["doc", "note"].includes(parsed.kind);
 });
 
-// Attempt to focus the search input after the component is mounted
-// and the DOM has settled. Uses requestAnimationFrame to ensure the
-// browser has painted and the input is focusable.
-const focusSearchInput = () => {
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      if (searchInputRef.value && document.activeElement !== searchInputRef.value) {
-        searchInputRef.value.focus();
-      }
-    });
-  });
+// Focus the search input. Uses nextTick() to ensure Vue's DOM updates
+// are complete. If the input isn't rendered yet (hasProject is false
+// because project data loads via async IPC), the watch(hasProject)
+// below will focus when the input becomes available.
+const focusSearchInput = async () => {
+  await nextTick();
+  const input = searchInputRef.value;
+  if (input) {
+    input.focus();
+  }
 };
 
-// Handle route changes that request focus on the search input.
-// This fires every time route.query.focus changes (not just on mount),
-// which handles repeated Command Palette → Search Context navigation.
+// Track whether we want to focus the search input.
+let shouldFocusSearch = false;
+
+// Handle focus requests from the Command Palette. The command pushes
+// /context?focus=search&_ft={Date.now()} — the _ft token changes on
+// every navigation, so this watcher fires even for repeated navigation.
 watch(
-  () => route.query.focus,
-  (focus) => {
-    if (focus === "search") {
+  () => route.query._ft,
+  () => {
+    if (route.query.focus === "search") {
+      shouldFocusSearch = true;
       focusSearchInput();
     }
   },
 );
 
-// Attempt initial focus on mount (in case the watcher above doesn't fire
-// for the initial route value).
+// Also watch route.query.focus directly for navigations that don’t
+// include the _ft token (backward compatibility, manual URL entry).
+watch(
+  () => route.query.focus,
+  (focus) => {
+    if (focus === "search") {
+      shouldFocusSearch = true;
+      focusSearchInput();
+    }
+  },
+);
+
+// CRITICAL: The search input is inside v-else of v-if="!hasProject".
+// When ContextPage mounts via Command Palette, currentProjectPath is
+// null because project data loads asynchronously via Rust IPC. So
+// hasProject is false on mount and the input is NOT in the DOM.
+// This watch fires deterministically when hasProject becomes true
+// (project data loaded), the input renders, and we focus it.
+watch(
+  () => hasProject.value,
+  (hp) => {
+    if (hp && shouldFocusSearch) {
+      focusSearchInput();
+    }
+  },
+);
+
+// Debounced live search: when the user types, wait 300ms then run the
+// search automatically. No need to press Enter (Enter still works for
+// immediate search).
+watch(query, (newQuery) => {
+  if (searchDebounce) clearTimeout(searchDebounce);
+  if (!newQuery.trim()) {
+    results.value = [];
+    hasSearched.value = false;
+    searching.value = false;
+    return;
+  }
+  searching.value = true;
+  searchDebounce = setTimeout(() => {
+    runSearch();
+  }, 300);
+});
+
+// Clear debounce on unmount.
+onUnmounted(() => {
+  if (searchDebounce) clearTimeout(searchDebounce);
+});
+
 onMounted(() => {
   if (route.query.focus === "search") {
+    shouldFocusSearch = true;
     focusSearchInput();
   }
-  // Load health data (async, don't block focus)
   loadHealth();
 });
 watch(currentProjectPath, () => {
@@ -284,17 +334,18 @@ watch(currentProjectPath, () => {
   selectedResult.value = null;
   inspection.value = null;
   results.value = [];
-  hasExecutedSearch.value = false;
+  hasSearched.value = false;
+  searching.value = false;
+  query.value = "";
 });
 
-// Reset executed search state when the user types a new query.
-// This ensures that typing a new query after a previous search
-// shows "Press Enter to search" instead of stale "No results".
-watch(query, (newQuery, oldQuery) => {
-  if (newQuery !== oldQuery) {
-    hasExecutedSearch.value = false;
-    executedQuery.value = "";
-  }
+
+// "No results" is only shown after a search has been run and the
+// query field still has text. Since we use debounced live search,
+// hasSearched becomes true after the debounce fires. If the user
+// clears the query, hasSearched resets to false.
+const noResultsVisible = computed(() => {
+  return hasSearched.value && results.value.length === 0 && query.value.trim().length > 0;
 });
 
 // Optional: preserve initial query from Command Palette
@@ -426,17 +477,17 @@ watch(
               <p class="text-[11px]">your context across docs, notes, snapshots, tasks, sessions, and recent work</p>
             </div>
           </div>
-          <div v-else-if="hasExecutedSearch && results.length === 0 && query === executedQuery" class="flex-1 flex items-center justify-center p-8 text-[12px]" style="color: var(--muted-foreground)">
+          <div v-else-if="noResultsVisible" class="flex-1 flex items-center justify-center p-8 text-[12px]" style="color: var(--muted-foreground)">
             <div class="text-center">
               <AlertCircle class="h-8 w-8 mx-auto mb-3 opacity-40" />
-              <p>No results for "{{ executedQuery }}"</p>
+              <p>No results for "{{ query }}"</p>
             </div>
           </div>
-          <div v-else-if="query.trim() && (!hasExecutedSearch || query !== executedQuery) && results.length === 0" class="flex-1 flex items-center justify-center p-8 text-[12px]" style="color: var(--muted-foreground)">
+          <div v-else-if="query.trim() && results.length === 0 && !hasSearched" class="flex-1 flex items-center justify-center p-8 text-[12px]" style="color: var(--muted-foreground)">
             <div class="text-center">
               <Search class="h-8 w-8 mx-auto mb-3 opacity-40" />
-              <p class="font-medium mb-1">Press Enter to search</p>
-              <p class="text-[11px]">searching for "{{ query }}"</p>
+              <p class="font-medium mb-1">Searching for "{{ query }}"...</p>
+              <p class="text-[11px]">Press Enter for instant search</p>
             </div>
           </div>
           <!-- Result List -->

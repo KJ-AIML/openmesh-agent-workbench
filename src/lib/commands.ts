@@ -356,6 +356,7 @@ export function getCommands(ctx: CommandContext): Command[] {
       title: "Search Context",
       icon: "search",
       route: "/context?focus=search",
+      buildRoute: () => `/context?focus=search&_ft=${Date.now()}`,
     },
     { id: "workspace-settings", title: "Open Settings", icon: "settings", route: "/settings" },
   ];
@@ -369,7 +370,7 @@ export function getCommands(ctx: CommandContext): Command[] {
       icon: page.icon,
       available: true,
       async run() {
-        ctx.openFolder(page.route);
+        ctx.openFolder(page.buildRoute ? page.buildRoute() : page.route);
       },
     });
   }

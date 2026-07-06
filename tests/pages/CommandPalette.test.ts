@@ -62,7 +62,7 @@ describe("CommandPalette", () => {
     const searchContext = commands.find((c) => c.id === "workspace-context");
     expect(searchContext).toBeDefined();
     await searchContext!.run();
-    expect(openFolder).toHaveBeenCalledWith("/context?focus=search");
+    expect(openFolder).toHaveBeenCalledWith(expect.stringMatching(/^\/context\?focus=search&_ft=\d+$/));
   });
 
   it("Search Context uses the Search icon", () => {

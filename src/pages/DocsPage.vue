@@ -405,47 +405,71 @@ function formatBytes(bytes: number | null): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+// Wait for the docs tree to be populated, with a bounded retry so
+// the deep-link works even if refreshDocs() takes longer than
+// expected (e.g., slow Rust IPC on desktop).
+async function ensureTreeLoaded(): Promise<void> {
+  if (docsTree.value.length > 0) return;
+  let attempts = 0;
+  while (docsTree.value.length === 0 && attempts < 20) {
+    await refreshDocs();
+    if (docsTree.value.length === 0) {
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    attempts++;
+  }
+  if (docsTree.value.length === 0) {
+    await refreshDocs();
+  }
+}
+
+// Handle a deep-link from Context Search: normalize the path, find the
+// exact node, expand all parent folders, and select + load the file.
+// Shared between onMounted (initial load) and the route query watcher
+// (subsequent navigations while DocsPage is already mounted).
+async function handleDeepLink(fileParam: string): Promise<void> {
+  // Normalize the incoming path: decode URL encoding and convert
+  // any Windows-style backslashes to POSIX forward slashes so it
+  // matches the tree node paths returned by the Rust backend.
+  const normalizedParam = normalizeTreePath(fileParam);
+  await ensureTreeLoaded();
+  // Find the node in the tree using normalized path.
+  const node = findNodeByPath(docsTree.value, normalizedParam);
+  if (node && node.nodeType === "file") {
+    // Expand all parent folders using normalized path segments.
+    const parts = normalizedParam.split("/").filter(Boolean);
+    for (let i = 1; i < parts.length; i++) {
+      const folderPath = parts.slice(0, i).join("/");
+      expandedFolders.value.add(folderPath);
+    }
+    // Select the file and load its content.
+    await handleSelectDoc(node);
+  }
+}
+
 onMounted(async () => {
   if (currentProject.value) {
-    // Wait for tree to be populated. Use a polling approach with a
-    // bounded wait so that the deep-link works even if refreshDocs()
-    // takes longer than expected (e.g., slow Rust IPC on desktop).
-    let attempts = 0;
-    while (docsTree.value.length === 0 && attempts < 20) {
-      await refreshDocs();
-      if (docsTree.value.length === 0) {
-        await new Promise((r) => setTimeout(r, 50));
-      }
-      attempts++;
-    }
-    // Also try one more refresh after the loop in case the last
-    // attempt populated the tree.
-    if (docsTree.value.length === 0) {
-      await refreshDocs();
-    }
-
+    await ensureTreeLoaded();
     // Handle deep-link from Context Search
     const fileParam = route.query.file;
     if (typeof fileParam === "string" && fileParam) {
-      // Normalize the incoming path: decode URL encoding and convert
-      // any Windows-style backslashes to POSIX forward slashes so it
-      // matches the tree node paths returned by the Rust backend.
-      const normalizedParam = normalizeTreePath(fileParam);
-      // Find the node in the tree using normalized path.
-      const node = findNodeByPath(docsTree.value, normalizedParam);
-      if (node && node.nodeType === "file") {
-        // Expand parent folders using normalized path segments.
-        const parts = normalizedParam.split("/").filter(Boolean);
-        for (let i = 1; i < parts.length; i++) {
-          const folderPath = parts.slice(0, i).join("/");
-          expandedFolders.value.add(folderPath);
-        }
-        // Select the file.
-        await handleSelectDoc(node);
-      }
+      await handleDeepLink(fileParam);
     }
   }
 });
+
+// Handle deep-link when the route query changes while DocsPage is
+// already mounted (component reuse). Without this, opening a second
+// doc from Context Search without first navigating away from /docs
+// would not expand folders or select the file.
+watch(
+  () => route.query.file,
+  async (fileParam) => {
+    if (typeof fileParam === "string" && fileParam) {
+      await handleDeepLink(fileParam);
+    }
+  },
+);
 
 /**
  * Normalize a path from a route query parameter to match the format

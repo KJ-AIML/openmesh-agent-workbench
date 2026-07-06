@@ -10,6 +10,13 @@ vi.mock("@/lib/contextClient", () => ({
   getContextHealth: vi.fn(),
 }));
 
+// Mock vue-router.
+const mockQuery = ref<Record<string, string | undefined>>({});
+vi.mock("vue-router", () => ({
+  useRoute: () => ({ query: mockQuery.value }),
+  useRouter: () => ({ push: vi.fn() }),
+}));
+
 // Mock useStore (mutable for test control).
 const mockStore = {
   currentProject: ref({ id: "p1", name: "Test Project", folderPath: "/tmp/test" } as any),
