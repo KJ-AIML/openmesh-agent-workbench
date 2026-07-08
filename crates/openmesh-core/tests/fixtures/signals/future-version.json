@@ -1,0 +1,12 @@
+{
+  "signalId": "s-future",
+  "workspaceId": "ws-1",
+  "producer": { "type": "native" },
+  "actor": { "type": "unknown" },
+  "kind": "progress",
+  "summary": "a record from a future protocol version",
+  "timestamp": "2026-07-08T00:00:00Z",
+  "evidenceRefs": [],
+  "sensitivity": "private",
+  "protocolVersion": "99.0"
+}

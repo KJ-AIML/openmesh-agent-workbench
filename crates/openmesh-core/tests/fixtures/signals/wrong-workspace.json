@@ -1,0 +1,12 @@
+{
+  "signalId": "s-wrong-workspace",
+  "workspaceId": "ws-does-not-match-any-real-project",
+  "producer": { "type": "native" },
+  "actor": { "type": "unknown" },
+  "kind": "progress",
+  "summary": "declares a workspace_id that does not match the containing project",
+  "timestamp": "2026-07-08T00:00:00Z",
+  "evidenceRefs": [],
+  "sensitivity": "private",
+  "protocolVersion": "1.0"
+}

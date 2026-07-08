@@ -1,0 +1,12 @@
+{
+  "signalId": "s-invalid-timestamp",
+  "workspaceId": "ws-1",
+  "producer": { "type": "native" },
+  "actor": { "type": "unknown" },
+  "kind": "progress",
+  "summary": "a raw record with a non-UTC timestamp offset, planted directly (not via write_signal)",
+  "timestamp": "2026-07-08T09:15:00-05:00",
+  "evidenceRefs": [],
+  "sensitivity": "private",
+  "protocolVersion": "1.0"
+}

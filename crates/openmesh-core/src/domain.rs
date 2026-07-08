@@ -14,12 +14,20 @@
 // ============================================================================
 
 use crate::context::Sensitivity;
+use serde::{Deserialize, Serialize};
+
+/// Wire-schema version for the Work Signal Protocol (Dev Track 0.1.3.2). Any
+/// wire-incompatible evolution (including a new enum variant on WorkSignalKind,
+/// ProducerRef, ActorRef, EvidenceRef, or Sensitivity) must bump this constant —
+/// see the approved 0.1.3.2 execution plan §3.10/§10 for the compatibility rule.
+pub const WORK_SIGNAL_PROTOCOL_VERSION: &str = "1.0";
 
 /// Which system/integration emitted a WorkSignal — for later dedup/correlation
 /// (Classification Pack cases WEC-26/WEC-32). Distinct from `ActorRef`: this is
 /// about the producer, not who the claim/action belongs to.
 #[non_exhaustive]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", content = "value", rename_all = "kebab-case")]
 pub enum ProducerRef {
     /// OpenMesh's own native producer (e.g. manual checkpoints, snapshot creation).
     Native,
@@ -37,7 +45,8 @@ pub enum ProducerRef {
 /// not the "Person and Proxy Identity" / role / responsibility profile system,
 /// which is 0.1.4's job ("My Work Proxy Profile"). No authority logic here.
 #[non_exhaustive]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", content = "value", rename_all = "kebab-case")]
 pub enum ActorRef {
     Person(String),
     Device(String),
@@ -50,7 +59,8 @@ pub enum ActorRef {
 /// by 0.1.3.6, Classification Pack case WEC-33) can be added without a breaking
 /// change to any downstream consumer of this crate.
 #[non_exhaustive]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", content = "value", rename_all = "kebab-case")]
 pub enum EvidenceRef {
     /// A file/path reference (e.g. a relative path within a project).
     FilePath(String),
@@ -61,7 +71,8 @@ pub enum EvidenceRef {
 /// WorkSignal's semantic kind. Fixed to the categories already settled in
 /// Development Spec v1.6 Decision 1 / the Continuity Runtime Architecture §6 —
 /// not an open/extensible list, since that list is already canonical.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum WorkSignalKind {
     Progress,
     Decision,
@@ -87,7 +98,8 @@ pub enum WorkSignalKind {
 /// result, and a human's acceptance exist as separately-attributed records
 /// (Classification Pack case WEC-29) instead of being inferred from evidence
 /// presence alone.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkSignal {
     pub signal_id: String,
     pub workspace_id: String,
@@ -97,7 +109,12 @@ pub struct WorkSignal {
     pub summary: String,
     pub timestamp: String,
     pub evidence_refs: Vec<EvidenceRef>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub correlation_hint: Option<String>,
+    /// Missing on read defaults to `Sensitivity::Private` via `#[serde(default)]`
+    /// — the enum's own `#[default]` attribute alone does not apply to a missing
+    /// *struct field*; this attribute is what actually wires it in (approved plan §3.9).
+    #[serde(default)]
     pub sensitivity: Sensitivity,
     pub protocol_version: String,
 }
@@ -329,5 +346,180 @@ mod tests {
         let c = EvidenceRef::ProducerSignal("s-1".into());
         assert_eq!(a, b);
         assert_ne!(a, c);
+    }
+
+    // ------------------------------------------------------------------
+    // Dev Track 0.1.3.2, Checkpoint A — protocol contract stabilization.
+    // ------------------------------------------------------------------
+
+    /// Full WorkSignal round-trips through JSON, preserving every field.
+    #[test]
+    fn work_signal_round_trips_through_json() {
+        let original = signal(
+            "s-roundtrip",
+            ProducerRef::Reporter("codex".into()),
+            ActorRef::Person("ter".into()),
+            WorkSignalKind::Handoff,
+            Some("corr-rt"),
+            vec![
+                EvidenceRef::FilePath("docs/overview.md".into()),
+                EvidenceRef::ProducerSignal("s-other".into()),
+            ],
+        );
+        let json = serde_json::to_string(&original).expect("serialize");
+        let restored: WorkSignal = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(restored.signal_id, original.signal_id);
+        assert_eq!(restored.workspace_id, original.workspace_id);
+        assert_eq!(restored.producer, original.producer);
+        assert_eq!(restored.actor, original.actor);
+        assert_eq!(restored.kind, original.kind);
+        assert_eq!(restored.summary, original.summary);
+        assert_eq!(restored.timestamp, original.timestamp);
+        assert_eq!(restored.evidence_refs, original.evidence_refs);
+        assert_eq!(restored.correlation_hint, original.correlation_hint);
+        assert_eq!(restored.sensitivity, original.sensitivity);
+        assert_eq!(restored.protocol_version, original.protocol_version);
+    }
+
+    /// Every data-carrying enum variant round-trips, including all unit variants.
+    #[test]
+    fn producer_ref_variants_round_trip() {
+        for p in [
+            ProducerRef::Native,
+            ProducerRef::Heli,
+            ProducerRef::Git,
+            ProducerRef::Reporter("codex".into()),
+        ] {
+            let json = serde_json::to_string(&p).expect("serialize");
+            let back: ProducerRef = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(back, p);
+        }
+    }
+
+    #[test]
+    fn actor_ref_variants_round_trip() {
+        for a in [
+            ActorRef::Person("ter".into()),
+            ActorRef::Device("laptop-1".into()),
+            ActorRef::Proxy("proxy-1".into()),
+            ActorRef::Unknown,
+        ] {
+            let json = serde_json::to_string(&a).expect("serialize");
+            let back: ActorRef = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(back, a);
+        }
+    }
+
+    #[test]
+    fn evidence_ref_variants_round_trip() {
+        for e in [
+            EvidenceRef::FilePath("docs/overview.md".into()),
+            EvidenceRef::ProducerSignal("s-1".into()),
+        ] {
+            let json = serde_json::to_string(&e).expect("serialize");
+            let back: EvidenceRef = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(back, e);
+        }
+    }
+
+    #[test]
+    fn work_signal_kind_variants_round_trip() {
+        for k in [
+            WorkSignalKind::Progress,
+            WorkSignalKind::Decision,
+            WorkSignalKind::Blocker,
+            WorkSignalKind::BlockerResolved,
+            WorkSignalKind::ScopeChange,
+            WorkSignalKind::Milestone,
+            WorkSignalKind::ReviewRequired,
+            WorkSignalKind::UnresolvedQuestion,
+            WorkSignalKind::Handoff,
+            WorkSignalKind::SessionEnd,
+            WorkSignalKind::AgentSwitch,
+        ] {
+            let json = serde_json::to_string(&k).expect("serialize");
+            let back: WorkSignalKind = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(back, k);
+        }
+    }
+
+    /// Locks the exact wire shape approved in the 0.1.3.2 execution plan §3.12:
+    /// camelCase fields, kebab-case kind, lowercase sensitivity, adjacently
+    /// tagged data-carrying enums. Any accidental future drift in field
+    /// naming, casing, or enum representation fails this test immediately.
+    #[test]
+    fn deserializes_the_canonical_example_json_fixture() {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let fixture_path = format!("{}/tests/fixtures/signals/valid.json", manifest_dir);
+        let json = std::fs::read_to_string(&fixture_path).expect("read fixture");
+        let s: WorkSignal = serde_json::from_str(&json).expect("deserialize fixture");
+
+        assert_eq!(s.signal_id, "codex-2026-07-08-001");
+        assert_eq!(s.workspace_id, "1720400000000-a1b2c3");
+        assert_eq!(s.producer, ProducerRef::Reporter("codex".into()));
+        assert_eq!(s.actor, ActorRef::Unknown);
+        assert_eq!(s.kind, WorkSignalKind::Progress);
+        assert_eq!(
+            s.summary,
+            "Implemented the shared continuity foundation and migrated context/index/ingestion into openmesh-core."
+        );
+        assert_eq!(s.timestamp, "2026-07-08T09:15:00Z");
+        assert_eq!(
+            s.evidence_refs,
+            vec![EvidenceRef::FilePath(
+                "crates/openmesh-core/src/domain.rs".into()
+            )]
+        );
+        assert_eq!(s.correlation_hint, Some("corr-0.1.3.1".to_string()));
+        assert_eq!(s.sensitivity, Sensitivity::Private);
+        assert_eq!(s.protocol_version, "1.0");
+        assert_eq!(WORK_SIGNAL_PROTOCOL_VERSION, "1.0");
+    }
+
+    /// A missing `sensitivity` field must deserialize as `Private` — proving
+    /// the `#[serde(default)]` field attribute actually wires in the enum's
+    /// own `#[default]`, not merely relying on it existing (approved plan §3.9).
+    #[test]
+    fn missing_sensitivity_field_defaults_to_private() {
+        let json = r#"{
+            "signalId": "s-1",
+            "workspaceId": "ws-1",
+            "producer": { "type": "native" },
+            "actor": { "type": "unknown" },
+            "kind": "progress",
+            "summary": "no sensitivity field here",
+            "timestamp": "2026-07-08T00:00:00Z",
+            "evidenceRefs": [],
+            "protocolVersion": "1.0"
+        }"#;
+        let s: WorkSignal = serde_json::from_str(json).expect("deserialize");
+        assert_eq!(s.sensitivity, Sensitivity::Private);
+    }
+
+    /// An unrecognized `kind` string under the *current* protocol version is
+    /// invalid current-version data, not a future-version compatibility case
+    /// — it must fail strict deserialization (approved plan §3.4/§10),
+    /// mirroring `context.rs`'s existing `deserialize_invalid_kind_fails`.
+    /// This is the direct evidence motivating the one-field (not per-enum)
+    /// preflight the classifier implements in Checkpoint C.
+    #[test]
+    fn unrecognized_kind_fails_strict_deserialize() {
+        let json = r#"{
+            "signalId": "s-1",
+            "workspaceId": "ws-1",
+            "producer": { "type": "native" },
+            "actor": { "type": "unknown" },
+            "kind": "not-a-real-kind",
+            "summary": "bad kind",
+            "timestamp": "2026-07-08T00:00:00Z",
+            "evidenceRefs": [],
+            "sensitivity": "private",
+            "protocolVersion": "1.0"
+        }"#;
+        let result: Result<WorkSignal, _> = serde_json::from_str(json);
+        assert!(
+            result.is_err(),
+            "unrecognized kind should fail deserialization"
+        );
     }
 }

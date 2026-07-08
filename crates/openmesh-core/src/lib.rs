@@ -7,4 +7,5 @@ pub mod context_service;
 pub mod domain;
 pub mod index;
 pub mod ingestion;
+pub mod signals;
 pub mod storage;

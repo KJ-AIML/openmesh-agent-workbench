@@ -1,0 +1,12 @@
+{
+  "signalId": "s-unrecognized-kind",
+  "workspaceId": "ws-1",
+  "producer": { "type": "native" },
+  "actor": { "type": "unknown" },
+  "kind": "not-a-real-kind",
+  "summary": "current version, unrecognized kind",
+  "timestamp": "2026-07-08T00:00:00Z",
+  "evidenceRefs": [],
+  "sensitivity": "private",
+  "protocolVersion": "1.0"
+}
