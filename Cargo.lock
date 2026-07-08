@@ -2211,10 +2211,9 @@ name = "openmesh"
 version = "0.1.2"
 dependencies = [
  "chrono",
- "dirs 5.0.1",
  "git2",
  "open",
- "rusqlite",
+ "openmesh-core",
  "serde",
  "serde_json",
  "tauri",
@@ -2222,6 +2221,17 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-fs",
  "tempfile",
+]
+
+[[package]]
+name = "openmesh-core"
+version = "0.1.2"
+dependencies = [
+ "chrono",
+ "dirs 5.0.1",
+ "rusqlite",
+ "serde",
+ "serde_json",
  "thiserror 1.0.69",
 ]
 

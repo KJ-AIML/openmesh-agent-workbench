@@ -1,14 +1,9 @@
-#[allow(dead_code)]
-mod context;
-mod context_service;
-mod index;
-mod ingestion;
-mod storage;
-
+use openmesh_core::context_service;
+use openmesh_core::storage;
+use openmesh_core::storage::*;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::process::Command;
-use storage::*;
 
 /// Normalize an agent tool identifier.
 ///

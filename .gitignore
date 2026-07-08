@@ -53,7 +53,8 @@ server.log
 # Skills directory
 /skills/
 
-# Tauri/Rust build artifacts
+# Tauri/Rust build artifacts (Cargo workspace shares one target/ at the repo root)
+/target/
 src-tauri/target/
 
 # Vite build output

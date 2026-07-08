@@ -1,0 +1,15 @@
+[package]
+name = "openmesh-core"
+version = "0.1.2"
+rust-version = "1.92.0"
+description = "Shared OpenMesh domain and storage logic used by the Desktop app and future CLI"
+authors = ["Openmesh Team"]
+edition = "2021"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "5"
+rusqlite = { version = "0.30", features = ["bundled"] }
+thiserror = "1"

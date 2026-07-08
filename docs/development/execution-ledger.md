@@ -1488,7 +1488,7 @@ onMounted(async () => {
 
 ---
 
-## 2026-07-05 � Dev Track 0.1.2.5 Runtime Truth Fix Closure
+## 2026-07-05 � Dev Track 0.1.2.5 Runtime Truth Fix Closure
 
 **Status:** CONDITIONAL_PASS (awaiting final runtime human retest)
 **Branch:** main
@@ -1607,3 +1607,57 @@ Manual desktop verification:
 
 ### Final Automated Status CONDITIONAL_PASS
 ### Dev Track 0.1.2.6 Unlocked NO
+
+## 2026-07-08 — Dev Track 0.1.3.1
+
+Status: PASS
+Branch: feat/openmesh-0.1.3
+Commit: pending (this ledger entry and the full 0.1.3.1 diff are committed together, immediately after this entry is written)
+Objective: Shared Core & Work Continuity Contracts — convert `src-tauri` into a two-member Cargo workspace (`src-tauri` + `crates/openmesh-core`), move the shared domain/storage/index/ingestion/context-service logic into `openmesh-core`, and add the minimum Work Continuity domain contracts (`WorkSignal`, `WorkEvent`, `EvidenceRef`, `ActorRef`, `ProducerRef`) needed by later 0.1.3 tracks — with zero behavior change to the existing Desktop app.
+What changed:
+- New root `Cargo.toml` (`[workspace] resolver = "2"`, members `src-tauri` + `crates/openmesh-core`).
+- New `crates/openmesh-core/Cargo.toml` and `crates/openmesh-core/src/lib.rs`.
+- Moved via `git mv`: `context.rs`, `context_service.rs`, `index.rs`, `ingestion.rs`, `storage.rs` from `src-tauri/src/` to `crates/openmesh-core/src/` — no behavior change (one fixture-path fix in `index.rs`'s own test, unrelated to the crate move).
+- Moved `Cargo.lock` to the repo root; zero third-party version/source/checksum drift.
+- `src-tauri/src/lib.rs`: `mod` declarations replaced with `use openmesh_core::{...}`; zero edits to any of the 52 `#[tauri::command]` function bodies.
+- `src-tauri/Cargo.toml`: added `openmesh-core` path dependency; removed `dirs`, `rusqlite`, `thiserror` (grep-confirmed unused after the code that used them moved away).
+- New `crates/openmesh-core/src/domain.rs`: minimum Work Continuity domain contracts, `#[non_exhaustive]` where extension is expected later (0.1.3.4/0.1.3.6/0.1.3.7), no serialization schema frozen, no persistence, no promotion logic.
+- `.gitignore` and `eslint.config.js`: added `/target/` / `target/**` — the workspace conversion moved the shared build directory from `src-tauri/target/` to the repo root.
+Tests added:
+- 5 Category A Classification Pack tests in `domain.rs` (WEC-29; CC-1; WEC-26+WEC-32; WEC-15; WEC-30), each proving a specific Work Continuity representability case from the approved Classification Pack.
+- 1 generic structural test (`evidence_ref_variants_construct_and_compare`) — not a Classification Pack case; exercises `EvidenceRef`'s existing variants only.
+- 4 Category B boundary assertions (WEC-17, WEC-09, WEC-12, WEC-33) verified by direct code review/grep (absence of `CurrentStateProjection`, `PendingAttention`, a correction-link field, and a Git-specific `EvidenceRef` variant), not unit tests — per the approved plan's own methodology.
+Commands run and exact results (final pre-commit run, 2026-07-08):
+- `npm run verify` — exit 0. Test Files 22 passed (22). Tests 212 passed (212). Type Errors: no errors.
+- `cargo fmt --check` — clean, no diff.
+- `cargo clippy --workspace -- -D warnings` — clean, zero warnings/errors.
+- `cargo test --workspace` — 87 passed; 0 failed; 0 ignored (81 pre-existing + 6 in `domain.rs`).
+- `cargo check --workspace` — clean.
+- `cargo tree -p openmesh-core | grep -i tauri` — empty (zero matches): confirmed no Tauri dependency in the shared core crate.
+- `#[tauri::command]` count: `src-tauri/src/lib.rs` 52, `src-tauri/src/main.rs` 0 — matches the pre-implementation baseline exactly.
+- `Cargo.lock` diffed directly against the `1bd6021` baseline content: only the new `openmesh-core` package entry and its dependency edges differ; zero version/source/checksum drift on any third-party package.
+- Manifest versions: `package.json`, `src-tauri/Cargo.toml`, `crates/openmesh-core/Cargo.toml` all `0.1.2` — unchanged.
+- `npm run tauri:build` — exit 0. Release binary `target/release/openmesh.exe` built; both `target/release/bundle/msi/OpenMesh_0.1.2_x64_en-US.msi` and `target/release/bundle/nsis/OpenMesh_0.1.2_x64-setup.exe` produced.
+Manual QA actually performed:
+Human operator (bryan.c@evokehub.com) ran the built `target/release/openmesh.exe` directly and executed the full 9-step interactive checklist:
+1. Launched the app — PASS.
+2. Opened a project pointed at `D:\KJ\repo\open-mesh-lab` — PASS.
+3. Opened Context Search — PASS.
+4. Imported a real file via the Docs page's Import feature and searched a distinctive term from it — PASS.
+5. At least one result appeared — PASS.
+6. Opened the result in Context Inspector — PASS.
+7. Source/evidence content rendered correctly — PASS.
+8. Restarted the app — PASS.
+9. Repeated the same search after restart; result still returned correctly — PASS. This is the strongest evidence that moving `context.rs`/`context_service.rs`/`index.rs`/`ingestion.rs`/`storage.rs` into `crates/openmesh-core` did not break path resolution or index re-opening across a cold process start.
+All 9 steps confirmed passing by the human operator before this entry was recorded.
+Architecture decisions:
+- No new architecture decided in this track — executed the topology already accepted in `.heli-harness/state/reports/openmesh-runtime-integration-architecture-reconciliation.md` and the approved `openmesh-0.1.3.1-execution-plan.md`.
+- A subsequent closure audit (same day) corrected one mislabeling (a test claiming to represent WEC-33 that only tested generic existing variants — renamed and reclassified as Category B/generic, keeping Category A at exactly 5 cases) and restored the original `#[cfg(test)]` gate on `DerivedIndex::open_in_memory`/`apply_pragmas_in_memory` once `context_service.rs` also finished moving into the same crate, since the crate-boundary condition that had required de-gating them no longer applied in the final topology.
+Known limitations:
+- Full detail of every checkpoint, deviation, and the closure audit is in `.heli-harness/state/reports/openmesh-0.1.3.1-implementation-report.md`.
+- The pre-existing duplicated path-resolver pattern (`storage::get_global_dir` and `index::derive_index_path` each independently calling `dirs::home_dir()`) was preserved exactly as planned, not consolidated — out of this track's scope.
+- One pre-existing unused-import warning (`derive_index_path` in `ingestion.rs`'s test module) predates this track (confirmed identical at the `1bd6021` baseline) and was left untouched — out of scope for a surgical shared-core extraction.
+Next recommended track: `0.1.3.2 — Work Signal Protocol & File-backed Inbox` (not started; requires a separate authorization).
+
+### Final Automated Status: PASS
+### Dev Track 0.1.3.2 Unlocked: YES (not started — awaiting separate authorization)

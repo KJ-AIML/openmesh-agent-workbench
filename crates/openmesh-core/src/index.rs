@@ -1370,7 +1370,7 @@ mod tests {
         let manifest_dir = env!("CARGO_MANIFEST_DIR");
         let fixture_path = format!(
             "{}/tests/fixtures/context/valid-document.json",
-            manifest_dir.replace("src-tauri", "")
+            manifest_dir
         );
         let json = std::fs::read_to_string(&fixture_path).unwrap();
         let ctx_doc: ContextDocument = serde_json::from_str(&json).unwrap();

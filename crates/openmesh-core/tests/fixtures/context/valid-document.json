@@ -1,0 +1,24 @@
+{
+  "id": "01J9X3v2example00000000000002",
+  "schemaVersion": "1.0.0",
+  "sourceId": "01J9X3v2example00000000000001",
+  "kind": "doc",
+  "projectId": "openmesh-project-001",
+  "ownerPersonId": "person-ter",
+  "canonicalRef": "openmesh://project/openmesh-project-001/doc/architecture/overview.md",
+  "title": "Architecture Overview",
+  "text": "# Architecture Overview\n\nOpenMesh is a local-first desktop agent workbench.\n",
+  "sensitivity": "private",
+  "agentContextEnabled": true,
+  "observedAt": "2026-07-05T03:00:00.000Z",
+  "sourceUpdatedAt": "2026-07-04T14:22:00.000Z",
+  "freshness": {
+    "state": "fresh",
+    "observedAt": "2026-07-05T03:00:00.000Z",
+    "sourceUpdatedAt": "2026-07-04T14:22:00.000Z"
+  },
+  "metadata": {
+    "ext": "md",
+    "loc": 42
+  }
+}
