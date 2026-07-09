@@ -1,0 +1,17 @@
+[package]
+name = "openmesh-cli"
+version = "0.1.2"
+rust-version = "1.92.0"
+description = "OpenMesh CLI — the official programmable integration spine into the file-backed Signal Inbox"
+authors = ["Openmesh Team"]
+edition = "2021"
+
+[[bin]]
+name = "openmesh-cli"
+path = "src/main.rs"
+
+[dependencies]
+openmesh-core = { path = "../openmesh-core" }
+clap = { version = "4", features = ["derive"] }
+chrono = { version = "0.4", features = ["serde"] }
+serde_json = "1"

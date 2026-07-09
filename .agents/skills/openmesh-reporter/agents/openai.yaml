@@ -1,0 +1,7 @@
+interface:
+  display_name: "OpenMesh Reporter"
+  short_description: "Report meaningful work boundaries into OpenMesh via openmesh-cli"
+  default_prompt: "Use $openmesh-reporter to report meaningful work boundaries (progress, decisions, blockers, handoffs, and similar) into OpenMesh through the openmesh-cli signal command as you work."
+
+policy:
+  allow_implicit_invocation: false
