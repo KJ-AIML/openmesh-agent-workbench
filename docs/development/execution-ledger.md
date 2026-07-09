@@ -1704,12 +1704,12 @@ Next recommended track: `0.1.3.3 — OpenMesh CLI Intake & Reporter Skill Alpha`
 
 ## 2026-07-09 — Dev Track 0.1.3.3
 
-Status: PASS — HUMAN ACCEPTED — COMMIT PENDING
+Status: PASS — HUMAN ACCEPTED — COMMITTED — PUSH PENDING
 Human final disposition date: 2026-07-09
 Checkpoints A-D: PASS. Checkpoint E: PASS (accepted under the approved split-agent amendment). Checkpoint F: GREEN — accepted. Whole Dev Track 0.1.3.3: **PASS**.
 Full regression: GREEN. Dogfood (Proof A/B/C): PASS. Real project data isolation: PASS. Dependency/manifest boundary: PASS. Product scope boundary: PASS.
 Branch: feat/openmesh-0.1.3
-Commit: NOT YET (accepted implementation still pending the separate commit gate; full diff described below)
+Feature commit: `c0e7c3913e7954b731a3c913ae35490128a7463f` (subject: `feat(cli): add WorkSignal intake and Reporter Skill`; parent `83b3cec`; verified — 3 modified/11 added/0 removed, exact accepted inventory; `git diff HEAD^ HEAD --check` clean; post-feature-commit worktree clean)
 Push: NOT YET
 Release: NOT YET
 Starting HEAD: `83b3cec` (Dev Track 0.1.3.2, PASS)
@@ -1747,8 +1747,8 @@ Known limitations:
 - Concurrent inbox processors remain explicitly NOT SUPPORTED IN V1 (0.1.3.2's existing, unchanged limitation).
 - The CLI alpha command is `openmesh-cli`, not a final public packaging name — the eventual short `openmesh` command name (if ever adopted) is deferred to later packaging work.
 - The one pre-existing `ingestion.rs` unused-import warning remains untouched — out of scope, predates this track.
-**Final human acceptance (same day, 2026-07-09)**: Human/Main-Brain issued the final disposition — Dev Track 0.1.3.3 is accepted as **PASS**. Checkpoints A-F are all accepted (A-D PASS, E PASS under the approved split-agent amendment, F GREEN). This disposition does not reopen any checkpoint, proof, the amendment, the Reporter contract, verifier design, the Codex runtime diagnosis, or the ambient-project contamination incident. Commit and push have **not** occurred; the accepted implementation remains subject to a separate commit gate before Dev Track 0.1.3.4 may begin.
-Next recommended track: 0.1.3.4, but **not yet unlocked** — the accepted implementation must still pass the separate commit gate first.
+**Final human acceptance (same day, 2026-07-09)**: Human/Main-Brain issued the final disposition — Dev Track 0.1.3.3 is accepted as **PASS**. Checkpoints A-F are all accepted (A-D PASS, E PASS under the approved split-agent amendment, F GREEN). This disposition does not reopen any checkpoint, proof, the amendment, the Reporter contract, verifier design, the Codex runtime diagnosis, or the ambient-project contamination incident. The accepted implementation was staged path-by-path (14 exact paths, no `git add .`/`git add -A`) and committed as a single feature commit, `c0e7c3913e7954b731a3c913ae35490128a7463f`, verified against the accepted inventory and manifest/version boundary. Push has **not** occurred; the committed implementation remains subject to a separate governance commit and a separate push decision before Dev Track 0.1.3.4 may begin.
+Next recommended track: 0.1.3.4, but **not yet unlocked** — push and a separate governance-commit gate remain outstanding first.
 
-### Final Automated Status: PASS — HUMAN ACCEPTED — COMMIT PENDING
-### Dev Track 0.1.3.4 Unlocked: NO (whole track accepted PASS; the accepted implementation must still pass the separate commit gate before the next development track begins)
+### Final Automated Status: PASS — HUMAN ACCEPTED — COMMITTED — PUSH PENDING
+### Dev Track 0.1.3.4 Unlocked: NO (whole track accepted PASS and feature-committed; push and the separate governance-commit gate must still complete before the next development track begins)
