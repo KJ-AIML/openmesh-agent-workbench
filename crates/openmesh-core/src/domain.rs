@@ -9,8 +9,10 @@
 // execution plan's section 6 and Dev Track 0.1.3.1's non-goals):
 //   - CurrentStateProjection (owned by 0.1.3.7)
 //   - PendingAttention (owned by 0.1.3.7)
-//   - a concrete correction-link field on WorkEvent (owned by 0.1.3.4)
 //   - a Git-specific EvidenceRef variant (owned by 0.1.3.6)
+//
+// Dev Track 0.1.3.4 Checkpoint A hardens the serializable WorkEvent wire shape
+// and EvidenceAttachment model. Ledger persistence is Checkpoint B.
 // ============================================================================
 
 use crate::context::Sensitivity;
@@ -21,6 +23,15 @@ use serde::{Deserialize, Serialize};
 /// ProducerRef, ActorRef, EvidenceRef, or Sensitivity) must bump this constant —
 /// see the approved 0.1.3.2 execution plan §3.10/§10 for the compatibility rule.
 pub const WORK_SIGNAL_PROTOCOL_VERSION: &str = "1.0";
+
+/// Wire-schema version for the Canonical WorkEvent protocol (Dev Track 0.1.3.4).
+pub const WORK_EVENT_PROTOCOL_VERSION: &str = "1.0";
+
+/// Frozen bound: `event_id` maximum length (approved 0.1.3.4 plan §3.1).
+pub const MAX_EVENT_ID_BYTES: usize = 256;
+
+/// Frozen bound: WorkEvent `summary` maximum length (approved 0.1.3.4 plan §3.1).
+pub const MAX_EVENT_SUMMARY_BYTES: usize = 4096;
 
 /// Which system/integration emitted a WorkSignal — for later dedup/correlation
 /// (Classification Pack cases WEC-26/WEC-32). Distinct from `ActorRef`: this is
@@ -66,6 +77,19 @@ pub enum EvidenceRef {
     FilePath(String),
     /// A reference to another WorkSignal by its `signal_id` (corroboration).
     ProducerSignal(String),
+}
+
+/// Evidence pointer plus optional observation metadata for a canonical WorkEvent.
+///
+/// `evidence_ref` is where the fact lives; `observed_at` is when/how OpenMesh
+/// (or a producer via append) came to know it. These are intentionally not
+/// collapsed (Dev Spec 0.1.3.4 / Classification Pack model pressure).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EvidenceAttachment {
+    pub evidence_ref: EvidenceRef,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub observed_at: Option<String>,
 }
 
 /// WorkSignal's semantic kind. Fixed to the categories already settled in
@@ -119,38 +143,166 @@ pub struct WorkSignal {
     pub protocol_version: String,
 }
 
-/// A durable, evidence-backed meaningful transition. `evidence_refs` is a
-/// **list**, not a single reference, so that many signals may support one
-/// WorkEvent (Classification Pack case CC-1) without forcing a cardinality.
+/// A durable, evidence-backed meaningful transition. `evidence` is a **list**,
+/// not a single reference, so that many signals may support one WorkEvent
+/// (Classification Pack case CC-1) without forcing a cardinality.
 ///
-/// Deliberately carries no `actor` field in this track (see `ActorRef`'s own
-/// doc comment for why) and no concrete correction-link field (see the
-/// `#[non_exhaustive]` attribute and the `new` constructor below, which leave
-/// room for a future field without a breaking change — the exact correction
-/// representation is 0.1.3.4's decision, not frozen here).
+/// Deliberately carries no `actor` field — actor attribution on promoted events
+/// is owned by 0.1.3.5, not frozen here.
 #[non_exhaustive]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkEvent {
+    pub event_id: String,
+    pub workspace_id: String,
     pub kind: String,
     pub summary: String,
-    pub evidence_refs: Vec<EvidenceRef>,
     pub timestamp: String,
+    pub evidence: Vec<EvidenceAttachment>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub corrects_event_id: Option<String>,
+    pub sensitivity: Sensitivity,
+    pub protocol_version: String,
 }
 
 impl WorkEvent {
     pub fn new(
+        event_id: impl Into<String>,
+        workspace_id: impl Into<String>,
         kind: impl Into<String>,
         summary: impl Into<String>,
-        evidence_refs: Vec<EvidenceRef>,
+        evidence: Vec<EvidenceAttachment>,
         timestamp: impl Into<String>,
     ) -> Self {
         Self {
+            event_id: event_id.into(),
+            workspace_id: workspace_id.into(),
             kind: kind.into(),
             summary: summary.into(),
-            evidence_refs,
             timestamp: timestamp.into(),
+            evidence,
+            corrects_event_id: None,
+            sensitivity: Sensitivity::Private,
+            protocol_version: WORK_EVENT_PROTOCOL_VERSION.to_string(),
         }
     }
+}
+
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+pub enum EventValidationError {
+    #[error("event_id is empty after trim")]
+    EmptyEventId,
+    #[error("event_id exceeds the {max}-byte bound")]
+    EventIdTooLong { max: usize },
+    #[error("event_id contains a control character")]
+    EventIdControlChar,
+    #[error("workspace_id is empty after trim")]
+    EmptyWorkspaceId,
+    #[error("kind is empty after trim")]
+    EmptyKind,
+    #[error("summary is empty after trim")]
+    EmptySummary,
+    #[error("summary exceeds the {max}-byte bound")]
+    SummaryTooLong { max: usize },
+    #[error("timestamp is invalid: {0}")]
+    InvalidTimestamp(String),
+    #[error("evidence must not be empty for a canonical WorkEvent")]
+    EmptyEvidence,
+    #[error("protocol_version must be {expected}, found {found}")]
+    WrongProtocolVersion { expected: String, found: String },
+    #[error("corrects_event_id is empty after trim")]
+    EmptyCorrectsEventId,
+    #[error("corrects_event_id exceeds the {max}-byte bound")]
+    CorrectsEventIdTooLong { max: usize },
+    #[error("corrects_event_id contains a control character")]
+    CorrectsEventIdControlChar,
+    #[error("evidence observed_at is invalid: {0}")]
+    InvalidObservedAt(String),
+}
+
+/// Shared semantic validation for WorkEvent records. Used by the future ledger
+/// append path (Checkpoint B) and classification (Checkpoint C).
+pub fn validate_event_semantics(event: &WorkEvent) -> Result<(), EventValidationError> {
+    validate_id_field(&event.event_id, IdField::EventId)?;
+    if event.workspace_id.trim().is_empty() {
+        return Err(EventValidationError::EmptyWorkspaceId);
+    }
+    if event.kind.trim().is_empty() {
+        return Err(EventValidationError::EmptyKind);
+    }
+    if event.summary.trim().is_empty() {
+        return Err(EventValidationError::EmptySummary);
+    }
+    if event.summary.len() > MAX_EVENT_SUMMARY_BYTES {
+        return Err(EventValidationError::SummaryTooLong {
+            max: MAX_EVENT_SUMMARY_BYTES,
+        });
+    }
+    validate_utc_timestamp(&event.timestamp).map_err(EventValidationError::InvalidTimestamp)?;
+    if event.evidence.is_empty() {
+        return Err(EventValidationError::EmptyEvidence);
+    }
+    for attachment in &event.evidence {
+        if let Some(observed_at) = &attachment.observed_at {
+            validate_utc_timestamp(observed_at).map_err(EventValidationError::InvalidObservedAt)?;
+        }
+    }
+    if event.protocol_version != WORK_EVENT_PROTOCOL_VERSION {
+        return Err(EventValidationError::WrongProtocolVersion {
+            expected: WORK_EVENT_PROTOCOL_VERSION.to_string(),
+            found: event.protocol_version.clone(),
+        });
+    }
+    if let Some(corrects) = &event.corrects_event_id {
+        validate_id_field(corrects, IdField::CorrectsEventId)?;
+    }
+    Ok(())
+}
+
+enum IdField {
+    EventId,
+    CorrectsEventId,
+}
+
+fn validate_id_field(value: &str, field: IdField) -> Result<(), EventValidationError> {
+    if value.trim().is_empty() {
+        return Err(match field {
+            IdField::EventId => EventValidationError::EmptyEventId,
+            IdField::CorrectsEventId => EventValidationError::EmptyCorrectsEventId,
+        });
+    }
+    if value.len() > MAX_EVENT_ID_BYTES {
+        return Err(match field {
+            IdField::EventId => EventValidationError::EventIdTooLong {
+                max: MAX_EVENT_ID_BYTES,
+            },
+            IdField::CorrectsEventId => EventValidationError::CorrectsEventIdTooLong {
+                max: MAX_EVENT_ID_BYTES,
+            },
+        });
+    }
+    if value.chars().any(|c| c.is_control()) {
+        return Err(match field {
+            IdField::EventId => EventValidationError::EventIdControlChar,
+            IdField::CorrectsEventId => EventValidationError::CorrectsEventIdControlChar,
+        });
+    }
+    Ok(())
+}
+
+/// RFC 3339 UTC only (`Z` or `+00:00`; reject `-00:00` and non-UTC offsets).
+fn validate_utc_timestamp(timestamp: &str) -> Result<(), String> {
+    let parsed = chrono::DateTime::parse_from_rfc3339(timestamp)
+        .map_err(|_| format!("timestamp is not valid RFC 3339: {timestamp}"))?;
+    if parsed.offset().local_minus_utc() != 0 {
+        return Err(format!("timestamp offset must be UTC: {timestamp}"));
+    }
+    if timestamp.trim_end().ends_with("-00:00") {
+        return Err(format!(
+            "timestamp offset -00:00 is not an approved UTC representation (only Z and +00:00 are): {timestamp}"
+        ));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -176,8 +328,31 @@ mod tests {
             evidence_refs,
             correlation_hint: correlation_hint.map(|s| s.to_string()),
             sensitivity: Sensitivity::Private,
-            protocol_version: "0.1.0".to_string(),
+            protocol_version: WORK_SIGNAL_PROTOCOL_VERSION.to_string(),
         }
+    }
+
+    fn attachment(evidence_ref: EvidenceRef) -> EvidenceAttachment {
+        EvidenceAttachment {
+            evidence_ref,
+            observed_at: None,
+        }
+    }
+
+    fn minimal_event(
+        kind: &str,
+        summary: &str,
+        evidence_refs: Vec<EvidenceRef>,
+        timestamp: &str,
+    ) -> WorkEvent {
+        WorkEvent::new(
+            "evt-test-1",
+            "ws-1",
+            kind,
+            summary,
+            evidence_refs.into_iter().map(attachment).collect(),
+            timestamp,
+        )
     }
 
     // Category A — Positive Representability Tests (execution plan §6/§9.D1).
@@ -232,18 +407,18 @@ mod tests {
             .map(|i| EvidenceRef::ProducerSignal(format!("s-{i}")))
             .collect();
 
-        let one_event_many_refs = WorkEvent::new(
+        let one_event_many_refs = minimal_event(
             "bugfix",
             "clear_project fixed",
             refs.clone(),
             "2026-07-08T00:00:00Z",
         );
-        assert_eq!(one_event_many_refs.evidence_refs.len(), 4);
+        assert_eq!(one_event_many_refs.evidence.len(), 4);
 
         let four_events: Vec<WorkEvent> = refs
             .into_iter()
             .map(|r| {
-                WorkEvent::new(
+                minimal_event(
                     "bugfix",
                     "clear_project fixed",
                     vec![r],
@@ -252,7 +427,7 @@ mod tests {
             })
             .collect();
         assert_eq!(four_events.len(), 4);
-        assert!(four_events.iter().all(|e| e.evidence_refs.len() == 1));
+        assert!(four_events.iter().all(|e| e.evidence.len() == 1));
     }
 
     /// WEC-26 + WEC-32: same-producer duplicate vs. cross-producer
@@ -324,12 +499,12 @@ mod tests {
             .map(|i| EvidenceRef::ProducerSignal(format!("round-{i}")))
             .collect();
 
-        let one_event = WorkEvent::new("stabilized", "0.1.2.5 stabilized", refs.clone(), "t");
-        assert_eq!(one_event.evidence_refs.len(), 6);
+        let one_event = minimal_event("stabilized", "0.1.2.5 stabilized", refs.clone(), "t");
+        assert_eq!(one_event.evidence.len(), 6);
 
         let six_events: Vec<WorkEvent> = refs
             .into_iter()
-            .map(|r| WorkEvent::new("bugfix-round", "one closure round", vec![r], "t"))
+            .map(|r| minimal_event("bugfix-round", "one closure round", vec![r], "t"))
             .collect();
         assert_eq!(six_events.len(), 6);
     }
@@ -521,5 +696,192 @@ mod tests {
             result.is_err(),
             "unrecognized kind should fail deserialization"
         );
+    }
+
+    // ------------------------------------------------------------------
+    // Dev Track 0.1.3.4, Checkpoint A — WorkEvent wire contract.
+    // ------------------------------------------------------------------
+
+    fn sample_event() -> WorkEvent {
+        WorkEvent {
+            event_id: "1783605120049-event001".into(),
+            workspace_id: "1783586870822-7352d".into(),
+            kind: "work.completed".into(),
+            summary: "Canonical WorkEvent for Checkpoint A.".into(),
+            timestamp: "2026-07-15T07:00:00Z".into(),
+            evidence: vec![
+                EvidenceAttachment {
+                    evidence_ref: EvidenceRef::FilePath(
+                        "crates/openmesh-core/src/domain.rs".into(),
+                    ),
+                    observed_at: Some("2026-07-15T07:00:01Z".into()),
+                },
+                EvidenceAttachment {
+                    evidence_ref: EvidenceRef::ProducerSignal("s-verify".into()),
+                    observed_at: None,
+                },
+            ],
+            corrects_event_id: None,
+            sensitivity: Sensitivity::Private,
+            protocol_version: WORK_EVENT_PROTOCOL_VERSION.to_string(),
+        }
+    }
+
+    #[test]
+    fn work_event_round_trips_through_json() {
+        let original = sample_event();
+        let json = serde_json::to_string(&original).expect("serialize");
+        let restored: WorkEvent = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(restored, original);
+    }
+
+    #[test]
+    fn evidence_attachment_round_trips_through_json() {
+        let original = EvidenceAttachment {
+            evidence_ref: EvidenceRef::FilePath("docs/overview.md".into()),
+            observed_at: Some("2026-07-15T07:00:00Z".into()),
+        };
+        let json = serde_json::to_string(&original).expect("serialize");
+        let restored: EvidenceAttachment = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(restored, original);
+    }
+
+    #[test]
+    fn deserializes_the_canonical_event_fixture() {
+        let manifest_dir = env!("CARGO_MANIFEST_DIR");
+        let fixture_path = format!("{manifest_dir}/tests/fixtures/events/valid.json");
+        let json = std::fs::read_to_string(&fixture_path).expect("read fixture");
+        let event: WorkEvent = serde_json::from_str(&json).expect("deserialize fixture");
+
+        assert_eq!(event.event_id, "1783605120049-event001");
+        assert_eq!(event.workspace_id, "1783586870822-7352d");
+        assert_eq!(event.kind, "work.completed");
+        assert_eq!(
+            event.summary,
+            "Canonical WorkEvent fixture for Dev Track 0.1.3.4 Checkpoint A."
+        );
+        assert_eq!(event.timestamp, "2026-07-15T07:00:00Z");
+        assert_eq!(event.evidence.len(), 2);
+        assert_eq!(
+            event.evidence[0].evidence_ref,
+            EvidenceRef::FilePath("crates/openmesh-core/src/domain.rs".into())
+        );
+        assert_eq!(
+            event.evidence[0].observed_at.as_deref(),
+            Some("2026-07-15T07:00:01Z")
+        );
+        assert_eq!(
+            event.evidence[1].evidence_ref,
+            EvidenceRef::ProducerSignal("s-verify".into())
+        );
+        assert!(event.evidence[1].observed_at.is_none());
+        assert_eq!(event.corrects_event_id, None);
+        assert_eq!(event.sensitivity, Sensitivity::Private);
+        assert_eq!(event.protocol_version, WORK_EVENT_PROTOCOL_VERSION);
+    }
+
+    #[test]
+    fn work_event_missing_sensitivity_is_rejected() {
+        let json = r#"{
+            "eventId": "evt-1",
+            "workspaceId": "ws-1",
+            "kind": "work.completed",
+            "summary": "completed the task",
+            "timestamp": "2026-07-15T07:00:00Z",
+            "evidence": [
+                { "evidenceRef": { "type": "file-path", "value": "docs/a.md" } }
+            ],
+            "protocolVersion": "1.0"
+        }"#;
+        let result: Result<WorkEvent, _> = serde_json::from_str(json);
+        assert!(
+            result.is_err(),
+            "missing sensitivity must fail strict WorkEvent deserialization"
+        );
+    }
+
+    #[test]
+    fn work_event_corrects_event_id_round_trips() {
+        let mut event = sample_event();
+        event.corrects_event_id = Some("evt-original".into());
+        let json = serde_json::to_string(&event).expect("serialize");
+        let restored: WorkEvent = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(restored.corrects_event_id.as_deref(), Some("evt-original"));
+    }
+
+    #[test]
+    fn validate_event_semantics_accepts_valid_event() {
+        validate_event_semantics(&sample_event()).expect("valid event");
+    }
+
+    #[test]
+    fn validate_event_semantics_rejects_empty_evidence() {
+        let mut event = sample_event();
+        event.evidence.clear();
+        assert_eq!(
+            validate_event_semantics(&event),
+            Err(EventValidationError::EmptyEvidence)
+        );
+    }
+
+    #[test]
+    fn validate_event_semantics_rejects_invalid_timestamp() {
+        let mut event = sample_event();
+        event.timestamp = "2026-07-15T07:00:00-05:00".into();
+        assert!(matches!(
+            validate_event_semantics(&event),
+            Err(EventValidationError::InvalidTimestamp(_))
+        ));
+    }
+
+    #[test]
+    fn validate_event_semantics_rejects_wrong_protocol_version() {
+        let mut event = sample_event();
+        event.protocol_version = "99.0".into();
+        assert_eq!(
+            validate_event_semantics(&event),
+            Err(EventValidationError::WrongProtocolVersion {
+                expected: WORK_EVENT_PROTOCOL_VERSION.to_string(),
+                found: "99.0".into(),
+            })
+        );
+    }
+
+    #[test]
+    fn validate_event_semantics_rejects_invalid_observed_at() {
+        let mut event = sample_event();
+        event.evidence[0].observed_at = Some("2026-07-15T07:00:01-05:00".into());
+        assert!(matches!(
+            validate_event_semantics(&event),
+            Err(EventValidationError::InvalidObservedAt(_))
+        ));
+    }
+
+    /// WorkEvent deliberately has no `actor` field — attribution composition is
+    /// 0.1.3.5's job. Serialized JSON must not include one.
+    #[test]
+    fn work_event_has_no_actor_field_on_wire() {
+        let json = serde_json::to_string(&sample_event()).expect("serialize");
+        let value: serde_json::Value = serde_json::from_str(&json).expect("parse");
+        let obj = value.as_object().expect("object");
+        assert!(!obj.contains_key("actor"));
+    }
+
+    /// EvidenceRef remains pointer-only — no Git/Heli-specific variants yet.
+    #[test]
+    fn evidence_ref_has_only_deferred_safe_variants() {
+        let variants = [
+            EvidenceRef::FilePath("path".into()),
+            EvidenceRef::ProducerSignal("s-1".into()),
+        ];
+        for variant in variants {
+            let json = serde_json::to_string(&variant).expect("serialize");
+            let restored: EvidenceRef = serde_json::from_str(&json).expect("deserialize");
+            assert_eq!(restored, variant);
+        }
+        // Compile-time guard: only FilePath and ProducerSignal exist today.
+        match EvidenceRef::FilePath("x".into()) {
+            EvidenceRef::FilePath(_) | EvidenceRef::ProducerSignal(_) => {}
+        }
     }
 }

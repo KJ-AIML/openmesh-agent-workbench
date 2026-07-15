@@ -1752,3 +1752,52 @@ Next recommended track: 0.1.3.4, but **not yet unlocked** — push and a separat
 
 ### Final Automated Status: PASS — HUMAN ACCEPTED — COMMITTED — PUSH PENDING
 ### Dev Track 0.1.3.4 Unlocked: NO (whole track accepted PASS and feature-committed; push and the separate governance-commit gate must still complete before the next development track begins)
+
+## 2026-07-15 — Dev Track 0.1.3.4
+
+Status: PASS — HUMAN ACCEPTED — COMMIT PENDING
+Human final disposition date: 2026-07-15
+Checkpoints A–E: PASS. Checkpoint F: GREEN — accepted. Whole Dev Track 0.1.3.4: **PASS**.
+Full regression: GREEN. Real project data isolation: PASS. Architecture/dependency boundary: PASS. Product scope boundary: PASS.
+Branch: feat/openmesh-0.1.3
+Starting HEAD: `cf81e5d89d28ce034ed1ca76765aa875cdcd3141` (Dev Track 0.1.3.3 governance commit, unchanged — all 0.1.3.4 work uncommitted)
+Commit: NOT YET
+Push: NOT YET
+Release: NOT YET
+Objective: Canonical WorkEvent & Evidence Ledger — freeze the `WorkEvent` wire contract, implement project-scoped ledger persistence under `<project>/.openmesh/events/ledger/`, quarantine recovery for invalid records, append-only correction/supersession via `correctsEventId`, and a core-only public API boundary with no CLI/Tauri/Desktop/Reporter write surface. Executed the approved plan (`.heli-harness/state/reports/openmesh-0.1.3.4-execution-plan.md`) through Checkpoints A–F.
+What changed (accepted product diff, uncommitted):
+- `crates/openmesh-core/src/domain.rs`: `WorkEvent` + `EvidenceAttachment` wire contract; `validate_event_semantics`; required `sensitivity`; `observedAt` validation; `WORK_EVENT_PROTOCOL_VERSION = "1.0"`.
+- `crates/openmesh-core/src/events.rs` (new): ledger module — `append_event`, `get_event`, `list_events`, `list_ledger_entries`, `validate_ledger`, `classify_ledger_record`, `list_corrections_for`, `effective_summary`; atomic exclusive-create write; quarantine recovery; correction target validation.
+- `crates/openmesh-core/src/lib.rs`: `pub mod events` + module boundary documentation.
+- `crates/openmesh-core/tests/fixtures/events/valid.json` (new): canonical event fixture.
+- `crates/openmesh-core/tests/ledger_boundary.rs` (new): integration boundary guards + public API smoke test.
+- `crates/openmesh-cli`, `src-tauri/**`, frontend source tree, Reporter Skill, `Cargo.toml`, `Cargo.lock`: **zero diff**.
+Commands run and exact results (Checkpoint F, full regression, 2026-07-15):
+- `npm run verify` — exit 0. Test Files 22 passed (22). Tests **212 passed** (212). Type Errors: no errors.
+- `cargo fmt --check` — clean.
+- `cargo clippy --workspace -- -D warnings` — clean.
+- `cargo test --workspace` — exit 0. **232 passed, 0 failed, 1 ignored** (197 `openmesh-core` = 188 unit + 9 integration; 35 `openmesh-cli` executed; `dogfood_verify.rs`'s single test correctly remained `ignored`, not run). One pre-existing `ingestion.rs` test-module unused-import warning, predating this track, left untouched — out of scope.
+- `cargo check --workspace` — clean.
+- `cargo build --workspace` — clean.
+- `git diff --check` — clean (benign CRLF/LF autocrlf warnings on `domain.rs`/`lib.rs` only).
+Real-project data-isolation proof: active project buckets remained `pending` 0 / `processed` 5 / `quarantine` 0 / `duplicate` 0 throughout; historical ancestor project remained `0/0/0/0`; no `.openmesh/events/` directory created on either project; no WorkSignals created; no signal inbox mutation.
+Architecture/dependency boundary:
+- Workspace members unchanged (`openmesh`, `openmesh-core`, `openmesh-cli`).
+- Dependency direction unchanged: `openmesh-cli` → `openmesh-core`; `openmesh-core` does not depend on `openmesh-cli`.
+- `#[tauri::command]` count: `src-tauri/src/lib.rs` **52**, `src-tauri/src/main.rs` 0 — unchanged.
+- Manifest versions and `Cargo.lock`: unchanged — no new third-party dependencies.
+Product scope boundary:
+- No CLI WorkEvent command; no Tauri WorkEvent command; no Desktop WorkEvent UI/hooks; Reporter Skill unchanged.
+- No promotion engine, correlation engine, suppression policy, signal-to-event processing, Current State projection, or Catch Me Up.
+- `EvidenceRef` remains pointer-only (`FilePath`, `ProducerSignal`); Git/Heli variants not introduced.
+- Dev Track 0.1.3.5 not started.
+**Final human acceptance (2026-07-15)**: Human/Main-Brain issued the final disposition — Dev Track 0.1.3.4 is accepted as **PASS**. Checkpoints A–F are all accepted (A–E PASS, F GREEN). This disposition does not authorize commit, push, release, or 0.1.3.5 work. A separate commit gate is required next.
+Known limitations:
+- Full checkpoint-by-checkpoint detail is in `.heli-harness/state/reports/openmesh-0.1.3.4-implementation-report.md`.
+- Ledger write surface is core-only (`openmesh_core::events::append_event`); no CLI/Tauri/Desktop producer path yet — deferred to later tracks.
+- `actor` field on WorkEvent deferred to 0.1.3.5 promotion composition.
+- Git/Heli `EvidenceRef` variants deferred to 0.1.3.6.
+Next recommended action: separate commit gate — final diff review and commit preparation.
+
+### Final Automated Status: PASS — HUMAN ACCEPTED — COMMIT PENDING
+### Dev Track 0.1.3.5 Unlocked: NO (whole track accepted PASS; commit gate must complete before the next development track begins)

@@ -1,0 +1,24 @@
+{
+  "eventId": "1783605120049-event001",
+  "workspaceId": "1783586870822-7352d",
+  "kind": "work.completed",
+  "summary": "Canonical WorkEvent fixture for Dev Track 0.1.3.4 Checkpoint A.",
+  "timestamp": "2026-07-15T07:00:00Z",
+  "evidence": [
+    {
+      "evidenceRef": {
+        "type": "file-path",
+        "value": "crates/openmesh-core/src/domain.rs"
+      },
+      "observedAt": "2026-07-15T07:00:01Z"
+    },
+    {
+      "evidenceRef": {
+        "type": "producer-signal",
+        "value": "s-verify"
+      }
+    }
+  ],
+  "protocolVersion": "1.0",
+  "sensitivity": "private"
+}
