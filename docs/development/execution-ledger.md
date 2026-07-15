@@ -1755,17 +1755,18 @@ Next recommended track: 0.1.3.4, but **not yet unlocked** — push and a separat
 
 ## 2026-07-15 — Dev Track 0.1.3.4
 
-Status: PASS — HUMAN ACCEPTED — COMMIT PENDING
+Status: PASS — HUMAN ACCEPTED — COMMITTED — PUSH PENDING
 Human final disposition date: 2026-07-15
 Checkpoints A–E: PASS. Checkpoint F: GREEN — accepted. Whole Dev Track 0.1.3.4: **PASS**.
 Full regression: GREEN. Real project data isolation: PASS. Architecture/dependency boundary: PASS. Product scope boundary: PASS.
 Branch: feat/openmesh-0.1.3
-Starting HEAD: `cf81e5d89d28ce034ed1ca76765aa875cdcd3141` (Dev Track 0.1.3.3 governance commit, unchanged — all 0.1.3.4 work uncommitted)
-Commit: NOT YET
+Starting HEAD: `cf81e5d89d28ce034ed1ca76765aa875cdcd3141` (Dev Track 0.1.3.3 governance commit)
+Feature commit: `06f8dcbbd7d7ca1d77f722e7e38ea27ee49c1c04` (subject: `feat(core): add WorkEvent evidence ledger`; parent `cf81e5d`; verified — 3 modified/3 added/0 removed, exact accepted inventory; `git diff HEAD^ HEAD --check` clean; post-commit worktree clean)
+Commit verification: PASS
 Push: NOT YET
 Release: NOT YET
 Objective: Canonical WorkEvent & Evidence Ledger — freeze the `WorkEvent` wire contract, implement project-scoped ledger persistence under `<project>/.openmesh/events/ledger/`, quarantine recovery for invalid records, append-only correction/supersession via `correctsEventId`, and a core-only public API boundary with no CLI/Tauri/Desktop/Reporter write surface. Executed the approved plan (`.heli-harness/state/reports/openmesh-0.1.3.4-execution-plan.md`) through Checkpoints A–F.
-What changed (accepted product diff, uncommitted):
+What changed (accepted product diff, committed in feature commit `06f8dcb`):
 - `crates/openmesh-core/src/domain.rs`: `WorkEvent` + `EvidenceAttachment` wire contract; `validate_event_semantics`; required `sensitivity`; `observedAt` validation; `WORK_EVENT_PROTOCOL_VERSION = "1.0"`.
 - `crates/openmesh-core/src/events.rs` (new): ledger module — `append_event`, `get_event`, `list_events`, `list_ledger_entries`, `validate_ledger`, `classify_ledger_record`, `list_corrections_for`, `effective_summary`; atomic exclusive-create write; quarantine recovery; correction target validation.
 - `crates/openmesh-core/src/lib.rs`: `pub mod events` + module boundary documentation.
@@ -1791,13 +1792,13 @@ Product scope boundary:
 - No promotion engine, correlation engine, suppression policy, signal-to-event processing, Current State projection, or Catch Me Up.
 - `EvidenceRef` remains pointer-only (`FilePath`, `ProducerSignal`); Git/Heli variants not introduced.
 - Dev Track 0.1.3.5 not started.
-**Final human acceptance (2026-07-15)**: Human/Main-Brain issued the final disposition — Dev Track 0.1.3.4 is accepted as **PASS**. Checkpoints A–F are all accepted (A–E PASS, F GREEN). This disposition does not authorize commit, push, release, or 0.1.3.5 work. A separate commit gate is required next.
+**Final human acceptance (2026-07-15)**: Human/Main-Brain issued the final disposition — Dev Track 0.1.3.4 is accepted as **PASS**. Checkpoints A–F are all accepted (A–E PASS, F GREEN). Feature commit `06f8dcbbd7d7ca1d77f722e7e38ea27ee49c1c04` created and verified (parent `cf81e5d89d28ce034ed1ca76765aa875cdcd3141`; 3 modified/3 added/0 removed; exact accepted inventory; committed diff check clean; post-commit worktree clean). Push has **not** occurred. A separate governance commit is required before push.
 Known limitations:
 - Full checkpoint-by-checkpoint detail is in `.heli-harness/state/reports/openmesh-0.1.3.4-implementation-report.md`.
 - Ledger write surface is core-only (`openmesh_core::events::append_event`); no CLI/Tauri/Desktop producer path yet — deferred to later tracks.
 - `actor` field on WorkEvent deferred to 0.1.3.5 promotion composition.
 - Git/Heli `EvidenceRef` variants deferred to 0.1.3.6.
-Next recommended action: separate commit gate — final diff review and commit preparation.
+Next recommended action: separate governance commit — review and commit the execution-ledger post-commit transition, then a separate push decision.
 
-### Final Automated Status: PASS — HUMAN ACCEPTED — COMMIT PENDING
-### Dev Track 0.1.3.5 Unlocked: NO (whole track accepted PASS; commit gate must complete before the next development track begins)
+### Final Automated Status: PASS — HUMAN ACCEPTED — COMMITTED — PUSH PENDING
+### Dev Track 0.1.3.5 Unlocked: NO (whole track accepted PASS and feature-committed; governance commit and push must still complete before the next development track begins)
