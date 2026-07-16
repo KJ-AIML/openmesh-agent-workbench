@@ -1861,4 +1861,56 @@ Known limitations:
 Next recommended action: separate push decision.
 
 ### Final Automated Status: PASS — HUMAN ACCEPTED — COMMITTED — PUSH PENDING
-### Dev Track 0.1.3.6 Unlocked: NO (whole track accepted PASS and feature-committed; governance committed; push must still complete before the next development track begins)
+### Dev Track 0.1.3.6 Unlocked: NO (whole track accepted PASS and feature-committed; governance commit and push must still complete before the next development track begins)
+
+## 2026-07-16 — Dev Track 0.1.3.6
+
+Status: PASS — HUMAN ACCEPTED — PUBLISHED — CLOSED
+Human final disposition date: 2026-07-16
+Checkpoints A–G: PASS (Checkpoint B: PASS WITH FIXES). Whole Dev Track 0.1.3.6: **PASS**.
+Full regression: GREEN. Real project data isolation: PASS. Architecture/dependency boundary: PASS. Product scope boundary: PASS.
+Branch: feat/openmesh-0.1.3
+Starting HEAD: `2ad3a48b04b15c64b82e2bc7c1db36b41503c571` (Dev Track 0.1.3.5 governance commit)
+Feature commit: `f405dce28e57301055a58c2639bd39d1fc6436c7` (subject: `feat(core): add local evidence producers`; parent `2ad3a48`; verified — 6 modified/12 added/0 removed, exact accepted inventory; `git diff HEAD^ HEAD --check` clean; unwanted Cursor `Co-authored-by` trailer removed by amend from `5f71386`; post-amend worktree clean)
+Commit verification: PASS
+Push: PENDING (governance commit records publish transition)
+Release: NOT YET
+Objective: Real Local Evidence Producers — Git + Heli — `EvidenceRef::GitState`, WorkSignal protocol `1.1` compatibility for Git evidence, pure producer contracts, read-only Git evidence reader via system `git` subprocess, read-only Heli harness evidence reader, Git/Heli WorkSignal composition into `pending/`, `openmesh-cli collect git|heli`, and Reporter + Git + Heli cross-producer correlation fixtures. Executed the approved plan (`.heli-harness/state/reports/openmesh-0.1.3.6-execution-plan.md`) through Checkpoints A–G.
+What changed (accepted product diff, committed in feature commit `f405dce`):
+- `crates/openmesh-core/src/domain.rs`: `EvidenceRef::GitState`, WorkSignal protocol `1.1` support, pure producer contract types (`GitSnapshot`, `HeliSnapshot`, producer result envelopes), validation helpers.
+- `crates/openmesh-core/src/signals.rs`: protocol `1.0`/`1.1` classification and semantic validation integration.
+- `crates/openmesh-core/src/lib.rs`: export `producers` module.
+- `crates/openmesh-core/src/promotion.rs`: 1-line `GitState` match arm for compile compatibility (no promotion logic change).
+- `crates/openmesh-core/src/producers/mod.rs`, `git.rs`, `heli.rs`, `compose.rs` (new): read-only Git/Heli evidence readers; `collect_git_signal` / `collect_heli_signal` composition into `pending/`.
+- `crates/openmesh-cli/src/collect.rs` (new), `crates/openmesh-cli/src/main.rs`: `openmesh-cli collect git|heli` with project resolution and optional correlation hint.
+- `crates/openmesh-core/tests/producer_contracts.rs`, `git_evidence_reader.rs`, `heli_evidence.rs`, `producer_compose.rs`, `cross_producer_correlation.rs` (new); `ledger_boundary.rs` updated; `fixtures/producers/git-state-valid.json` (new); `openmesh-cli/tests/collect.rs` (new).
+- `src-tauri/**`, frontend source tree, Reporter Skill, `Cargo.toml`, `Cargo.lock`: **zero diff**.
+Accepted deviation:
+- Plan §3.7 cited `ActorRef::Native`; implementation uses `ActorRef::Unknown` because `ActorRef` has no `Native` variant — no fake actor identity introduced.
+Commands run and exact results (Checkpoint G + fmt patch + commit gate, 2026-07-16):
+- `cargo fmt --check` — PASS (after single `cargo fmt` patch to `producer_compose.rs`).
+- `cargo test --workspace` — exit 0, PASS.
+- `cargo clippy -p openmesh-core -- -D warnings` — exit 0, PASS.
+- `cargo check -p openmesh-cli` — exit 0, PASS (no warnings).
+- `npm run verify` — exit 0. Test Files 22 passed (22). Tests **212 passed** (212). Type Errors: no errors.
+- `git diff --check` — clean (benign CRLF/LF autocrlf warnings only).
+Real-project data-isolation proof: active project buckets remained `pending` 0 / `processed` 5 / `quarantine` 0 / `duplicate` 0 throughout; no `.openmesh/events/` directory created; no `.openmesh/events/promotion` directory created; no WorkSignals created in real active project; no WorkEvents created in real active project; all producer/CLI test writes were temp-project-only.
+Architecture/dependency boundary:
+- Workspace members unchanged (`openmesh`, `openmesh-core`, `openmesh-cli`).
+- `#[tauri::command]` count: `src-tauri/src/lib.rs` **52** — unchanged.
+- `Cargo.toml` / `Cargo.lock`: unchanged — no new third-party dependencies; no `git2` in `openmesh-core`.
+Product scope boundary:
+- No Current State projection, Catch-up, or projection output.
+- No promotion orchestration (`promote_processed_signals`, inbox scanning, auto-apply).
+- No Tauri/Desktop producer commands; Reporter Skill unchanged.
+- No GitHub/GitLab API; no LLM/AXGA runtime; no daemon/watcher/background loop.
+- Dev Track 0.1.3.7 not started.
+**Final human acceptance (2026-07-16)**: Human/Main-Brain issued the final disposition — Dev Track 0.1.3.6 is accepted as **PASS**. Checkpoints A–G are all accepted (B: PASS WITH FIXES). Feature commit `f405dce28e57301055a58c2639bd39d1fc6436c7` created and verified (parent `2ad3a48b04b15c64b82e2bc7c1db36b41503c571`; 6 modified/12 added/0 removed; exact accepted inventory; committed diff check clean; unwanted Cursor `Co-authored-by` trailer removed by amend; post-commit worktree clean). Full regression was GREEN at commit time. Governance commit records publish transition; push follows governance commit.
+Known limitations:
+- Full checkpoint-by-checkpoint detail is in `.heli-harness/state/reports/openmesh-0.1.3.6-implementation-report.md`.
+- Git porcelain v1 parsing (not `-z` migration); Heli optional report surface is latest `openmesh-*.md` by mtime only.
+- Promotion orchestration and Current State / Catch-up remain deferred to later tracks.
+Next recommended action: Dev Track 0.1.3.7 planning may begin only after this governance commit is pushed and remote state verified.
+
+### Final Automated Status: PASS — HUMAN ACCEPTED — PUBLISHED — CLOSED
+### Dev Track 0.1.3.7 Unlocked: NO (governance commit must be pushed and remote state verified before the next development track begins)
