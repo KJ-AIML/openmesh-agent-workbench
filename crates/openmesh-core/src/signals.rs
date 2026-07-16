@@ -9,7 +9,9 @@
 // duplicate identity, and replay are Checkpoints C/D — not implemented here.
 // ============================================================================
 
-use crate::domain::{WorkSignal, WORK_SIGNAL_PROTOCOL_VERSION};
+use crate::domain::{
+    is_supported_work_signal_protocol, validate_work_signal_semantics, WorkSignal,
+};
 use crate::storage::{get_project_dir, read_project, Project};
 use std::fs;
 use std::fs::OpenOptions;
@@ -140,6 +142,9 @@ pub fn validate_semantics(signal: &WorkSignal) -> Result<(), SignalError> {
     }
 
     validate_timestamp(&signal.timestamp)?;
+
+    validate_work_signal_semantics(signal)
+        .map_err(|e| SignalError::InvalidSemantics(e.to_string()))?;
 
     Ok(())
 }
@@ -389,7 +394,7 @@ fn classify_pre_identity(
         .get("protocolVersion")
         .and_then(|v| v.as_str())
         .ok_or_else(|| Classification::Malformed("missing protocolVersion".into()))?;
-    if protocol_version != WORK_SIGNAL_PROTOCOL_VERSION {
+    if !is_supported_work_signal_protocol(protocol_version) {
         return Err(Classification::UnsupportedVersion(
             protocol_version.to_string(),
         ));

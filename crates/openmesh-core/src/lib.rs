@@ -30,6 +30,18 @@
 // - `intelligence` — proposal-only `ContinuityIntelligence`, hardened `NoopContinuityIntelligence`
 // - `promotion` — `resolve_ambiguous_with_intelligence`, audit/event consistency guards
 //
+// Dev Track 0.1.3.6 Checkpoint A — `EvidenceRef::GitState`, WorkSignal protocol `1.1`,
+// and pure producer contract types in `domain` (no producer I/O yet).
+//
+// Dev Track 0.1.3.6 Checkpoint B — read-only Git evidence reader:
+// - `producers::git` — system `git` subprocess snapshot (`read_git_snapshot`)
+//
+// Dev Track 0.1.3.6 Checkpoint C — read-only Heli harness reader:
+// - `producers::heli` — bounded `.heli-harness/state` snapshot (`read_heli_snapshot`)
+//
+// Dev Track 0.1.3.6 Checkpoint D — producer WorkSignal composition:
+// - `producers::compose` — `collect_git_signal` / `collect_heli_signal`
+//
 // Ledger APIs are core-only in this track. CLI, Tauri, and Desktop do not expose
 // WorkEvent ledger commands yet.
 
@@ -41,6 +53,7 @@ pub mod events;
 pub mod index;
 pub mod ingestion;
 pub mod intelligence;
+pub mod producers;
 pub mod promotion;
 pub mod signals;
 pub mod storage;

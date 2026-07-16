@@ -204,7 +204,7 @@ fn signals_module_does_not_append_work_events() {
 }
 
 #[test]
-fn evidence_ref_variants_remain_file_path_and_producer_signal_only() {
+fn evidence_ref_variants_include_git_state_without_heli_variant() {
     let domain_rs = include_str!("../src/domain.rs");
     let enum_body = domain_rs
         .split("pub enum EvidenceRef")
@@ -213,8 +213,10 @@ fn evidence_ref_variants_remain_file_path_and_producer_signal_only() {
         .expect("EvidenceRef enum");
     assert!(enum_body.contains("FilePath"));
     assert!(enum_body.contains("ProducerSignal"));
-    assert!(!enum_body.contains("Git"));
-    assert!(!enum_body.contains("Heli"));
+    assert!(enum_body.contains("GitState"));
+    assert!(!enum_body.contains("GitRef"));
+    assert!(!enum_body.contains("HeliRef"));
+    assert!(!enum_body.contains("HeliState"));
 }
 
 #[test]

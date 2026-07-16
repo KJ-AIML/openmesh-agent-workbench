@@ -655,7 +655,7 @@ fn build_proposed_composition(
         .iter()
         .filter_map(|ev| match ev {
             EvidenceRef::FilePath(path) => Some(path.clone()),
-            EvidenceRef::ProducerSignal(_) => None,
+            EvidenceRef::ProducerSignal(_) | EvidenceRef::GitState(_) => None,
         })
         .collect();
 

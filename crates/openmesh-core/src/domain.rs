@@ -9,7 +9,8 @@
 // execution plan's section 6 and Dev Track 0.1.3.1's non-goals):
 //   - CurrentStateProjection (owned by 0.1.3.7)
 //   - PendingAttention (owned by 0.1.3.7)
-//   - a Git-specific EvidenceRef variant (owned by 0.1.3.6)
+// Dev Track 0.1.3.6 Checkpoint A — `EvidenceRef::GitState` (WEC-33) and WorkSignal
+// protocol `1.1` compatibility for Git evidence producers.
 //
 // Dev Track 0.1.3.4 Checkpoint A hardens the serializable WorkEvent wire shape
 // and EvidenceAttachment model. Ledger persistence is Checkpoint B.
@@ -23,6 +24,30 @@ use serde::{Deserialize, Serialize};
 /// ProducerRef, ActorRef, EvidenceRef, or Sensitivity) must bump this constant —
 /// see the approved 0.1.3.2 execution plan §3.10/§10 for the compatibility rule.
 pub const WORK_SIGNAL_PROTOCOL_VERSION: &str = "1.0";
+
+/// WorkSignal wire schema when `EvidenceRef::GitState` is present (Dev Track 0.1.3.6).
+pub const WORK_SIGNAL_PROTOCOL_VERSION_WITH_GIT_EVIDENCE: &str = "1.1";
+
+/// Frozen bound: `GitState.repo_id` maximum length (approved 0.1.3.6 plan §3.1).
+pub const MAX_GIT_STATE_REPO_ID_BYTES: usize = 32;
+/// Frozen bound: `GitState.branch` maximum length.
+pub const MAX_GIT_STATE_BRANCH_BYTES: usize = 256;
+/// Frozen bound: `GitState.head` — full Git SHA-1 hex length.
+pub const MAX_GIT_STATE_HEAD_BYTES: usize = 40;
+/// Frozen bound: each repo-relative path in `GitState.changed_paths`.
+pub const MAX_GIT_STATE_PATH_BYTES: usize = 512;
+/// Frozen bound: number of entries in `GitState.changed_paths`.
+pub const MAX_GIT_STATE_CHANGED_PATHS: usize = 64;
+/// Frozen bound: optional `GitState.base_ref` length.
+pub const MAX_GIT_STATE_BASE_REF_BYTES: usize = 256;
+/// Frozen bound: optional `GitState.worktree_root` length.
+pub const MAX_GIT_STATE_WORKTREE_ROOT_BYTES: usize = 1024;
+
+/// Returns true when `version` is a supported on-disk WorkSignal protocol.
+pub fn is_supported_work_signal_protocol(version: &str) -> bool {
+    version == WORK_SIGNAL_PROTOCOL_VERSION
+        || version == WORK_SIGNAL_PROTOCOL_VERSION_WITH_GIT_EVIDENCE
+}
 
 /// Wire-schema version for the Canonical WorkEvent protocol (Dev Track 0.1.3.4).
 pub const WORK_EVENT_PROTOCOL_VERSION: &str = "1.0";
@@ -85,6 +110,254 @@ pub enum EvidenceRef {
     FilePath(String),
     /// A reference to another WorkSignal by its `signal_id` (corroboration).
     ProducerSignal(String),
+    /// Bounded local Git repository snapshot metadata (WEC-33, Dev Track 0.1.3.6).
+    GitState(GitState),
+}
+
+/// Pointer-only Git evidence — metadata about local repository state, never full
+/// source code or patch bodies (approved 0.1.3.6 plan §3.1).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct GitState {
+    pub repo_id: String,
+    pub branch: String,
+    pub head: String,
+    pub dirty: bool,
+    pub staged_count: u32,
+    pub unstaged_count: u32,
+    pub untracked_count: u32,
+    pub changed_paths: Vec<String>,
+    pub observed_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ahead: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub behind: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub base_ref: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub worktree_root: Option<String>,
+}
+
+/// Pure producer contract — local Git snapshot before WorkSignal composition (Checkpoint B).
+pub type GitSnapshot = GitState;
+
+/// Pure producer contract — bounded Heli harness state excerpt (Checkpoint C).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HeliSnapshot {
+    pub current_task_excerpt: Option<String>,
+    pub decisions_tail_excerpt: Option<String>,
+    pub latest_report_path: Option<String>,
+    pub observed_at: String,
+}
+
+/// Why a producer chose not to emit a WorkSignal (no I/O).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProducerSkipReason {
+    HeliAbsent,
+    GitNotRepository,
+    GitUnavailable,
+}
+
+/// Git producer failure classification (no I/O).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GitProducerError {
+    GitNotAvailable,
+    NotARepository,
+    ReadFailed(String),
+}
+
+/// Heli producer failure classification (no I/O).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HeliProducerError {
+    ReadFailed(String),
+}
+
+/// Pure producer result envelope for Git (Checkpoint B).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum GitProducerResult {
+    Snapshot(GitSnapshot),
+    Skip(ProducerSkipReason),
+    Err(GitProducerError),
+}
+
+/// Pure producer result envelope for Heli (Checkpoint C).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HeliProducerResult {
+    Snapshot(HeliSnapshot),
+    Skip(ProducerSkipReason),
+    Err(HeliProducerError),
+}
+
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+pub enum SignalValidationError {
+    #[error("unsupported protocol_version {found}; accepted versions are 1.0 and 1.1")]
+    UnsupportedProtocolVersion { found: String },
+    #[error("protocol_version 1.0 must not include git-state evidence")]
+    Protocol10WithGitState,
+    #[error("invalid evidence: {0}")]
+    InvalidEvidence(String),
+    #[error("invalid git-state evidence: {0}")]
+    InvalidGitState(String),
+}
+
+/// Returns true when `signal` carries any `EvidenceRef::GitState` attachment.
+pub fn signal_has_git_state_evidence(signal: &WorkSignal) -> bool {
+    signal
+        .evidence_refs
+        .iter()
+        .any(|ev| matches!(ev, EvidenceRef::GitState(_)))
+}
+
+/// Deterministically bound `changed_paths` to the frozen maximum.
+pub fn bound_git_changed_paths(mut paths: Vec<String>) -> Vec<String> {
+    paths.sort();
+    paths.truncate(MAX_GIT_STATE_CHANGED_PATHS);
+    paths
+}
+
+/// Validate one `EvidenceRef`, including nested `GitState` when present.
+pub fn validate_evidence_ref(evidence: &EvidenceRef) -> Result<(), SignalValidationError> {
+    match evidence {
+        EvidenceRef::FilePath(path) => validate_repo_relative_path(path, "file-path")
+            .map_err(|msg| SignalValidationError::InvalidEvidence(format!("file-path: {msg}"))),
+        EvidenceRef::ProducerSignal(id) => {
+            if id.trim().is_empty() {
+                return Err(SignalValidationError::InvalidEvidence(
+                    "producer-signal id is empty".into(),
+                ));
+            }
+            if id.len() > MAX_EVENT_ID_BYTES {
+                return Err(SignalValidationError::InvalidEvidence(format!(
+                    "producer-signal id exceeds {MAX_EVENT_ID_BYTES} bytes"
+                )));
+            }
+            Ok(())
+        }
+        EvidenceRef::GitState(state) => validate_git_state(state),
+    }
+}
+
+/// Validate WorkSignal protocol/evidence compatibility and every evidence ref.
+pub fn validate_work_signal_semantics(signal: &WorkSignal) -> Result<(), SignalValidationError> {
+    validate_work_signal_protocol_evidence_compatibility(signal)?;
+    for evidence in &signal.evidence_refs {
+        validate_evidence_ref(evidence)?;
+    }
+    Ok(())
+}
+
+fn validate_work_signal_protocol_evidence_compatibility(
+    signal: &WorkSignal,
+) -> Result<(), SignalValidationError> {
+    let has_git_state = signal_has_git_state_evidence(signal);
+    match signal.protocol_version.as_str() {
+        WORK_SIGNAL_PROTOCOL_VERSION => {
+            if has_git_state {
+                Err(SignalValidationError::Protocol10WithGitState)
+            } else {
+                Ok(())
+            }
+        }
+        WORK_SIGNAL_PROTOCOL_VERSION_WITH_GIT_EVIDENCE => {
+            if has_git_state {
+                Ok(())
+            } else {
+                // 1.1 without git-state is allowed for forward compatibility.
+                Ok(())
+            }
+        }
+        found => Err(SignalValidationError::UnsupportedProtocolVersion {
+            found: found.to_string(),
+        }),
+    }
+}
+
+/// Validate a `GitState` evidence payload.
+pub fn validate_git_state(state: &GitState) -> Result<(), SignalValidationError> {
+    if state.repo_id.trim().is_empty() {
+        return Err(SignalValidationError::InvalidGitState(
+            "repo_id is empty".into(),
+        ));
+    }
+    if state.repo_id.len() > MAX_GIT_STATE_REPO_ID_BYTES {
+        return Err(SignalValidationError::InvalidGitState(format!(
+            "repo_id exceeds {MAX_GIT_STATE_REPO_ID_BYTES} bytes"
+        )));
+    }
+    if !state.repo_id.starts_with("fnv1a-") {
+        return Err(SignalValidationError::InvalidGitState(
+            "repo_id must start with fnv1a-".into(),
+        ));
+    }
+    if !state.repo_id[6..].chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(SignalValidationError::InvalidGitState(
+            "repo_id suffix must be lowercase hex".into(),
+        ));
+    }
+
+    if state.branch.len() > MAX_GIT_STATE_BRANCH_BYTES {
+        return Err(SignalValidationError::InvalidGitState(format!(
+            "branch exceeds {MAX_GIT_STATE_BRANCH_BYTES} bytes"
+        )));
+    }
+
+    if state.head.len() != MAX_GIT_STATE_HEAD_BYTES {
+        return Err(SignalValidationError::InvalidGitState(format!(
+            "head must be exactly {MAX_GIT_STATE_HEAD_BYTES} hex characters"
+        )));
+    }
+    if !state.head.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err(SignalValidationError::InvalidGitState(
+            "head must be hexadecimal".into(),
+        ));
+    }
+
+    if state.changed_paths.len() > MAX_GIT_STATE_CHANGED_PATHS {
+        return Err(SignalValidationError::InvalidGitState(format!(
+            "changed_paths exceeds {MAX_GIT_STATE_CHANGED_PATHS} entries"
+        )));
+    }
+    for path in &state.changed_paths {
+        validate_repo_relative_path(path, "changed_paths entry").map_err(|msg| {
+            SignalValidationError::InvalidGitState(format!("changed_paths: {msg}"))
+        })?;
+    }
+
+    validate_utc_timestamp(&state.observed_at)
+        .map_err(|msg| SignalValidationError::InvalidGitState(format!("observed_at: {msg}")))?;
+
+    if let Some(base_ref) = &state.base_ref {
+        if base_ref.len() > MAX_GIT_STATE_BASE_REF_BYTES {
+            return Err(SignalValidationError::InvalidGitState(format!(
+                "base_ref exceeds {MAX_GIT_STATE_BASE_REF_BYTES} bytes"
+            )));
+        }
+    }
+    if let Some(root) = &state.worktree_root {
+        if root.len() > MAX_GIT_STATE_WORKTREE_ROOT_BYTES {
+            return Err(SignalValidationError::InvalidGitState(format!(
+                "worktree_root exceeds {MAX_GIT_STATE_WORKTREE_ROOT_BYTES} bytes"
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_repo_relative_path(path: &str, label: &str) -> Result<(), String> {
+    if path.trim().is_empty() {
+        return Err(format!("{label} is empty"));
+    }
+    if path.len() > MAX_GIT_STATE_PATH_BYTES {
+        return Err(format!("{label} exceeds {MAX_GIT_STATE_PATH_BYTES} bytes"));
+    }
+    if path.contains('\\') {
+        return Err(format!("{label} must use forward slashes"));
+    }
+    if path.starts_with('/') || path.starts_with("../") || path.contains("/../") {
+        return Err(format!("{label} must be repo-relative"));
+    }
+    Ok(())
 }
 
 /// Evidence pointer plus optional observation metadata for a canonical WorkEvent.
@@ -532,17 +805,35 @@ mod tests {
     }
 
     // Generic structural test (not a Classification Pack case). WEC-33
-    // (Git-state evidence representability) remains Category B / deferred to
-    // 0.1.3.6 — this test only exercises the two variants that already exist
-    // today (`FilePath`, `ProducerSignal`); it makes no claim about Git,
-    // uncommitted, or unpushed state representability.
+    // (Git-state evidence representability) is implemented in Dev Track 0.1.3.6
+    // Checkpoint A — see `producer_contracts.rs`.
     #[test]
     fn evidence_ref_variants_construct_and_compare() {
         let a = EvidenceRef::FilePath("docs/overview.md".into());
         let b = EvidenceRef::FilePath("docs/overview.md".into());
         let c = EvidenceRef::ProducerSignal("s-1".into());
+        let d = EvidenceRef::GitState(sample_git_state());
         assert_eq!(a, b);
         assert_ne!(a, c);
+        assert_ne!(c, d);
+    }
+
+    fn sample_git_state() -> GitState {
+        GitState {
+            repo_id: "fnv1a-abc123".into(),
+            branch: "main".into(),
+            head: "2ad3a48b04b15c64b82e2bc7c1db36b41503c571".into(),
+            dirty: true,
+            staged_count: 0,
+            unstaged_count: 1,
+            untracked_count: 0,
+            changed_paths: vec!["crates/openmesh-core/src/domain.rs".into()],
+            observed_at: "2026-07-16T04:30:00Z".into(),
+            ahead: None,
+            behind: None,
+            base_ref: None,
+            worktree_root: None,
+        }
     }
 
     // ------------------------------------------------------------------
@@ -612,6 +903,7 @@ mod tests {
         for e in [
             EvidenceRef::FilePath("docs/overview.md".into()),
             EvidenceRef::ProducerSignal("s-1".into()),
+            EvidenceRef::GitState(sample_git_state()),
         ] {
             let json = serde_json::to_string(&e).expect("serialize");
             let back: EvidenceRef = serde_json::from_str(&json).expect("deserialize");
@@ -888,21 +1180,24 @@ mod tests {
         assert!(!obj.contains_key("actor"));
     }
 
-    /// EvidenceRef remains pointer-only — no Git/Heli-specific variants yet.
+    /// EvidenceRef includes pointer-only variants — `FilePath`, `ProducerSignal`,
+    /// and bounded `GitState` metadata (no source/diff bodies).
     #[test]
-    fn evidence_ref_has_only_deferred_safe_variants() {
+    fn evidence_ref_includes_git_state_variant() {
         let variants = [
             EvidenceRef::FilePath("path".into()),
             EvidenceRef::ProducerSignal("s-1".into()),
+            EvidenceRef::GitState(sample_git_state()),
         ];
         for variant in variants {
             let json = serde_json::to_string(&variant).expect("serialize");
             let restored: EvidenceRef = serde_json::from_str(&json).expect("deserialize");
             assert_eq!(restored, variant);
         }
-        // Compile-time guard: only FilePath and ProducerSignal exist today.
-        match EvidenceRef::FilePath("x".into()) {
-            EvidenceRef::FilePath(_) | EvidenceRef::ProducerSignal(_) => {}
+        match EvidenceRef::GitState(sample_git_state()) {
+            EvidenceRef::FilePath(_)
+            | EvidenceRef::ProducerSignal(_)
+            | EvidenceRef::GitState(_) => {}
         }
     }
 }

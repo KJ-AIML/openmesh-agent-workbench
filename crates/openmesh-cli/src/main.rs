@@ -10,6 +10,7 @@
 // `write_signal` call happens yet (Checkpoints B/C).
 // ============================================================================
 
+mod collect;
 mod output;
 mod project;
 mod signal;
@@ -32,6 +33,17 @@ pub enum Commands {
     /// Report a WorkSignal of a specific semantic kind.
     #[command(subcommand)]
     Signal(SignalKindCommand),
+    /// Collect local evidence into the Signal Inbox (Dev Track 0.1.3.6).
+    #[command(subcommand)]
+    Collect(CollectCommand),
+}
+
+#[derive(Subcommand, Debug)]
+pub enum CollectCommand {
+    /// Collect Git repository state into a WorkSignal.
+    Git(collect::CollectArgs),
+    /// Collect Heli harness state into a WorkSignal.
+    Heli(collect::CollectArgs),
 }
 
 /// One subcommand per `WorkSignalKind` variant (kebab-case, mirroring the
@@ -191,7 +203,17 @@ fn main() {
 
 fn run() -> i32 {
     let cli = Cli::parse();
-    let Commands::Signal(kind) = cli.command;
+    let cwd = std::env::current_dir().expect("failed to read current working directory");
+    match cli.command {
+        Commands::Signal(kind) => run_signal(kind),
+        Commands::Collect(cmd) => match cmd {
+            CollectCommand::Git(args) => collect::run_collect_git(&args, &cwd),
+            CollectCommand::Heli(args) => collect::run_collect_heli(&args, &cwd),
+        },
+    }
+}
+
+fn run_signal(kind: SignalKindCommand) -> i32 {
     let args = kind.args();
     let json_mode = args.json;
 

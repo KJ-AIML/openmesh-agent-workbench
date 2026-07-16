@@ -1,0 +1,17 @@
+{
+  "type": "git-state",
+  "value": {
+    "repoId": "fnv1a-2ad3a48b04b15c64b82e2bc",
+    "branch": "feat/openmesh-0.1.3",
+    "head": "2ad3a48b04b15c64b82e2bc7c1db36b41503c571",
+    "dirty": true,
+    "stagedCount": 0,
+    "unstagedCount": 1,
+    "untrackedCount": 0,
+    "changedPaths": ["crates/openmesh-core/src/domain.rs"],
+    "observedAt": "2026-07-16T04:30:00Z",
+    "ahead": 0,
+    "behind": 0,
+    "baseRef": "origin/feat/openmesh-0.1.3"
+  }
+}
