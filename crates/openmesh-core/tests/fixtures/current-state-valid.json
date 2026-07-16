@@ -1,0 +1,52 @@
+{
+  "workspaceId": "1783586870822-7352d",
+  "generatedAt": "2026-07-16T10:00:00Z",
+  "protocolVersion": "1.0",
+  "sections": {
+    "completed": [],
+    "inProgress": [
+      {
+        "id": "signal:1783605120049-2f76d48",
+        "summary": "Git: branch=feat/openmesh-0.1.3 head=2ad3a48 dirty=true changed=1",
+        "kind": "progress",
+        "source": "processed-signal",
+        "sourceId": "1783605120049-2f76d48",
+        "producer": "git",
+        "timestamp": "2026-07-16T09:30:00Z",
+        "evidenceRefs": [
+          {
+            "type": "file-path",
+            "value": "crates/openmesh-core/src/domain.rs"
+          }
+        ],
+        "confidence": "medium"
+      }
+    ],
+    "blocked": [],
+    "decisions": [],
+    "needsAttention": [],
+    "stillOpen": []
+  },
+  "pendingAttention": [],
+  "sourceCounts": {
+    "workEvents": 0,
+    "processedSignals": 1,
+    "pendingSignals": 0,
+    "promotionAuditRecords": 0,
+    "quarantineSignals": 0,
+    "duplicateSignals": 0,
+    "reporterSignals": 0,
+    "gitSignals": 1,
+    "heliSignals": 0,
+    "unknownProducerSignals": 0,
+    "otherProducerSignals": 0
+  },
+  "evidenceRefs": [
+    {
+      "type": "file-path",
+      "value": "crates/openmesh-core/src/domain.rs"
+    }
+  ],
+  "limitations": [],
+  "rebuildInputsHash": "fnv1a-abc123def456"
+}

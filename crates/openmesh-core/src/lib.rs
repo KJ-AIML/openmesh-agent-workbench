@@ -42,12 +42,25 @@
 // Dev Track 0.1.3.6 Checkpoint D — producer WorkSignal composition:
 // - `producers::compose` — `collect_git_signal` / `collect_heli_signal`
 //
+// Dev Track 0.1.3.7 Checkpoint A — continuity read-model domain contracts:
+// - `domain` — `CurrentStateProjection`, `PendingAttentionItem`, `CatchUpView`
+//
+// Dev Track 0.1.3.7 Checkpoint B — read-only continuity input loaders:
+// - `continuity::readers` — signal buckets, WorkEvent ledger, promotion audit
+//
+// Dev Track 0.1.3.7 Checkpoint C — Current State builder + projection persistence:
+// - `continuity::current_state` — `build_current_state_projection`, rebuild/read/write
+//
+// Dev Track 0.1.3.7 Checkpoint D — on-demand Catch-up view builder:
+// - `continuity::catch_up` — `build_catch_up_view` (no persistence)
+//
 // Ledger APIs are core-only in this track. CLI, Tauri, and Desktop do not expose
 // WorkEvent ledger commands yet.
 
-#[allow(dead_code)]
 pub mod context;
 pub mod context_service;
+#[allow(dead_code)]
+pub mod continuity;
 pub mod domain;
 pub mod events;
 pub mod index;

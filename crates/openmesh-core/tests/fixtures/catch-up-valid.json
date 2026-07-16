@@ -1,0 +1,69 @@
+{
+  "workspaceId": "1783586870822-7352d",
+  "generatedAt": "2026-07-16T10:00:00Z",
+  "protocolVersion": "1.0",
+  "window": {
+    "since": "2026-07-15T10:00:00Z",
+    "until": "2026-07-16T10:00:00Z"
+  },
+  "sections": {
+    "completed": [],
+    "changed": [
+      {
+        "id": "event:evt-001",
+        "summary": "Promoted progress on domain contracts",
+        "kind": "progress",
+        "source": "work-event",
+        "sourceId": "evt-001",
+        "producer": "reporter:test",
+        "timestamp": "2026-07-16T09:00:00Z",
+        "evidenceRefs": [
+          {
+            "type": "file-path",
+            "value": "crates/openmesh-core/src/domain.rs"
+          }
+        ],
+        "confidence": "high"
+      }
+    ],
+    "blocked": [],
+    "decided": [],
+    "needsAttention": [
+      {
+        "id": "signal:pending-001",
+        "summary": "Awaiting review of continuity contracts",
+        "kind": "review-required",
+        "source": "pending-signal",
+        "sourceId": "pending-001",
+        "producer": "reporter:test",
+        "timestamp": "2026-07-16T09:45:00Z",
+        "evidenceRefs": [],
+        "confidence": "low",
+        "unverified": true
+      }
+    ],
+    "stillOpen": []
+  },
+  "summary": "1 changed; 1 needs attention",
+  "nextSuggestedAttention": [
+    {
+      "id": "attention:pending-001",
+      "summary": "Awaiting review of continuity contracts",
+      "reason": "pending-signal",
+      "source": "pending-signal",
+      "sourceId": "pending-001",
+      "timestamp": "2026-07-16T09:45:00Z",
+      "evidenceRefs": [],
+      "status": "open",
+      "severity": "medium",
+      "priority": 3
+    }
+  ],
+  "evidenceRefs": [
+    {
+      "type": "file-path",
+      "value": "crates/openmesh-core/src/domain.rs"
+    }
+  ],
+  "limitations": []
+}

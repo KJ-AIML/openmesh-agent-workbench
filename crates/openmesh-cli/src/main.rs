@@ -10,10 +10,12 @@
 // `write_signal` call happens yet (Checkpoints B/C).
 // ============================================================================
 
+mod catch_up;
 mod collect;
 mod output;
 mod project;
 mod signal;
+mod state;
 
 use clap::{Args, Parser, Subcommand};
 
@@ -36,6 +38,10 @@ pub enum Commands {
     /// Collect local evidence into the Signal Inbox (Dev Track 0.1.3.6).
     #[command(subcommand)]
     Collect(CollectCommand),
+    /// Show the rebuildable Current State projection (Dev Track 0.1.3.7).
+    State(state::StateArgs),
+    /// Build an on-demand local Catch-up view (Dev Track 0.1.3.7).
+    CatchUp(catch_up::CatchUpArgs),
 }
 
 #[derive(Subcommand, Debug)]
@@ -210,6 +216,8 @@ fn run() -> i32 {
             CollectCommand::Git(args) => collect::run_collect_git(&args, &cwd),
             CollectCommand::Heli(args) => collect::run_collect_heli(&args, &cwd),
         },
+        Commands::State(args) => state::run_state(&args, &cwd),
+        Commands::CatchUp(args) => catch_up::run_catch_up(&args, &cwd),
     }
 }
 
