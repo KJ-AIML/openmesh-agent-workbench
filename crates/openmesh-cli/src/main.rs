@@ -14,6 +14,7 @@ mod catch_up;
 mod collect;
 mod event;
 mod output;
+mod profile;
 mod project;
 mod signal;
 mod state;
@@ -46,6 +47,9 @@ pub enum Commands {
     /// Inspect or correct canonical WorkEvents (evidence correction CLI).
     #[command(subcommand)]
     Event(EventCommand),
+    /// Manage the local Work Proxy Profile (Dev Track 0.1.4).
+    #[command(subcommand)]
+    Profile(profile::ProfileCommand),
 }
 
 #[derive(Subcommand, Debug)]
@@ -234,6 +238,7 @@ fn run() -> i32 {
             EventCommand::Inspect(args) => event::run_event_inspect(&args, &cwd),
             EventCommand::Correct(args) => event::run_event_correct(&args, &cwd),
         },
+        Commands::Profile(cmd) => profile::run_profile(cmd, &cwd),
     }
 }
 

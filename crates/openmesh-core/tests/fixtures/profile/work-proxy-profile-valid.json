@@ -1,0 +1,87 @@
+{
+  "profileId": "profile-dogfood-001",
+  "workspaceId": "ws-fixture-0.1.4",
+  "ownerLabel": "Fixture Owner",
+  "roleLabel": "Engineering lead",
+  "workingStyle": "async-first",
+  "communicationStyle": "concise",
+  "communicationPreferences": {
+    "tone": "direct",
+    "detailLevel": "medium",
+    "asyncPreference": "prefer-async",
+    "correctionPreference": "surface-limitations"
+  },
+  "decisionPreferences": {
+    "decisionStyle": "evidence-first",
+    "escalationPreference": "ask-human-on-ambiguity"
+  },
+  "authorityRules": [
+    {
+      "ruleId": "rule-global",
+      "scope": "*",
+      "authority": "must-ask-human",
+      "description": "Default safe baseline",
+      "conditions": [],
+      "evidenceRequired": true,
+      "humanConfirmationRequired": true,
+      "limitations": ["proxy does not decide alone"]
+    },
+    {
+      "ruleId": "rule-factual-progress",
+      "scope": "work.progress",
+      "authority": "can-answer",
+      "description": "Evidence-backed progress only",
+      "conditions": ["requires-citation"],
+      "evidenceRequired": true,
+      "humanConfirmationRequired": false,
+      "limitations": []
+    }
+  ],
+  "privacyRules": [
+    {
+      "ruleId": "privacy-internal-notes",
+      "topic": "internal-notes",
+      "sensitivity": "internal",
+      "allowedUse": "summarize-with-caution",
+      "restriction": "do not quote verbatim in answers",
+      "requiresHumanConfirmation": false
+    },
+    {
+      "ruleId": "privacy-credentials",
+      "topic": "credentials",
+      "sensitivity": "secret",
+      "allowedUse": "exclude-from-answers",
+      "restriction": "never include in proxy output",
+      "requiresHumanConfirmation": true
+    }
+  ],
+  "sensitiveTopics": ["credentials", "personal-health"],
+  "defaultRefusalRules": [
+    {
+      "ruleId": "refusal-no-impersonation",
+      "statement": "cannot impersonate owner"
+    },
+    {
+      "ruleId": "refusal-no-invented-evidence",
+      "statement": "cannot invent evidence"
+    },
+    {
+      "ruleId": "refusal-no-irreversible-approval",
+      "statement": "cannot approve irreversible actions"
+    }
+  ],
+  "evidencePolicy": {
+    "answerWithoutEvidence": false,
+    "requireEvidenceForClaims": true,
+    "exposeLimitations": true,
+    "citeSourceKinds": ["file-path", "work-event", "producer-signal"],
+    "unsupportedClaimBehavior": "ask-human"
+  },
+  "limitations": [
+    "proxy profile metadata only; no answering in 0.1.4",
+    "corrected presentation remains capped by evidence policy"
+  ],
+  "createdAt": "2026-07-17T08:00:00Z",
+  "lastUpdatedAt": "2026-07-17T08:30:00Z",
+  "profileVersion": "1.0"
+}

@@ -653,19 +653,24 @@ fn cli_workflow_does_not_touch_tauri_or_0_1_4() {
     collect_rs_files(&cli_src, &mut files);
     for path in files {
         let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-        if !matches!(
-            file_name,
-            "event.rs" | "state.rs" | "catch_up.rs" | "main.rs"
-        ) {
-            continue;
-        }
-        let content = fs::read_to_string(&path).expect("read source");
-        for term in forbidden {
-            assert!(
-                !content.contains(term),
-                "workflow CLI must not reference `{term}`: {}",
-                path.display()
-            );
+        if matches!(file_name, "event.rs") {
+            let content = fs::read_to_string(&path).expect("read source");
+            for term in forbidden {
+                assert!(
+                    !content.contains(term),
+                    "workflow CLI must not reference `{term}`: {}",
+                    path.display()
+                );
+            }
+        } else if matches!(file_name, "state.rs" | "catch_up.rs" | "main.rs") {
+            let content = fs::read_to_string(&path).expect("read source");
+            for term in ["tauri::", "#[tauri::command]", "ContinuityIntelligence"] {
+                assert!(
+                    !content.contains(term),
+                    "workflow CLI must not reference `{term}`: {}",
+                    path.display()
+                );
+            }
         }
     }
 

@@ -63,6 +63,18 @@
 // - `events` — `append_event_correction`, `inspect_event`
 // - `openmesh-cli event inspect|correct` (ledger append-only; no state/catch-up rebuild)
 //
+// Dev Track 0.1.4 Checkpoint A — Work Proxy Profile domain contracts (pure, no I/O):
+// - `domain` — `WorkProxyProfile`, authority ladder, validation helpers
+//
+// Dev Track 0.1.4 Checkpoint B — profile policy validation + authority resolution:
+// - `profile_validation` — cross-field policy checks, `resolve_profile_authority`
+//
+// Dev Track 0.1.4 Checkpoint C — local profile storage:
+// - `profile` — read/write/exists at `.openmesh/profile/work-proxy-profile.json`
+//
+// Dev Track 0.1.4 Checkpoint D — CLI profile workflow:
+// - `openmesh-cli profile init|show|update|validate`
+//
 // Ledger APIs are core-only in this track. CLI, Tauri, and Desktop do not expose
 // WorkEvent ledger commands yet.
 
@@ -76,6 +88,8 @@ pub mod index;
 pub mod ingestion;
 pub mod intelligence;
 pub mod producers;
+pub mod profile;
+pub mod profile_validation;
 pub mod promotion;
 pub mod signals;
 pub mod storage;
