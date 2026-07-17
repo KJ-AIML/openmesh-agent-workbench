@@ -1,0 +1,19 @@
+{
+  "eventId": "evt-correction-001",
+  "workspaceId": "1783586870822-7352d",
+  "kind": "correction",
+  "summary": "Corrected classification: work was blocked, not completed.",
+  "timestamp": "2026-07-17T04:00:00Z",
+  "correctsEventId": "1783605120049-event001",
+  "evidence": [
+    {
+      "evidenceRef": {
+        "type": "file-path",
+        "value": "crates/openmesh-core/tests/fixtures/events/valid.json"
+      },
+      "observedAt": "2026-07-17T04:00:01Z"
+    }
+  ],
+  "protocolVersion": "1.0",
+  "sensitivity": "private"
+}

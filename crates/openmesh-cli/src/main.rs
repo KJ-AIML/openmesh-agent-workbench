@@ -12,6 +12,7 @@
 
 mod catch_up;
 mod collect;
+mod event;
 mod output;
 mod project;
 mod signal;
@@ -42,6 +43,17 @@ pub enum Commands {
     State(state::StateArgs),
     /// Build an on-demand local Catch-up view (Dev Track 0.1.3.7).
     CatchUp(catch_up::CatchUpArgs),
+    /// Inspect or correct canonical WorkEvents (evidence correction CLI).
+    #[command(subcommand)]
+    Event(EventCommand),
+}
+
+#[derive(Subcommand, Debug)]
+pub enum EventCommand {
+    /// Inspect a WorkEvent, its correction chain, and effective presentation.
+    Inspect(event::EventInspectArgs),
+    /// Append an append-only correction WorkEvent for a target event.
+    Correct(event::EventCorrectArgs),
 }
 
 #[derive(Subcommand, Debug)]
@@ -218,6 +230,10 @@ fn run() -> i32 {
         },
         Commands::State(args) => state::run_state(&args, &cwd),
         Commands::CatchUp(args) => catch_up::run_catch_up(&args, &cwd),
+        Commands::Event(cmd) => match cmd {
+            EventCommand::Inspect(args) => event::run_event_inspect(&args, &cwd),
+            EventCommand::Correct(args) => event::run_event_correct(&args, &cwd),
+        },
     }
 }
 

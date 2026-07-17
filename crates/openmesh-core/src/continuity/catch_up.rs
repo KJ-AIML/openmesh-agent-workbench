@@ -4,12 +4,14 @@ use crate::continuity::current_state::ContinuityError;
 use crate::continuity::readers::{ContinuityDiagnostic, ContinuityInputSnapshot};
 use crate::domain::ProducerRef;
 use crate::domain::{
-    validate_catch_up_view, CatchUpSections, CatchUpView, CatchUpWindow, ContinuityConfidence,
-    ContinuitySourceKind, ContinuityStateItem, ContinuityValidationError, CurrentStateProjection,
-    EvidenceRef, PendingAttentionItem, WorkEvent, WorkSignal, WorkSignalKind,
-    CATCH_UP_VIEW_PROTOCOL_VERSION, MAX_CATCH_UP_EVIDENCE_REFS, MAX_CATCH_UP_SUMMARY_BYTES,
-    MAX_CONTINUITY_ITEM_EVIDENCE_REFS, MAX_CONTINUITY_STATE_ITEM_SUMMARY_BYTES,
-    MAX_NEXT_SUGGESTED_ATTENTION, MAX_PROJECTION_LIMITATIONS,
+    effective_presentation, validate_catch_up_view, validate_correction_relationship,
+    CatchUpSections, CatchUpView, CatchUpWindow, ContinuityConfidence, ContinuitySourceKind,
+    ContinuityStateItem, ContinuityValidationError, CorrectionSemanticDiagnostic,
+    CurrentStateProjection, EffectiveEventPresentation, EvidenceRef, PendingAttentionItem,
+    WorkEvent, WorkSignal, WorkSignalKind, CATCH_UP_VIEW_PROTOCOL_VERSION,
+    MAX_CATCH_UP_EVIDENCE_REFS, MAX_CATCH_UP_SUMMARY_BYTES, MAX_CONTINUITY_ITEM_EVIDENCE_REFS,
+    MAX_CONTINUITY_STATE_ITEM_SUMMARY_BYTES, MAX_NEXT_SUGGESTED_ATTENTION,
+    MAX_PROJECTION_LIMITATIONS,
 };
 use crate::promotion::{PromotionDecisionRecord, PromotionOutcome};
 use std::collections::{BTreeSet, HashMap};
@@ -45,12 +47,66 @@ pub fn build_catch_up_view(
     let ambiguity = detect_correlation_ambiguity(snapshot);
 
     for event in &snapshot.work_events {
+        if event.corrects_event_id.is_some() {
+            if let Err(diagnostic) = validate_correction_relationship(event, &snapshot.work_events)
+            {
+                limitations.push(limitation_from_correction_diagnostic(&diagnostic));
+            }
+        } else if let Some(presentation) =
+            effective_presentation(&snapshot.work_events, &event.event_id)
+        {
+            for diagnostic in &presentation.diagnostics {
+                limitations.push(limitation_from_correction_diagnostic(diagnostic));
+            }
+        }
+    }
+
+    for event in &snapshot.work_events {
+        let Some(target_id) = event.corrects_event_id.as_deref() else {
+            continue;
+        };
         if !timestamp_in_window(&event.timestamp, window) {
             continue;
         }
-        let item = item_from_work_event(event);
+        if validate_correction_relationship(event, &snapshot.work_events).is_err() {
+            continue;
+        }
+        let Some(target) = snapshot
+            .work_events
+            .iter()
+            .find(|candidate| candidate.event_id == target_id)
+        else {
+            continue;
+        };
+        let Some(presentation) = effective_presentation(&snapshot.work_events, target_id) else {
+            continue;
+        };
+        let item = item_from_correction_in_window(event, target, &presentation);
         collect_evidence_refs(&item.evidence_refs, &mut evidence_set);
-        push_catch_up_section(&mut sections, catch_up_section_for_event(&event.kind), item);
+        push_catch_up_section(&mut sections, CatchUpSection::Changed, item);
+    }
+
+    for event in &snapshot.work_events {
+        if event.corrects_event_id.is_some() {
+            continue;
+        }
+        if !timestamp_in_window(&event.timestamp, window) {
+            continue;
+        }
+        let Some(presentation) = effective_presentation(&snapshot.work_events, &event.event_id)
+        else {
+            continue;
+        };
+        if presentation.is_corrected {
+            limitations.push(correction_visibility_limitation(&presentation));
+        }
+        let item = item_from_work_event(event, &presentation);
+        collect_evidence_refs(&item.evidence_refs, &mut evidence_set);
+        push_catch_up_section(
+            &mut sections,
+            catch_up_section_for_event(presentation.kind_text()),
+            item,
+        );
     }
 
     for signal in snapshot
@@ -257,28 +313,98 @@ fn is_ambiguous_source(source_id: &str, ambiguity: &HashMap<String, Vec<String>>
         .any(|ids| ids.iter().any(|id| id.ends_with(source_id)))
 }
 
-fn item_from_work_event(event: &WorkEvent) -> ContinuityStateItem {
+fn correction_ledger_evidence_ref(event_id: &str) -> EvidenceRef {
+    EvidenceRef::FilePath(format!(".openmesh/events/ledger/{event_id}.json"))
+}
+
+fn correction_visibility_limitation(presentation: &EffectiveEventPresentation) -> String {
+    truncate_summary(&format!(
+        "work event {} presentation corrected by {}",
+        presentation.event_id,
+        presentation.correction_event_ids.join(", ")
+    ))
+}
+
+fn limitation_from_correction_diagnostic(diagnostic: &CorrectionSemanticDiagnostic) -> String {
+    match diagnostic {
+        CorrectionSemanticDiagnostic::SelfCorrection { event_id } => {
+            format!("invalid correction: event {event_id} cannot correct itself")
+        }
+        CorrectionSemanticDiagnostic::MissingTarget {
+            correction_event_id,
+            target_id,
+        } => format!("invalid correction {correction_event_id}: missing target {target_id}"),
+        CorrectionSemanticDiagnostic::CorrectionCycle { path } => {
+            format!("correction cycle detected: {}", path.join(" -> "))
+        }
+        CorrectionSemanticDiagnostic::InvalidCorrectionSemantics {
+            correction_event_id,
+        } => {
+            format!("invalid correction semantics for {correction_event_id}")
+        }
+    }
+}
+
+fn item_from_work_event(
+    event: &WorkEvent,
+    presentation: &EffectiveEventPresentation,
+) -> ContinuityStateItem {
+    let mut evidence_refs: Vec<EvidenceRef> = event
+        .evidence
+        .iter()
+        .map(|attachment| attachment.evidence_ref.clone())
+        .collect();
+    for correction_id in &presentation.correction_event_ids {
+        evidence_refs.push(correction_ledger_evidence_ref(correction_id));
+    }
     ContinuityStateItem {
         id: format!("event:{}", event.event_id),
-        summary: truncate_summary(&event.summary),
-        kind: event.kind.clone(),
+        summary: truncate_summary(presentation.summary_text()),
+        kind: presentation.kind_text().to_string(),
         source: ContinuitySourceKind::WorkEvent,
         source_id: event.event_id.clone(),
         producer: "work-event-ledger".into(),
         timestamp: event.timestamp.clone(),
-        evidence_refs: bound_evidence_refs(
-            &event
-                .evidence
-                .iter()
-                .map(|attachment| attachment.evidence_ref.clone())
-                .collect::<Vec<_>>(),
-        ),
-        confidence: if event.corrects_event_id.is_some() {
-            ContinuityConfidence::Medium
-        } else {
-            ContinuityConfidence::High
-        },
+        evidence_refs: bound_evidence_refs(&evidence_refs),
+        confidence: presentation.confidence,
         correlation_hint: None,
+        unverified: None,
+    }
+}
+
+fn item_from_correction_in_window(
+    correction: &WorkEvent,
+    target: &WorkEvent,
+    presentation: &EffectiveEventPresentation,
+) -> ContinuityStateItem {
+    let mut evidence_refs: Vec<EvidenceRef> = target
+        .evidence
+        .iter()
+        .map(|attachment| attachment.evidence_ref.clone())
+        .collect();
+    for attachment in &correction.evidence {
+        evidence_refs.push(attachment.evidence_ref.clone());
+    }
+    evidence_refs.push(correction_ledger_evidence_ref(&target.event_id));
+    evidence_refs.push(correction_ledger_evidence_ref(&correction.event_id));
+    ContinuityStateItem {
+        id: format!(
+            "event:{}:corrected-by:{}",
+            target.event_id, correction.event_id
+        ),
+        summary: truncate_summary(&format!(
+            "corrected {} (effective: {})",
+            target.event_id,
+            presentation.summary_text()
+        )),
+        kind: presentation.kind_text().to_string(),
+        source: ContinuitySourceKind::WorkEvent,
+        source_id: correction.event_id.clone(),
+        producer: "work-event-ledger".into(),
+        timestamp: correction.timestamp.clone(),
+        evidence_refs: bound_evidence_refs(&evidence_refs),
+        confidence: ContinuityConfidence::Medium,
+        correlation_hint: Some(target.event_id.clone()),
         unverified: None,
     }
 }

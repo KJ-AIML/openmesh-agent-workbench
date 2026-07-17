@@ -54,6 +54,15 @@
 // Dev Track 0.1.3.7 Checkpoint D — on-demand Catch-up view builder:
 // - `continuity::catch_up` — `build_catch_up_view` (no persistence)
 //
+// Dev Track 0.1.3.8 Checkpoint A — correction semantics freeze (pure helpers):
+// - `domain` — `effective_presentation`, `effective_kind_for`, `effective_summary_for`,
+//   correction chain visibility, superseded-original detection (no continuity/CLI wiring yet)
+// - `events` — `effective_kind` ledger query alongside existing `effective_summary`
+//
+// Dev Track 0.1.3.8 Checkpoint B — correction ingestion + CLI event inspect/correct:
+// - `events` — `append_event_correction`, `inspect_event`
+// - `openmesh-cli event inspect|correct` (ledger append-only; no state/catch-up rebuild)
+//
 // Ledger APIs are core-only in this track. CLI, Tauri, and Desktop do not expose
 // WorkEvent ledger commands yet.
 
@@ -70,3 +79,8 @@ pub mod producers;
 pub mod promotion;
 pub mod signals;
 pub mod storage;
+
+pub use events::{
+    append_event_correction, inspect_event, AppendCorrectionResult, EventCorrectionRequest,
+    EventError, EventInspection,
+};

@@ -5,13 +5,15 @@ use crate::continuity::readers::{
 };
 use crate::domain::ProducerRef;
 use crate::domain::{
-    pending_attention_priority_for_severity, validate_current_state_projection,
-    ContinuityConfidence, ContinuitySourceKind, ContinuityStateItem, ContinuityValidationError,
-    CurrentStateProjection, CurrentStateSections, EvidenceRef, PendingAttentionItem,
-    PendingAttentionReason, PendingAttentionSeverity, PendingAttentionStatus, WorkEvent,
-    WorkSignal, WorkSignalKind, CURRENT_STATE_PROJECTION_PROTOCOL_VERSION,
-    MAX_CONTINUITY_ITEM_EVIDENCE_REFS, MAX_CONTINUITY_STATE_ITEM_SUMMARY_BYTES,
-    MAX_PROJECTION_EVIDENCE_REFS, MAX_PROJECTION_LIMITATIONS,
+    effective_presentation, pending_attention_priority_for_severity,
+    validate_correction_relationship, validate_current_state_projection, ContinuityConfidence,
+    ContinuitySourceKind, ContinuityStateItem, ContinuityValidationError,
+    CorrectionSemanticDiagnostic, CurrentStateProjection, CurrentStateSections,
+    EffectiveEventPresentation, EvidenceRef, PendingAttentionItem, PendingAttentionReason,
+    PendingAttentionSeverity, PendingAttentionStatus, WorkEvent, WorkSignal, WorkSignalKind,
+    CURRENT_STATE_PROJECTION_PROTOCOL_VERSION, MAX_CONTINUITY_ITEM_EVIDENCE_REFS,
+    MAX_CONTINUITY_STATE_ITEM_SUMMARY_BYTES, MAX_PROJECTION_EVIDENCE_REFS,
+    MAX_PROJECTION_LIMITATIONS,
 };
 use crate::promotion::{PromotionDecisionRecord, PromotionOutcome};
 use crate::storage::get_project_dir;
@@ -77,9 +79,38 @@ pub fn build_current_state_projection(
     let ambiguity = detect_correlation_ambiguity(snapshot);
 
     for event in &snapshot.work_events {
-        let item = item_from_work_event(event);
+        if event.corrects_event_id.is_some() {
+            if let Err(diagnostic) = validate_correction_relationship(event, &snapshot.work_events)
+            {
+                limitations.push(limitation_from_correction_diagnostic(&diagnostic));
+            }
+        } else if let Some(presentation) =
+            effective_presentation(&snapshot.work_events, &event.event_id)
+        {
+            for diagnostic in &presentation.diagnostics {
+                limitations.push(limitation_from_correction_diagnostic(diagnostic));
+            }
+        }
+    }
+
+    for event in &snapshot.work_events {
+        if event.corrects_event_id.is_some() {
+            continue;
+        }
+        let Some(presentation) = effective_presentation(&snapshot.work_events, &event.event_id)
+        else {
+            continue;
+        };
+        if presentation.is_corrected {
+            limitations.push(correction_visibility_limitation(&presentation));
+        }
+        let item = item_from_work_event(event, &presentation);
         collect_evidence_refs(&item.evidence_refs, &mut evidence_set);
-        push_to_section(&mut sections, section_for_work_event(&event.kind), item);
+        push_to_section(
+            &mut sections,
+            section_for_work_event(&presentation.effective_kind),
+            item,
+        );
     }
 
     for signal in &snapshot.processed_signals {
@@ -331,28 +362,61 @@ fn is_ambiguous_source(source_id: &str, ambiguity: &HashMap<String, Vec<String>>
         .any(|ids| ids.iter().any(|id| id.ends_with(source_id)))
 }
 
-fn item_from_work_event(event: &WorkEvent) -> ContinuityStateItem {
-    let evidence_refs = bound_evidence_refs(
-        &event
-            .evidence
-            .iter()
-            .map(|attachment| attachment.evidence_ref.clone())
-            .collect::<Vec<_>>(),
-    );
+fn correction_ledger_evidence_ref(event_id: &str) -> EvidenceRef {
+    EvidenceRef::FilePath(format!(".openmesh/events/ledger/{event_id}.json"))
+}
+
+fn correction_visibility_limitation(presentation: &EffectiveEventPresentation) -> String {
+    truncate_summary(&format!(
+        "work event {} presentation corrected by {}",
+        presentation.event_id,
+        presentation.correction_event_ids.join(", ")
+    ))
+}
+
+fn limitation_from_correction_diagnostic(diagnostic: &CorrectionSemanticDiagnostic) -> String {
+    match diagnostic {
+        CorrectionSemanticDiagnostic::SelfCorrection { event_id } => {
+            format!("invalid correction: event {event_id} cannot correct itself")
+        }
+        CorrectionSemanticDiagnostic::MissingTarget {
+            correction_event_id,
+            target_id,
+        } => format!("invalid correction {correction_event_id}: missing target {target_id}"),
+        CorrectionSemanticDiagnostic::CorrectionCycle { path } => {
+            format!("correction cycle detected: {}", path.join(" -> "))
+        }
+        CorrectionSemanticDiagnostic::InvalidCorrectionSemantics {
+            correction_event_id,
+        } => {
+            format!("invalid correction semantics for {correction_event_id}")
+        }
+    }
+}
+
+fn item_from_work_event(
+    event: &WorkEvent,
+    presentation: &EffectiveEventPresentation,
+) -> ContinuityStateItem {
+    let mut evidence_refs: Vec<EvidenceRef> = event
+        .evidence
+        .iter()
+        .map(|attachment| attachment.evidence_ref.clone())
+        .collect();
+    for correction_id in &presentation.correction_event_ids {
+        evidence_refs.push(correction_ledger_evidence_ref(correction_id));
+    }
+    let evidence_refs = bound_evidence_refs(&evidence_refs);
     ContinuityStateItem {
         id: format!("event:{}", event.event_id),
-        summary: truncate_summary(&event.summary),
-        kind: event.kind.clone(),
+        summary: truncate_summary(presentation.summary_text()),
+        kind: presentation.kind_text().to_string(),
         source: ContinuitySourceKind::WorkEvent,
         source_id: event.event_id.clone(),
         producer: "work-event-ledger".into(),
         timestamp: event.timestamp.clone(),
         evidence_refs,
-        confidence: if event.corrects_event_id.is_some() {
-            ContinuityConfidence::Medium
-        } else {
-            ContinuityConfidence::High
-        },
+        confidence: presentation.confidence,
         correlation_hint: None,
         unverified: None,
     }

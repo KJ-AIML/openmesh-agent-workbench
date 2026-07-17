@@ -15,12 +15,20 @@
 // - EventError, LedgerClassification, LedgerValidationReport, ...
 // ============================================================================
 
-use crate::domain::{is_supported_work_event_protocol, validate_event_semantics, WorkEvent};
+use crate::domain::{
+    is_supported_work_event_protocol, validate_correction_relationship, validate_event_semantics,
+    ActorRef, CorrectionSemanticDiagnostic, EffectiveEventPresentation, WorkEvent,
+    WORK_EVENT_PROTOCOL_VERSION_PROMOTED,
+};
 use crate::storage::{get_project_dir, read_project, Project};
+use chrono::Utc;
+use serde::Serialize;
 use std::fs;
 use std::fs::OpenOptions;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
+use std::process;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Frozen bound (approved 0.1.3.4 plan §3.3): canonical record maximum size.
 pub const MAX_RECORD_BYTES: usize = 256 * 1024;
@@ -45,6 +53,8 @@ pub enum EventError {
     CorrectionTargetNotFound(String),
     #[error("event cannot correct itself")]
     SelfCorrectionNotAllowed,
+    #[error("correction would create an invalid cycle: {0}")]
+    CorrectionCycle(String),
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
     #[error("json error: {0}")]
@@ -287,16 +297,6 @@ fn validate_correction_target(
     }
 }
 
-/// Picks the winning correction for `effective_summary`.
-/// Rule: latest `timestamp` (lexicographic ISO-8601 UTC), then `event_id` tie-break.
-fn select_latest_correction(corrections: Vec<WorkEvent>) -> Option<WorkEvent> {
-    corrections.into_iter().max_by(|a, b| {
-        a.timestamp
-            .cmp(&b.timestamp)
-            .then_with(|| a.event_id.cmp(&b.event_id))
-    })
-}
-
 // ============================================================================
 // Public ledger API
 // ============================================================================
@@ -388,19 +388,188 @@ pub fn list_corrections_for(
 
 /// Returns the effective summary for `event_id` at ledger level only.
 ///
-/// When no direct corrections exist, returns the original event summary.
-/// When one or more corrections exist, returns the summary of the correction
-/// with the latest `timestamp`; ties break on lexicographic `event_id`.
+/// When no valid direct corrections exist, returns the original event summary.
+/// When one or more valid corrections exist, returns the summary of the latest
+/// correction per deterministic tie-break rules in `domain::effective_summary_for`.
 pub fn effective_summary(project_path: &str, event_id: &str) -> Result<Option<String>, EventError> {
-    let Some(original) = get_event(project_path, event_id)? else {
+    let events = list_events(project_path)?;
+    let Some(original) = events.iter().find(|event| event.event_id == event_id) else {
         return Ok(None);
     };
-    let corrections = list_corrections_for(project_path, event_id)?;
-    if corrections.is_empty() {
-        return Ok(Some(original.summary));
+    Ok(Some(crate::domain::effective_summary_for(
+        &events, original,
+    )))
+}
+
+/// Returns the effective kind for `event_id` at ledger level only.
+///
+/// When no valid direct corrections exist, returns the original event kind.
+/// When one or more valid corrections exist, returns the kind of the latest
+/// correction per deterministic tie-break rules in `domain::effective_kind_for`.
+pub fn effective_kind(project_path: &str, event_id: &str) -> Result<Option<String>, EventError> {
+    let events = list_events(project_path)?;
+    let Some(original) = events.iter().find(|event| event.event_id == event_id) else {
+        return Ok(None);
+    };
+    Ok(Some(crate::domain::effective_kind_for(&events, original)))
+}
+
+/// Input for appending a human correction WorkEvent (Dev Track 0.1.3.8 Checkpoint B).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EventCorrectionRequest {
+    pub corrected_kind: String,
+    pub corrected_summary: String,
+    pub actor_label: Option<String>,
+    pub timestamp: Option<String>,
+}
+
+/// Result of appending a correction WorkEvent.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AppendCorrectionResult {
+    pub correction_event: WorkEvent,
+    pub target_event_id: String,
+    pub effective_presentation: EffectiveEventPresentation,
+}
+
+/// Ledger inspection view for CLI `event inspect`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EventInspection {
+    pub event_id: String,
+    pub original: WorkEvent,
+    pub effective_presentation: EffectiveEventPresentation,
+    pub correction_events: Vec<WorkEvent>,
+}
+
+/// Frozen format: `evt-correction-<YYYYMMDD>-<unix_nanos_hex>-<pid_hex>`.
+pub fn generate_correction_event_id() -> String {
+    let date = Utc::now().format("%Y%m%d");
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock is before UNIX_EPOCH")
+        .as_nanos();
+    let pid = process::id();
+    format!("evt-correction-{date}-{nanos:x}-{pid:x}")
+}
+
+fn correction_timestamp(request: &EventCorrectionRequest) -> Result<String, EventError> {
+    if let Some(timestamp) = &request.timestamp {
+        crate::domain::validate_utc_timestamp(timestamp)
+            .map_err(|err| EventError::InvalidSemantics(format!("timestamp is invalid: {err}")))?;
+        return Ok(timestamp.clone());
     }
-    let latest = select_latest_correction(corrections).expect("non-empty corrections");
-    Ok(Some(latest.summary))
+    Ok(Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string())
+}
+
+fn map_correction_diagnostic(err: CorrectionSemanticDiagnostic) -> EventError {
+    match err {
+        CorrectionSemanticDiagnostic::SelfCorrection { .. } => EventError::SelfCorrectionNotAllowed,
+        CorrectionSemanticDiagnostic::MissingTarget { target_id, .. } => {
+            EventError::CorrectionTargetNotFound(target_id)
+        }
+        CorrectionSemanticDiagnostic::CorrectionCycle { path } => {
+            EventError::CorrectionCycle(path.join(" -> "))
+        }
+        CorrectionSemanticDiagnostic::InvalidCorrectionSemantics {
+            correction_event_id,
+        } => EventError::InvalidSemantics(format!(
+            "correction event {correction_event_id} failed semantic validation"
+        )),
+    }
+}
+
+fn build_correction_event(
+    project: &Project,
+    target: &WorkEvent,
+    request: &EventCorrectionRequest,
+) -> Result<WorkEvent, EventError> {
+    let corrected_kind = request.corrected_kind.trim().to_string();
+    if corrected_kind.is_empty() {
+        return Err(EventError::InvalidSemantics(
+            "kind is empty after trim".into(),
+        ));
+    }
+    let corrected_summary = request.corrected_summary.trim().to_string();
+    if corrected_summary.is_empty() {
+        return Err(EventError::InvalidSemantics(
+            "summary is empty after trim".into(),
+        ));
+    }
+
+    let actor_label = request
+        .actor_label
+        .as_deref()
+        .filter(|label| !label.trim().is_empty())
+        .unwrap_or("cli-operator")
+        .to_string();
+
+    let event = WorkEvent {
+        event_id: generate_correction_event_id(),
+        workspace_id: project.id.clone(),
+        kind: corrected_kind,
+        summary: corrected_summary,
+        timestamp: correction_timestamp(request)?,
+        evidence: target.evidence.clone(),
+        corrects_event_id: Some(target.event_id.clone()),
+        sensitivity: target.sensitivity.clone(),
+        protocol_version: WORK_EVENT_PROTOCOL_VERSION_PROMOTED.to_string(),
+        actor: Some(ActorRef::Person(actor_label)),
+    };
+
+    validate_event_semantics(&event)
+        .map_err(|err| EventError::InvalidSemantics(err.to_string()))?;
+    Ok(event)
+}
+
+/// Appends a new correction WorkEvent for `target_event_id` without mutating the target.
+pub fn append_event_correction(
+    project_path: &str,
+    target_event_id: &str,
+    request: &EventCorrectionRequest,
+) -> Result<AppendCorrectionResult, EventError> {
+    let project = load_project(project_path)?;
+    let target = get_event(project_path, target_event_id)?
+        .ok_or_else(|| EventError::CorrectionTargetNotFound(target_event_id.to_string()))?;
+
+    let correction = build_correction_event(&project, &target, request)?;
+    let events = list_events(project_path)?;
+    if let Err(diagnostic) = validate_correction_relationship(&correction, &events) {
+        return Err(map_correction_diagnostic(diagnostic));
+    }
+
+    append_event(project_path, &correction)?;
+
+    let events = list_events(project_path)?;
+    let effective_presentation = crate::domain::effective_presentation(&events, target_event_id)
+        .ok_or_else(|| EventError::CorrectionTargetNotFound(target_event_id.to_string()))?;
+
+    Ok(AppendCorrectionResult {
+        correction_event: correction,
+        target_event_id: target_event_id.to_string(),
+        effective_presentation,
+    })
+}
+
+/// Reads ledger state for `event_id` including effective presentation and correction chain.
+pub fn inspect_event(project_path: &str, event_id: &str) -> Result<EventInspection, EventError> {
+    let original = get_event(project_path, event_id)?
+        .ok_or_else(|| EventError::NotFound(event_id.to_string()))?;
+    let events = list_events(project_path)?;
+    let effective_presentation = crate::domain::effective_presentation(&events, event_id)
+        .ok_or_else(|| EventError::NotFound(event_id.to_string()))?;
+
+    let correction_events = effective_presentation
+        .correction_event_ids
+        .iter()
+        .filter_map(|id| get_event(project_path, id).ok().flatten())
+        .collect();
+
+    Ok(EventInspection {
+        event_id: event_id.to_string(),
+        original,
+        effective_presentation,
+        correction_events,
+    })
 }
 
 /// Deserializes a single on-disk ledger record file without recovery.
