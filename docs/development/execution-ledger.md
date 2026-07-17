@@ -1913,4 +1913,58 @@ Known limitations:
 Next recommended action: Dev Track 0.1.3.7 planning may begin only after this governance commit is pushed and remote state verified.
 
 ### Final Automated Status: PASS — HUMAN ACCEPTED — PUBLISHED — CLOSED
-### Dev Track 0.1.3.7 Unlocked: NO (governance commit must be pushed and remote state verified before the next development track begins)
+### Dev Track 0.1.3.7 Unlocked: YES (governance commit pushed and remote state verified; 0.1.3.8 eligible to unlock after separate human authorization)
+
+## 2026-07-17 — Dev Track 0.1.3.7
+
+Status: PASS — HUMAN ACCEPTED — PUBLISHED — CLOSED
+Human final disposition date: 2026-07-17
+Checkpoints A–G: PASS. Whole Dev Track 0.1.3.7: **PASS**.
+Full regression: GREEN. Real project data isolation: PASS. Architecture/dependency boundary: PASS. Product scope boundary: PASS.
+Branch: feat/openmesh-0.1.3
+Starting HEAD: `0b63678a911e25c420da91829229625612ece144` (Dev Track 0.1.3.6 governance commit)
+Feature commit: `331d2ec8f3097f8d4865a30d8a92ce991a3a69fa` (subject: `feat(core): add current state and catch-up`; parent `0b63678`; verified — 3 modified/17 added/0 removed, exact accepted inventory; `git diff HEAD^ HEAD --check` clean; final commit body subject-only with no Cursor `Co-authored-by` trailer)
+Feature commit hygiene note: initial `git commit` received unwanted Cursor `Co-authored-by` trailer; standard `git commit --amend -m` re-injected the trailer via environment; final feature commit rewritten with `git commit-tree` + `update-ref` (same tree and parent; subject-only body; no Cursor co-author trailer remains).
+Commit verification: PASS
+Push: COMPLETE (feature + governance commits pushed to `origin/feat/openmesh-0.1.3`)
+Release: NOT YET
+Objective: Current State & Local Catch-up — `CurrentStateProjection` v1.0, `PendingAttentionItem` with status/severity, `SourceCounts` producer breakdown, read-only continuity input loaders, deterministic Current State builder with rebuildable projection persistence at `.openmesh/projections/current-state.json`, on-demand `CatchUpView` builder, `openmesh-cli state` and `openmesh-cli catch-up`, and evidence/ambiguity boundary proofs. Executed the approved plan (`.heli-harness/state/reports/openmesh-0.1.3.7-execution-plan.md`) through Checkpoints A–G.
+What changed (accepted product diff, committed in feature commit `331d2ec`):
+- `crates/openmesh-core/src/domain.rs`: `CurrentStateProjection` v1.0, `PendingAttentionItem` (status + severity), `CatchUpView`, `SourceCounts` with reporter/git/heli breakdown, validation helpers, bounded evidence/limitations, UTC timestamps.
+- `crates/openmesh-core/src/lib.rs`: export `continuity` module.
+- `crates/openmesh-core/src/continuity/mod.rs`, `readers.rs`, `current_state.rs`, `catch_up.rs` (new): read-only loaders, `ContinuityInputSnapshot`, Current State builder + projection persistence, on-demand Catch-up builder.
+- `crates/openmesh-cli/src/state.rs`, `catch_up.rs` (new), `main.rs`: `openmesh-cli state` and `openmesh-cli catch-up` with project resolution, JSON/human output, default rebuild/read and 24h catch-up window.
+- Tests: `current_state_contracts.rs`, `catch_up_contracts.rs`, `continuity_readers.rs`, `current_state_builder.rs`, `current_state_projection.rs`, `catch_up_builder.rs`, `evidence_boundary.rs` (core); `state_catch_up.rs`, `evidence_boundary.rs` (CLI); fixtures `current-state-valid.json`, `catch-up-valid.json`.
+- `src-tauri/**`, frontend source tree, Reporter Skill, `Cargo.toml`, `Cargo.lock`, `signals.rs`, `events.rs`, `promotion.rs`, `intelligence.rs`, `producers/**`: **zero diff**.
+Commands run and exact results (Checkpoint G + commit gate + feature commit, 2026-07-17):
+- `cargo fmt --check` — PASS.
+- `cargo test -p openmesh-core` — PASS — **454 passed**.
+- `cargo test -p openmesh-cli` — PASS — **62 passed**, 1 ignored (`dogfood_verify`).
+- `cargo test --workspace` — PASS — **516 passed**, 1 ignored.
+- `cargo clippy -p openmesh-core -- -D warnings` — PASS.
+- `cargo clippy -p openmesh-cli -- -D warnings` — PASS.
+- `cargo clippy --workspace -- -D warnings` — PASS.
+- `cargo check --workspace` — PASS.
+- `cargo build --workspace` — PASS.
+- `npm run verify` — PASS — **212/212**, 0 type errors.
+- `git diff --check` — PASS (benign CRLF/LF autocrlf warnings only).
+Real-project data-isolation proof: active project buckets remained `pending` 0 / `processed` 5 / `quarantine` 0 / `duplicate` 0 throughout; `.openmesh/projections` absent in real active project; projection writes temp-project-only; catch-up files created **0**; no signal inbox mutation; WorkSignals created in real active project **0**; WorkEvents created **0**; promotion audit mutation **none**.
+Architecture/dependency boundary:
+- Workspace members unchanged (`openmesh`, `openmesh-core`, `openmesh-cli`).
+- `#[tauri::command]` count: `src-tauri/src/lib.rs` **52** — unchanged.
+- `Cargo.toml` / `Cargo.lock`: unchanged — no new third-party dependencies.
+Product scope boundary:
+- No Work Proxy Profile, Ask My Proxy, or Context Pack.
+- No LLM/AXGA runtime; `ContinuityIntelligence` seam remains noop-only.
+- No Tauri/Desktop continuity commands; no daemon/watcher/background loop.
+- No GitHub/GitLab/remote API; catch-up is on-demand only with no catch-up file persistence.
+- Dev Track 0.1.3.8 not started.
+**Final human acceptance (2026-07-17)**: Human/Main-Brain issued the final disposition — Dev Track 0.1.3.7 is accepted as **PASS**. Checkpoints A–G are all accepted. Feature commit `331d2ec8f3097f8d4865a30d8a92ce991a3a69fa` created and verified (parent `0b63678a911e25c420da91829229625612ece144`; 3 modified/17 added/0 removed; committed diff check clean; unwanted Cursor trailer removed via commit-tree rewrite; post-commit worktree clean). Full regression was GREEN at commit time. Governance commit records publish transition; push follows governance commit.
+Known limitations:
+- Full checkpoint-by-checkpoint detail is in `.heli-harness/state/reports/openmesh-0.1.3.7-implementation-report.md`.
+- Catch-up default window is 24h UTC; no catch-up checkpoint file persistence in this track.
+- Evidence correction UI and E2E dogfood gate remain deferred to 0.1.3.8.
+Next recommended action: Dev Track 0.1.3.8 unlock review may begin only after separate human authorization.
+
+### Final Automated Status: PASS — HUMAN ACCEPTED — PUBLISHED — CLOSED
+### Dev Track 0.1.3.8 Unlocked: NO (separate unlock review and human authorization required before 0.1.3.8 begins)
