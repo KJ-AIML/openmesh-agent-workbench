@@ -2024,4 +2024,70 @@ Known limitations:
 Next recommended action: Dev Track 0.1.4 unlock review may begin only after separate human authorization.
 
 ### Final Automated Status: PASS — HUMAN ACCEPTED — PUBLISHED — CLOSED
-### Dev Track 0.1.4 Unlocked: NO (separate unlock review and human authorization required before 0.1.4 begins)
+### Dev Track 0.1.4 Unlocked: YES (0.1.3.8 published; separate human authorization received for 0.1.4 implementation)
+
+## 2026-07-18 — Dev Track 0.1.4
+
+Status: PASS — HUMAN ACCEPTED — FEATURE COMMITTED
+Human final disposition date: 2026-07-18
+Checkpoints A–G: PASS. Whole Dev Track 0.1.4: **PASS**.
+Full regression: GREEN. Real project data isolation: PASS. Architecture/dependency boundary: PASS. Product scope boundary: PASS.
+Branch: feat/openmesh-0.1.3
+Starting HEAD: `5359929b5f33da3783967f4d72c20d01d4709a26` (Dev Track 0.1.3.8 governance commit)
+Feature commit: `5bf94b85987cfb930970e658de70cb2c56dea00b` (subject: `feat(core): add work proxy profile`; parent `5359929b5f33da3783967f4d72c20d01d4709a26`; verified — 4 modified/13 added/0 removed, exact accepted inventory; +5145 / -13; `git diff HEAD^ HEAD --check` clean; final commit body subject-only with no Cursor `Co-authored-by` trailer)
+Feature commit hygiene note: initial `git commit` received unwanted Cursor `Co-authored-by` trailer; `git commit --amend --no-verify` still re-injected the trailer; final feature commit rewritten with `git commit-tree` + `git reset --hard` (same tree and parent; subject-only body; no Cursor co-author trailer remains).
+Commit verification: PASS
+Push: NOT YET (feature commit local only; governance commit pending; publish gate not yet authorized)
+Release: NOT YET
+Objective: My Work Proxy Profile — `WorkProxyProfile` v1.0 domain contracts, five-level authority ladder with deterministic resolution and privacy dominance, cross-policy validation, refusal and evidence policies, local canonical profile storage at `.openmesh/profile/work-proxy-profile.json`, CLI `profile init|show|update|validate`, no-impersonation and fail-closed boundaries, continuity compatibility with `state` and `catch-up`, and one coherent 14-step fresh-project dogfood session. Executed through Checkpoints A–G.
+What changed (accepted product diff, committed in feature commit `5bf94b8`):
+- `crates/openmesh-core/src/domain.rs`: `WorkProxyProfile` v1.0, authority ladder types, validators, `default_work_proxy_profile`.
+- `crates/openmesh-core/src/profile_validation.rs` (new): cross-field policy validation, `resolve_profile_authority`, `ProfilePolicyResult`, `proxy_behavior_allowed`.
+- `crates/openmesh-core/src/profile.rs` (new): canonical path, validated read/write, workspace ownership, atomic replacement, explicit missing profile.
+- `crates/openmesh-core/src/lib.rs`: export profile modules.
+- `crates/openmesh-cli/src/profile.rs` (new), `main.rs`: `openmesh-cli profile init|show|update|validate` with human and JSON output.
+- Tests: `profile_contracts.rs` (20), `profile_validation.rs` (20), `profile_storage.rs` (25), `profile_boundary.rs` (14 core), `profile_continuity_compatibility.rs` (11 core); `profile.rs` (19), `profile_workflow.rs` (8), `profile_boundary.rs` (17), `profile_continuity_compatibility.rs` (11); `event_correction_workflow.rs` boundary-guard scope fix; fixture `work-proxy-profile-valid.json`.
+- `src-tauri/**`, frontend source tree, `Cargo.toml`, `Cargo.lock`, `continuity/**`, `events.rs`, `signals.rs`, `promotion.rs`, `intelligence.rs`, `producers/**`: **zero diff**.
+Commands run and exact results (Checkpoint G + commit gate + feature commit, 2026-07-18):
+- `cargo fmt --check` — PASS.
+- `cargo test -p openmesh-core` — PASS.
+- `cargo test -p openmesh-cli` — PASS.
+- `cargo test --workspace` — PASS.
+- `cargo clippy -p openmesh-core -- -D warnings` — PASS.
+- `cargo clippy -p openmesh-cli -- -D warnings` — PASS.
+- `cargo clippy --workspace -- -D warnings` — PASS.
+- `cargo check --workspace` — PASS.
+- `cargo build --workspace` — PASS.
+- `npm run verify` — PASS — **212/212**, 0 type errors.
+- `git diff --check` — PASS (benign CRLF/LF autocrlf warnings only).
+Fresh dogfood gate: **14/14 PASS** (one project root: `C:\Users\KongphopJamreansuk\AppData\Local\Temp\openmesh-0.1.4-dogfood-36368`; evidence in `.heli-harness/state/reports/openmesh-0.1.4-profile-dogfood-gate.md` and `dogfood-evidence/` — external to worktree git).
+Dogfood highlights:
+- state `rebuildInputsHash` before/after profile: `fnv1a-6dd176ff3e7276a3` (unchanged)
+- invalid profile update preserved valid profile and continuity data
+- malformed profile isolated from continuity (`state`/`catch-up` still succeed)
+- active project buckets remained `pending` 0 / `processed` 0 / `quarantine` 0 / `duplicate` 0; worktree inbox `0 / 5 / 0 / 0`
+Real-project data-isolation proof: no `.openmesh/profile/` or `.openmesh/projections/` in real active project or worktree; profile writes temp-project-only; no signal inbox mutation on real projects; WorkSignals created in real projects **0**; WorkEvents created in real projects **0**; promotion audit mutation **none**.
+Architecture/dependency boundary:
+- Workspace members unchanged (`openmesh`, `openmesh-core`, `openmesh-cli`).
+- `#[tauri::command]` count: `src-tauri/src/lib.rs` **52** — unchanged.
+- `Cargo.toml` / `Cargo.lock`: unchanged — no new third-party dependencies.
+Product scope boundary:
+- No Proxy Context Pack.
+- No Ask My Proxy.
+- No generated answers; authority resolution returns policy metadata only.
+- No LLM/AXGA runtime.
+- No Desktop/Tauri profile commands.
+- No daemon/watcher/background loop.
+- No remote API/sync or Team Mesh.
+- Dev Track 0.1.5 not started.
+- Dev Track 0.1.6 not started.
+**Final human acceptance (2026-07-18)**: Human/Main-Brain issued the final disposition — Dev Track 0.1.4 is accepted as **PASS**. Checkpoints A–G are all accepted. Feature commit `5bf94b85987cfb930970e658de70cb2c56dea00b` created and verified (parent `5359929b5f33da3783967f4d72c20d01d4709a26`; 17 files; +5145 / -13; removed 0; unexpected 0; committed diff check clean; unwanted Cursor trailer removed via commit-tree rewrite; post-commit worktree clean except external `.heli-harness/**`). Full regression was GREEN at commit time. Governance commit records this transition; push not yet authorized.
+Known limitations:
+- Full checkpoint-by-checkpoint detail is in external Heli reports under `.heli-harness/state/reports/`.
+- Dogfood catch-up `sections.changed` may differ by one item when `until` advances between back-to-back CLI runs; fixed-window compatibility tests prove profile orthogonality.
+- Profile init uses `storage::init_project` marker layout when no CLI init command exists.
+Next recommended action: publish gate (push feature + governance commits) may proceed only after separate human authorization.
+
+### Final Automated Status: PASS — HUMAN ACCEPTED — FEATURE COMMITTED
+### Dev Track 0.1.5 Unlocked: NO (separate unlock review and human authorization required)
+### Dev Track 0.1.6 Unlocked: NO (separate unlock review and human authorization required)
