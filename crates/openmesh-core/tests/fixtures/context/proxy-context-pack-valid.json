@@ -1,0 +1,174 @@
+{
+  "contextPackId": "context-pack-fnv1a-6dd176ff3e7276a3",
+  "workspaceId": "ws-fixture-0.1.5",
+  "profileId": "profile-ws-fixture-0.1.5",
+  "profileVersion": "1.0",
+  "protocolVersion": "1.0",
+  "generatedAt": "2026-07-18T04:00:00Z",
+  "requestedWindow": {
+    "since": "2026-07-17T00:00:00Z",
+    "until": "2026-07-18T00:00:00Z"
+  },
+  "ownerIdentity": {
+    "ownerLabel": "Fixture Owner",
+    "roleLabel": "Engineering lead"
+  },
+  "communicationPreferences": {
+    "tone": "direct",
+    "detailLevel": "medium",
+    "asyncPreference": "prefer-async",
+    "correctionPreference": "surface-limitations"
+  },
+  "decisionPreferences": {
+    "decisionStyle": "evidence-first",
+    "escalationPreference": "ask-human-on-ambiguity"
+  },
+  "authoritySummary": {
+    "authorityRules": [
+      {
+        "ruleId": "rule-global",
+        "scope": "*",
+        "authority": "must-ask-human",
+        "description": "default safe baseline",
+        "conditions": [],
+        "evidenceRequired": true,
+        "humanConfirmationRequired": true,
+        "limitations": []
+      }
+    ],
+    "defaultRefusalRules": [
+      {
+        "ruleId": "refusal-no-impersonation",
+        "statement": "cannot impersonate owner"
+      }
+    ],
+    "ladderLevels": [
+      "can-answer",
+      "can-suggest",
+      "can-draft",
+      "must-ask-human",
+      "cannot-answer"
+    ],
+    "executionBoundary": "policy-metadata-only; no runtime authority execution in 0.1.5"
+  },
+  "privacySummary": {
+    "privacyRules": [
+      {
+        "ruleId": "privacy-credentials",
+        "topic": "credentials",
+        "sensitivity": "secret",
+        "allowedUse": "exclude-from-answers",
+        "restriction": "never include in proxy output",
+        "requiresHumanConfirmation": true
+      }
+    ],
+    "sensitiveTopics": ["credentials"],
+    "filteringApplied": ["secret-evidence-omitted"]
+  },
+  "evidencePolicy": {
+    "answerWithoutEvidence": false,
+    "requireEvidenceForClaims": true,
+    "exposeLimitations": true,
+    "citeSourceKinds": ["file-path", "work-event"],
+    "unsupportedClaimBehavior": "say-unknown"
+  },
+  "currentState": {
+    "workspaceId": "ws-fixture-0.1.5",
+    "sections": {
+      "completed": [],
+      "inProgress": [
+        {
+          "id": "item-in-progress-1",
+          "summary": "bootstrap continuity fixture",
+          "kind": "work.in-progress",
+          "source": "work-event",
+          "provenance": "confirmed",
+          "timestamp": "2026-07-17T10:00:00Z",
+          "evidenceRefs": [
+            { "type": "file-path", "value": "docs/readme.md" }
+          ],
+          "confidence": "high"
+        }
+      ],
+      "blocked": [],
+      "decisions": [],
+      "needsAttention": [],
+      "stillOpen": []
+    },
+    "pendingAttention": [
+      {
+        "id": "pending-1",
+        "summary": "pending signal awaiting promotion",
+        "reason": "pending-signal",
+        "provenance": "pending",
+        "timestamp": "2026-07-17T11:00:00Z",
+        "status": "open",
+        "severity": "medium",
+        "priority": 3,
+        "evidenceRefs": []
+      }
+    ],
+    "limitations": ["context pack metadata only; no answering runtime in 0.1.5"]
+  },
+  "catchUp": {
+    "workspaceId": "ws-fixture-0.1.5",
+    "window": {
+      "since": "2026-07-17T00:00:00Z",
+      "until": "2026-07-18T00:00:00Z"
+    },
+    "sections": {
+      "completed": [],
+      "changed": [],
+      "blocked": [],
+      "decided": [],
+      "needsAttention": [],
+      "stillOpen": []
+    },
+    "summary": "No material changes in fixture window.",
+    "nextSuggestedAttention": [],
+    "limitations": ["context pack metadata only; no answering runtime in 0.1.5"]
+  },
+  "evidenceIndex": [
+    {
+      "refId": "ref-001",
+      "evidenceRef": { "type": "file-path", "value": "docs/readme.md" },
+      "origin": "continuity-item",
+      "sensitivity": "private",
+      "label": "readme evidence",
+      "timestamp": "2026-07-17T10:00:00Z"
+    }
+  ],
+  "sourceCounts": {
+    "workEvents": 1,
+    "processedSignals": 1,
+    "pendingSignals": 1,
+    "promotionAuditRecords": 0,
+    "quarantineSignals": 0,
+    "duplicateSignals": 0,
+    "reporterSignals": 0,
+    "gitSignals": 0,
+    "heliSignals": 0,
+    "unknownProducerSignals": 0,
+    "otherProducerSignals": 0
+  },
+  "diagnostics": [],
+  "limitations": ["context pack metadata only; no answering runtime in 0.1.5"],
+  "unresolvedItems": [],
+  "freshness": {
+    "snapshotObservedAt": "2026-07-18T03:59:00Z",
+    "currentStateGeneratedAt": "2026-07-18T03:59:30Z",
+    "catchUpSince": "2026-07-17T00:00:00Z",
+    "catchUpUntil": "2026-07-18T00:00:00Z",
+    "packGeneratedAt": "2026-07-18T04:00:00Z",
+    "ageSeconds": 3600,
+    "warnings": []
+  },
+  "redactionSummary": {
+    "secretItemsOmitted": 1,
+    "policyRestrictedItemsOmitted": 0,
+    "malformedItemsOmitted": 0,
+    "quarantinedItemsOmitted": 0,
+    "boundsTruncatedItems": 0
+  },
+  "buildInputsHash": "fnv1a-6dd176ff3e7276a3"
+}

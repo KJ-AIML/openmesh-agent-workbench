@@ -335,20 +335,56 @@ fn checkpoint_a_does_not_touch_continuity_or_cli() {
 }
 
 #[test]
-fn checkpoint_a_does_not_start_ask_my_proxy_or_context_pack() {
+fn profile_contracts_do_not_start_ask_my_proxy_or_answer_runtime() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let domain = fs::read_to_string(root.join("src/domain.rs")).expect("read domain");
+    for rel in ["src/profile.rs", "src/profile_validation.rs"] {
+        let content = fs::read_to_string(root.join(rel)).expect("read profile source");
+        let lowered = content.to_ascii_lowercase();
+        for forbidden in [
+            "proxycontextpack",
+            "validate_proxy_context_pack",
+            "context_pack",
+            "context-pack",
+            "build_context_pack",
+            "select_context_pack",
+            "ask_my_proxy",
+            "ask-my-proxy",
+            "ask my proxy",
+            "generate_answer",
+            "openai",
+            "axga",
+        ] {
+            assert!(
+                !lowered.contains(forbidden),
+                "{rel} must not reference {forbidden}"
+            );
+        }
+    }
+
+    let profile = sample_profile();
+    let json = serde_json::to_string(&profile).expect("serialize profile");
+    let lowered = json.to_ascii_lowercase();
     for forbidden in [
-        "ask my proxy",
-        "ask-my-proxy",
-        "context pack",
-        "context-pack",
-        "ProxyContextPack",
-        "generate_answer",
+        "\"answer\"",
+        "\"response\"",
+        "\"query\"",
+        "\"prompt\"",
+        "\"draftcontent\"",
+        "\"suggestiontext\"",
+        "\"model\"",
+        "\"provider\"",
+        "\"temperature\"",
+        "\"axga\"",
+        "\"llm\"",
     ] {
         assert!(
-            !domain.to_ascii_lowercase().contains(forbidden),
-            "domain.rs must not reference {forbidden}"
+            !lowered.contains(forbidden),
+            "profile contract must not expose {forbidden}"
         );
     }
+
+    // 0.1.5 domain contracts may define ProxyContextPack without profile runtime coupling.
+    let domain = fs::read_to_string(root.join("src/domain.rs")).expect("read domain");
+    assert!(domain.contains("ProxyContextPack"));
+    assert!(!domain.contains("fn generate_answer"));
 }

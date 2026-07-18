@@ -12,6 +12,7 @@
 
 mod catch_up;
 mod collect;
+mod context;
 mod event;
 mod output;
 mod profile;
@@ -50,6 +51,9 @@ pub enum Commands {
     /// Manage the local Work Proxy Profile (Dev Track 0.1.4).
     #[command(subcommand)]
     Profile(profile::ProfileCommand),
+    /// Build, show, or validate the local Proxy Context Pack (Dev Track 0.1.5).
+    #[command(subcommand)]
+    Context(context::ContextCommand),
 }
 
 #[derive(Subcommand, Debug)]
@@ -239,6 +243,7 @@ fn run() -> i32 {
             EventCommand::Correct(args) => event::run_event_correct(&args, &cwd),
         },
         Commands::Profile(cmd) => profile::run_profile(cmd, &cwd),
+        Commands::Context(cmd) => context::run_context(cmd, &cwd),
     }
 }
 

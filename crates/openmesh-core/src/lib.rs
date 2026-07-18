@@ -75,10 +75,26 @@
 // Dev Track 0.1.4 Checkpoint D — CLI profile workflow:
 // - `openmesh-cli profile init|show|update|validate`
 //
+// Dev Track 0.1.5 Checkpoint A — Proxy Context Pack domain contracts (pure, no I/O):
+// - `domain` — `ProxyContextPack` v1.0, sanitized continuity surfaces, validation helpers
+//
+// Dev Track 0.1.5 Checkpoint B — deterministic context selection (pure, no I/O):
+// - `context_pack_selection` — evidence index assembly, sanitization, redaction counts
+//
+// Dev Track 0.1.5 Checkpoint D — complete policy validation (pure, no I/O):
+// - `context_pack_validation` — cross-field invariants, fail-closed privacy semantics
+//
+// Dev Track 0.1.5 Checkpoint E — local context pack persistence + CLI workflow:
+// - `context_pack_storage` — canonical pack at `.openmesh/projections/proxy-context-pack.json`
+//
 // Ledger APIs are core-only in this track. CLI, Tauri, and Desktop do not expose
 // WorkEvent ledger commands yet.
 
 pub mod context;
+pub mod context_pack;
+pub mod context_pack_selection;
+pub mod context_pack_storage;
+pub mod context_pack_validation;
 pub mod context_service;
 #[allow(dead_code)]
 pub mod continuity;

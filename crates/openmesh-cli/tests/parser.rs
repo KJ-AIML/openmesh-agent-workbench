@@ -56,14 +56,7 @@ fn all_eleven_kinds_are_recognized_by_signal_help() {
 fn no_other_top_level_command_exists() {
     let output = cli().arg("--help").output().unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
-    for forbidden in [
-        "status",
-        "workspace",
-        "context",
-        "process",
-        "replay",
-        "init",
-    ] {
+    for forbidden in ["status", "workspace", "process", "replay", "init"] {
         assert!(
             !stdout.to_lowercase().contains(forbidden),
             "top-level --help must not mention `{forbidden}`, got:\n{stdout}"

@@ -466,16 +466,15 @@ fn compatibility_tests_touch_no_tauri_remote_or_team_mesh() {
 }
 
 #[test]
-fn checkpoint_f_does_not_start_0_1_5_or_0_1_6() {
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
-    for file in ["profile.rs", "main.rs"] {
-        let content = fs::read_to_string(root.join(file)).expect("read source");
-        let lowered = content.to_ascii_lowercase();
-        for forbidden in ["proxycontextpack", "askmyproxy", "0.1.5", "0.1.6"] {
-            assert!(
-                !lowered.contains(forbidden),
-                "{file} must not start {forbidden}"
-            );
-        }
+fn checkpoint_f_profile_module_does_not_start_0_1_5_or_0_1_6() {
+    let content =
+        fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/profile.rs"))
+            .expect("read profile.rs");
+    let lowered = content.to_ascii_lowercase();
+    for forbidden in ["proxycontextpack", "askmyproxy", "0.1.5", "0.1.6"] {
+        assert!(
+            !lowered.contains(forbidden),
+            "profile.rs must not start {forbidden}"
+        );
     }
 }
