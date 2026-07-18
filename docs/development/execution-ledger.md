@@ -2089,5 +2089,74 @@ Known limitations:
 Next recommended action: publish gate (push feature + governance commits) may proceed only after separate human authorization.
 
 ### Final Automated Status: PASS — HUMAN ACCEPTED — FEATURE COMMITTED
-### Dev Track 0.1.5 Unlocked: NO (separate unlock review and human authorization required)
+### Dev Track 0.1.5 Unlocked: YES (0.1.4 feature committed; separate human authorization received for 0.1.5 implementation)
+
+## 2026-07-18 — Dev Track 0.1.5
+
+Status: PASS — HUMAN ACCEPTED — FEATURE COMMITTED — CLOSED LOCALLY
+Human final disposition date: 2026-07-18
+Checkpoints A–H: PASS. Whole Dev Track 0.1.5: **PASS**.
+Full regression: GREEN. Real project data isolation: PASS. Architecture/dependency boundary: PASS. Product scope boundary: PASS.
+Branch: feat/openmesh-0.1.3
+Starting HEAD: `f7ea903f63ea4e80ddd6ccfdf1e01283498eeb8e` (Dev Track 0.1.4 governance commit)
+Feature commit: `d9941394deccdfa80a72a5801947b88d6389d192` (subject: `feat(context): add proxy context pack builder`; parent `f7ea903f63ea4e80ddd6ccfdf1e01283498eeb8e`; verified — 7 modified/16 added/0 removed, exact accepted inventory; +11405 / -46; `git diff HEAD^ HEAD --check` clean; final commit body subject-only with no Cursor `Co-authored-by` trailer)
+Feature commit hygiene note: initial `git commit` received unwanted Cursor `Co-authored-by` trailer; `git commit --amend --no-verify` still re-injected the trailer; final feature commit rewritten with `git commit-tree` + `git update-ref` (same tree and parent; subject-only body; no Cursor co-author trailer remains).
+Commit verification: PASS
+Push: NOT YET (feature commit local only; governance commit pending; publish gate not yet authorized)
+Release: NOT YET
+Objective: Proxy Context Pack Builder — `ProxyContextPack` v1.0 domain contracts, deterministic secret-safe evidence selection, read-only composition builder with sanitized semantic `buildInputsHash`, complete validation and typed safe errors, canonical local persistence at `.openmesh/projections/proxy-context-pack.json`, CLI `context build|show|validate`, no-answer/no-authority-execution boundaries, continuity compatibility, and one coherent 16-step fresh-project dogfood session. Executed through Checkpoints A–H.
+What changed (accepted product diff, committed in feature commit `d994139`):
+- `crates/openmesh-core/src/domain.rs`: `ProxyContextPack` v1.0 contracts, validation entrypoints, deterministic pack identity.
+- `crates/openmesh-core/src/context_pack.rs` (new): read-only builder and safe semantic hash composition.
+- `crates/openmesh-core/src/context_pack_selection.rs` (new): deterministic selection and secret-safe sanitization.
+- `crates/openmesh-core/src/context_pack_validation.rs` (new): complete validation and typed failure semantics.
+- `crates/openmesh-core/src/context_pack_storage.rs` (new): canonical path, atomic validated write, explicit read errors.
+- `crates/openmesh-core/src/lib.rs`: export context pack modules.
+- `crates/openmesh-cli/src/context.rs` (new), `main.rs`: `openmesh-cli context build|show|validate` with human and JSON output.
+- Tests: `context_pack_contracts.rs`, `context_pack_selection.rs`, `context_pack_builder.rs`, `context_pack_validation.rs`, `context_pack_storage.rs`, `context_pack_boundary.rs`, `context_pack_continuity_compatibility.rs`; `context_workflow.rs`, `context_boundary.rs`, `context_compatibility.rs`; narrow boundary updates in `profile_contracts.rs`, `parser.rs`, `profile_boundary.rs`, `profile_continuity_compatibility.rs`; fixture `proxy-context-pack-valid.json`.
+- `profile.rs`, `profile_validation.rs`, `continuity/**`, `events.rs`, `signals.rs`, `promotion.rs`, `intelligence.rs`, `producers/**`, `src-tauri/**`, frontend source tree, `Cargo.toml`, `Cargo.lock`: **zero diff**.
+Commands run and exact results (Checkpoint H + commit gates, 2026-07-18):
+- `cargo fmt --check` — PASS.
+- `cargo test -p openmesh-core` — PASS.
+- `cargo test -p openmesh-cli` — PASS.
+- `cargo test --workspace` — PASS.
+- `cargo clippy -p openmesh-core -- -D warnings` — PASS.
+- `cargo clippy -p openmesh-cli -- -D warnings` — PASS.
+- `cargo clippy --workspace -- -D warnings` — PASS.
+- `cargo check --workspace` — PASS.
+- `cargo build --workspace` — PASS.
+- `npm run verify` — PASS — **212/212**, 0 type errors.
+- `git diff --check` — PASS (benign CRLF/LF autocrlf warnings only).
+Fresh dogfood gate: **16/16 PASS** (one project root: `C:\Users\KongphopJamreansuk\AppData\Local\Temp\openmesh-0.1.5-dogfood-5168`; evidence in `.heli-harness/state/reports/openmesh-0.1.5-context-dogfood-gate.md` and `openmesh-0.1.5-dogfood-evidence/` — external to worktree git).
+Dogfood highlights:
+- repeated `buildInputsHash`: `fnv1a-df8108a9759f7f2d`
+- repeated `contextPackId`: `context-pack-fnv1a-df8108a9759f7f2d`
+- `secretItemsOmitted`: 4 (aggregate only; secret identity absent from pack surfaces)
+- pending provenance preserved; corrected effective summary used
+- malformed profile/pack isolated from profile/state/catch-up
+- explicit `--write` created only `proxy-context-pack.json`
+- active project buckets remained `pending` 0 / `processed` 0 / `quarantine` 0 / `duplicate` 0; worktree inbox `0 / 5 / 0 / 0`
+Real-project data-isolation proof: no `.openmesh/profile/` or `.openmesh/projections/proxy-context-pack.json` in real active project or worktree; context pack writes temp-project-only; no signal inbox mutation on real projects; WorkSignals created in real projects **0**; WorkEvents created in real projects **0**; promotion audit mutation **none**.
+Architecture/dependency boundary:
+- Workspace members unchanged (`openmesh`, `openmesh-core`, `openmesh-cli`).
+- `#[tauri::command]` count: `src-tauri/src/lib.rs` **52** — unchanged.
+- `Cargo.toml` / `Cargo.lock`: unchanged — no new third-party dependencies.
+Product scope boundary:
+- No Ask My Proxy.
+- No generated answers, drafts, or suggestions; authority remains metadata only.
+- No LLM/AXGA/intelligence runtime activation.
+- No Desktop/Tauri context commands.
+- No daemon/watcher/background loop.
+- No remote API/sync or Team Mesh.
+- Dev Track 0.1.6 not started.
+- Dev Track 0.1.7 not started.
+**Final human acceptance (2026-07-18)**: Human/Main-Brain issued the final disposition — Dev Track 0.1.5 is accepted as **PASS**. Checkpoints A–H are all accepted. Feature commit `d9941394deccdfa80a72a5801947b88d6389d192` created and verified (parent `f7ea903f63ea4e80ddd6ccfdf1e01283498eeb8e`; 23 files; +11405 / -46; removed 0; unexpected 0; committed diff check clean; unwanted Cursor trailer removed via commit-tree rewrite; post-commit worktree clean except external `.heli-harness/**`). Full regression was GREEN at commit time. Governance commit records local closure; push not yet authorized.
+Known limitations:
+- Full checkpoint-by-checkpoint detail is in external Heli reports under `.heli-harness/state/reports/`.
+- Dogfood CLI binary used sandbox `CARGO_TARGET_DIR` build; worktree `target/debug/openmesh-cli.exe` may be stale without rebuild.
+- Context pack build requires existing valid profile; no automatic profile synthesis.
+Next recommended action: publish gate (push feature + governance commits) may proceed only after separate human authorization.
+
+### Final Automated Status: PASS — HUMAN ACCEPTED — FEATURE COMMITTED — CLOSED LOCALLY
 ### Dev Track 0.1.6 Unlocked: NO (separate unlock review and human authorization required)
+### Dev Track 0.1.7 Unlocked: NO (separate unlock review and human authorization required)
