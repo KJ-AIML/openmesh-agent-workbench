@@ -55,7 +55,51 @@ fn workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
+fn sha256_bytes_powershell(bytes: &[u8]) -> String {
+    let tmp = std::env::temp_dir().join(format!(
+        "openmesh-sha256-{}-{}.bin",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or(0)
+    ));
+    fs::write(&tmp, bytes).expect("write temp hash file");
+    let output = Command::new("powershell")
+        .args([
+            "-NoProfile",
+            "-Command",
+            &format!(
+                "(Get-FileHash -Algorithm SHA256 '{}').Hash.ToLower()",
+                tmp.display()
+            ),
+        ])
+        .output()
+        .expect("hash bytes");
+    let _ = fs::remove_file(&tmp);
+    assert!(
+        output.status.success(),
+        "hash command failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8_lossy(&output.stdout).trim().to_string()
+}
+
 fn sha256_file(path: &Path) -> String {
+    let root = workspace_root();
+    if let Ok(relative_path) = path.strip_prefix(&root) {
+        let relative = relative_path.to_string_lossy().replace('\\', "/");
+        let canonical = Command::new("git")
+            .args(["cat-file", "-p", &format!("HEAD:{relative}")])
+            .current_dir(&root)
+            .output();
+        if let Ok(output) = canonical {
+            if output.status.success() {
+                return sha256_bytes_powershell(&output.stdout);
+            }
+        }
+    }
+
     let output = Command::new("powershell")
         .args([
             "-NoProfile",

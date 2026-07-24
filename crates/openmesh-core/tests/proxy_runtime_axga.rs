@@ -1193,35 +1193,171 @@ fn no_0_1_7_contracts_are_added() {
     assert!(!source.contains("\"claims\""));
 }
 
-#[test]
-fn no_commit_push_or_feature_closure_exists() {
-    let ledger = include_str!("../../../docs/development/execution-ledger.md");
-    assert!(!ledger.contains("Dev Track 0.1.6 — PASS"));
-    assert!(!ledger.contains("0.1.6 Checkpoint G — PASS"));
-    assert!(!ledger.contains("0.1.6 Checkpoint H — PASS"));
+fn repo_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+}
 
-    let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let status = Command::new("git")
-        .args(["status", "--porcelain"])
-        .current_dir(&repo_root)
+fn git_ok(args: &[&str]) -> String {
+    let output = Command::new("git")
+        .args(args)
+        .current_dir(repo_root())
         .output()
-        .expect("git status");
-    assert!(status.status.success());
-    let porcelain = String::from_utf8_lossy(&status.stdout);
+        .unwrap_or_else(|_| panic!("spawn git {args:?}"));
     assert!(
-        !porcelain.is_empty(),
-        "amendment verification expects an uncommitted worktree diff"
+        output.status.success(),
+        "git {args:?} failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8_lossy(&output.stdout).trim().to_string()
+}
+
+const CLOSURE_REMOTE_BASELINE: &str = "7dc2bf0bce928a295a68c491a70e550203b56c24";
+const CLOSURE_FEATURE_COMMIT: &str = "3e8f3a9feba9f504b656beca23e1e523b2133ab4";
+
+fn assert_not_behind_upstream() {
+    assert_eq!(
+        git_ok(&["rev-list", "--count", "HEAD..@{upstream}"]),
+        "0",
+        "branch must not be behind upstream"
+    );
+}
+
+fn section_0_1_6(ledger: &str) -> &str {
+    let start = ledger
+        .find("## 2026-07-24 — Dev Track 0.1.6")
+        .expect("0.1.6 section");
+    let tail = &ledger[start..];
+    let end = tail[1..]
+        .find("\n## ")
+        .map(|index| start + 1 + index)
+        .unwrap_or(ledger.len());
+    &ledger[start..end]
+}
+
+fn assert_ledger_records_local_closure_without_push() {
+    let ledger = fs::read_to_string(repo_root().join("docs/development/execution-ledger.md"))
+        .expect("execution ledger");
+    let section = section_0_1_6(&ledger);
+    assert!(section.contains("CLOSED LOCALLY"));
+    assert!(section.contains(CLOSURE_FEATURE_COMMIT));
+    for forbidden in [
+        "Push: PERFORMED",
+        "Push: COMPLETE",
+        "Merge: COMPLETE",
+        "Tag: COMPLETE",
+        "Release: COMPLETE",
+    ] {
+        assert!(
+            !section.contains(forbidden),
+            "forbidden 0.1.6 ledger claim: {forbidden}"
+        );
+    }
+    assert!(
+        section.contains("Push: NOT YET") || section.contains("NOT PERFORMED"),
+        "0.1.6 ledger must record push as not yet performed"
+    );
+}
+
+fn assert_closure_commit_chain() {
+    assert!(
+        Command::new("git")
+            .args([
+                "merge-base",
+                "--is-ancestor",
+                CLOSURE_REMOTE_BASELINE,
+                "HEAD"
+            ])
+            .current_dir(repo_root())
+            .status()
+            .expect("merge-base")
+            .success(),
+        "remote baseline must be ancestor of HEAD"
     );
 
-    let ahead = Command::new("git")
-        .args(["rev-list", "--count", "@{upstream}..HEAD"])
-        .current_dir(&repo_root)
-        .output()
-        .expect("git ahead count");
-    if ahead.status.success() {
-        let count = String::from_utf8_lossy(&ahead.stdout).trim().to_string();
-        assert_eq!(count, "0", "branch must not be ahead of upstream (no push)");
+    let feature_subject = git_ok(&["log", "-1", "--format=%s", CLOSURE_FEATURE_COMMIT]);
+    assert!(
+        feature_subject.contains("Ask My Proxy local alpha"),
+        "unexpected feature commit subject: {feature_subject}"
+    );
+
+    let governance_sha = git_ok(&[
+        "log",
+        "--format=%H %s",
+        &format!("{CLOSURE_REMOTE_BASELINE}..HEAD"),
+    ])
+    .lines()
+    .find_map(|line| {
+        let (sha, subject) = line.split_once(' ')?;
+        subject
+            .contains("close OpenMesh 0.1.6")
+            .then(|| sha.to_string())
+    })
+    .expect("governance closure commit must exist on branch");
+    let governance_files = git_ok(&["diff", "--name-only", &format!("{governance_sha}^!")]);
+    assert_eq!(
+        governance_files, "docs/development/execution-ledger.md",
+        "governance commit must only touch execution ledger"
+    );
+
+    assert!(
+        Command::new("git")
+            .args([
+                "merge-base",
+                "--is-ancestor",
+                CLOSURE_FEATURE_COMMIT,
+                "HEAD"
+            ])
+            .current_dir(repo_root())
+            .status()
+            .expect("feature ancestor")
+            .success(),
+        "feature commit must be ancestor of HEAD"
+    );
+}
+
+fn assert_only_authorized_paths_after_feature_commit() {
+    let diff = git_ok(&[
+        "diff",
+        "--name-only",
+        &format!("{CLOSURE_FEATURE_COMMIT}..HEAD"),
+    ]);
+    for line in diff.lines().filter(|line| !line.is_empty()) {
+        let allowed = line == "docs/development/execution-ledger.md"
+            || (line.starts_with("crates/") && line.contains("/tests/") && line.ends_with(".rs"));
+        assert!(allowed, "unauthorized path after feature commit: {line}");
     }
+}
+
+#[test]
+fn authorized_0_1_6_local_closure_chain_is_intact() {
+    assert_not_behind_upstream();
+    assert_ledger_records_local_closure_without_push();
+    assert_closure_commit_chain();
+    assert_only_authorized_paths_after_feature_commit();
+
+    let ahead = git_ok(&["rev-list", "--count", "@{upstream}..HEAD"]);
+    assert!(
+        ahead != "0",
+        "authorized local feature/governance commits must remain unpushed (ahead > 0)"
+    );
+}
+
+#[test]
+fn reject_premature_amendment_phase_closure_markers_in_ledger() {
+    let ledger = fs::read_to_string(repo_root().join("docs/development/execution-ledger.md"))
+        .expect("execution ledger");
+    assert!(
+        !ledger.contains("0.1.6 Checkpoint G — PASS"),
+        "premature checkpoint G ledger marker"
+    );
+    assert!(
+        !ledger.contains("0.1.6 Checkpoint H — PASS"),
+        "premature checkpoint H ledger marker"
+    );
+    assert!(
+        !ledger.contains("Dev Track 0.1.6 — PASS"),
+        "premature whole-track ledger marker"
+    );
 }
 
 #[test]
