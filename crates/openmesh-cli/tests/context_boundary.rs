@@ -471,19 +471,20 @@ fn checkpoint_f_does_not_start_ask_my_proxy() {
     }
 }
 
+// Lifecycle amendment (Checkpoint E isolation patch): context module must remain
+// isolated from proxy/0.1.7 surfaces. Shared `main.rs` may register the E `proxy`
+// command; context.rs ownership is unchanged.
 #[test]
 fn checkpoint_f_does_not_start_0_1_6_or_0_1_7() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
-    for file in ["context.rs", "main.rs"] {
-        let lowered = fs::read_to_string(root.join(file))
-            .expect("read")
-            .to_ascii_lowercase();
-        for forbidden in ["0.1.6", "0.1.7", "context document annex", "askmyproxy"] {
-            assert!(
-                !lowered.contains(forbidden),
-                "{file} must not start {forbidden}"
-            );
-        }
+    let lowered = fs::read_to_string(root.join("context.rs"))
+        .expect("read")
+        .to_ascii_lowercase();
+    for forbidden in ["0.1.6", "0.1.7", "context document annex", "askmyproxy"] {
+        assert!(
+            !lowered.contains(forbidden),
+            "context.rs must not start {forbidden}"
+        );
     }
 }
 

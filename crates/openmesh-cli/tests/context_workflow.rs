@@ -517,9 +517,11 @@ fn context_commands_execute_no_authority() {
     assert!(stdout.contains("does not execute proxy authority"));
 }
 
+// Lifecycle amendment (Checkpoint E isolation patch): context help must not expose
+// ask/answer/query subcommands. Top-level `proxy ask` registration is E-owned.
 #[test]
 fn context_commands_expose_no_ask_answer_chat_or_query_subcommand() {
-    let combined = format!("{}\n{}", top_level_help(), context_help()).to_ascii_lowercase();
+    let combined = context_help().to_ascii_lowercase();
     for forbidden in [
         "ask ",
         "answer ",
@@ -775,19 +777,18 @@ fn checkpoint_e_does_not_start_ask_my_proxy() {
     }
 }
 
+// Lifecycle amendment (Checkpoint E isolation patch): context module isolation only.
 #[test]
 fn checkpoint_e_does_not_start_0_1_6_or_0_1_7() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
-    for file in ["context.rs", "main.rs"] {
-        let lowered = fs::read_to_string(root.join(file))
-            .expect("read")
-            .to_ascii_lowercase();
-        for forbidden in ["0.1.6", "0.1.7", "context document annex", "askmyproxy"] {
-            assert!(
-                !lowered.contains(forbidden),
-                "{file} must not start {forbidden}"
-            );
-        }
+    let lowered = fs::read_to_string(root.join("context.rs"))
+        .expect("read")
+        .to_ascii_lowercase();
+    for forbidden in ["0.1.6", "0.1.7", "context document annex", "askmyproxy"] {
+        assert!(
+            !lowered.contains(forbidden),
+            "context.rs must not start {forbidden}"
+        );
     }
 }
 

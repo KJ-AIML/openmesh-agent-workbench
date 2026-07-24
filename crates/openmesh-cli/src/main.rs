@@ -17,6 +17,8 @@ mod event;
 mod output;
 mod profile;
 mod project;
+mod proxy;
+mod proxy_runtime_factory;
 mod signal;
 mod state;
 
@@ -54,6 +56,9 @@ pub enum Commands {
     /// Build, show, or validate the local Proxy Context Pack (Dev Track 0.1.5).
     #[command(subcommand)]
     Context(context::ContextCommand),
+    /// Ask the local Work Proxy for a draft answer (Dev Track 0.1.6).
+    #[command(subcommand)]
+    Proxy(proxy::ProxyCommand),
 }
 
 #[derive(Subcommand, Debug)]
@@ -244,6 +249,7 @@ fn run() -> i32 {
         },
         Commands::Profile(cmd) => profile::run_profile(cmd, &cwd),
         Commands::Context(cmd) => context::run_context(cmd, &cwd),
+        Commands::Proxy(cmd) => proxy::run_proxy(cmd, &cwd),
     }
 }
 

@@ -612,15 +612,25 @@ fn checkpoint_f_does_not_touch_tauri_desktop_or_0_1_3_8() {
     ];
     let continuity_src = root.join("crates/openmesh-core/src/continuity");
     let cli_src = root.join("crates/openmesh-cli/src");
-    for dir in [continuity_src, cli_src] {
+    // Lifecycle amendment (Checkpoint E isolation patch): AXGA references are
+    // legitimate only in E-owned factory files under the CLI src tree.
+    const CHECKPOINT_E_CLI_FILES: &[&str] = &["proxy.rs", "proxy_runtime_factory.rs"];
+    for dir in [continuity_src, cli_src.clone()] {
         if !dir.exists() {
             continue;
         }
         let mut files = Vec::new();
         collect_rs_files(&dir, &mut files);
         for path in files {
+            let file_name = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or_default();
             let content = fs::read_to_string(&path).expect("read source");
             for term in forbidden {
+                if dir == cli_src && term == "AXGA" && CHECKPOINT_E_CLI_FILES.contains(&file_name) {
+                    continue;
+                }
                 assert!(
                     !content.contains(term),
                     "Checkpoint F scope must not reference `{term}`: {}",

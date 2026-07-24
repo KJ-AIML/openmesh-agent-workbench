@@ -87,6 +87,26 @@
 // Dev Track 0.1.5 Checkpoint E — local context pack persistence + CLI workflow:
 // - `context_pack_storage` — canonical pack at `.openmesh/projections/proxy-context-pack.json`
 //
+// Dev Track 0.1.6 Checkpoint A — proxy draft domain and wire contracts (pure, no I/O):
+// - `domain` — `ProxyQuestion`, `ProxyDraft`, `ProxyDraftTraceMetadata`, runtime request/output
+//   contracts, and structural validators (no prompt composition, runtime, or CLI yet)
+//
+// Dev Track 0.1.6 Checkpoint B — question identity + prompt-safe context + composition:
+// - `proxy_question` — `ProxyRequestIdentityProvider`, `create_proxy_question`
+// - `proxy_prompt_context` — `ProxyPromptContext`, allowlist mapper, deterministic bounding
+// - `proxy_prompt` — `compose_proxy_prompt`
+//
+// Dev Track 0.1.6 Checkpoint C — provider-neutral runtime trait + unconfigured + test stub:
+// - `proxy_runtime` — `ProxyDraftRuntime`, `UnconfiguredProxyDraftRuntime`,
+//   `DeterministicStubProxyDraftRuntime`
+//
+// Dev Track 0.1.6 Checkpoint D — Ask My Proxy composition service + draft safety:
+// - `proxy_ask` — `ask_my_proxy_local`, trace metadata construction, `ProxyAskOptions`
+// - `proxy_draft_safety` — `validate_generated_draft_safety`
+//
+// Dev Track 0.1.6 DG — approved external runtime adapter:
+// - `proxy_runtime_axga` — `AxgaAiProxyDraftRuntime`
+//
 // Ledger APIs are core-only in this track. CLI, Tauri, and Desktop do not expose
 // WorkEvent ledger commands yet.
 
@@ -107,6 +127,13 @@ pub mod producers;
 pub mod profile;
 pub mod profile_validation;
 pub mod promotion;
+pub mod proxy_ask;
+pub mod proxy_draft_safety;
+pub mod proxy_prompt;
+pub mod proxy_prompt_context;
+pub mod proxy_question;
+pub mod proxy_runtime;
+pub mod proxy_runtime_axga;
 pub mod signals;
 pub mod storage;
 

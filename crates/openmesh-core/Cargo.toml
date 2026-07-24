@@ -13,3 +13,8 @@ chrono = { version = "0.4", features = ["serde"] }
 dirs = "5"
 rusqlite = { version = "0.30", features = ["bundled"] }
 thiserror = "1"
+axga-ai = { git = "https://github.com/KJ-AIML/axga-harness-agent-rs.git", rev = "f47ebba523a0b59754e3ba2eb200e55b2e7d5d35" }
+axga-shared = { git = "https://github.com/KJ-AIML/axga-harness-agent-rs.git", rev = "f47ebba523a0b59754e3ba2eb200e55b2e7d5d35" }
+tokio = { version = "1", features = ["rt", "time", "macros"] }
+futures = "0.3"
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }

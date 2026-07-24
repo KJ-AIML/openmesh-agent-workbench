@@ -346,17 +346,6 @@ const FUTURE_TRACK_FORBIDDEN_MODULES: &[&str] = &[
     "heli_producer.rs",
 ];
 
-const LLM_RUNTIME_FORBIDDEN_TERMS: &[&str] = &[
-    "axga-ai",
-    "axga_ai",
-    "openai",
-    "anthropic",
-    "llm::",
-    "invoke_model",
-    "chat_completion",
-    "OpenMeshAiRuntime",
-];
-
 #[test]
 fn boundary_blocks_cli_tauri_desktop_promotion_surfaces() {
     let root = workspace_root();
@@ -413,26 +402,220 @@ fn boundary_blocks_git_heli_producers() {
     assert!(!enum_body.contains("HeliRef"));
 }
 
+const AXGA_REFERENCE_TERMS: &[&str] = &[
+    "axga-ai",
+    "axga_ai",
+    "axga-shared",
+    "axga_shared",
+    "AxgaAi",
+    "axga_core",
+    "axga-core",
+];
+
+const DG_ADAPTER_ALLOWED_CORE_FILES: &[&str] = &["proxy_runtime_axga.rs"];
+
+const DG_ADAPTER_FORBIDDEN_CORE_FILES: &[&str] = &[
+    "proxy_runtime.rs",
+    "proxy_ask.rs",
+    "proxy_draft_safety.rs",
+    "proxy_prompt.rs",
+    "proxy_prompt_context.rs",
+    "proxy_question.rs",
+];
+
+const DG_ADAPTER_FORBIDDEN_CORE_PREFIXES: &[&str] =
+    &["context", "profile", "continuity", "promotion", "producers"];
+
+fn assert_file_excludes_axga_terms(path: &Path, content: &str, label: &str) {
+    for term in AXGA_REFERENCE_TERMS {
+        assert!(
+            !content.contains(term),
+            "{label} must not reference AXGA runtime `{term}`: {}",
+            path.display()
+        );
+    }
+}
+
+fn assert_lib_rs_only_wires_dg_adapter(content: &str) {
+    assert!(
+        content.contains("proxy_runtime_axga"),
+        "lib.rs must export the DG adapter module"
+    );
+    for forbidden in [
+        "use axga",
+        "axga-ai",
+        "axga_ai::",
+        "OpenAiProvider",
+        "AnthropicProvider",
+        "DeepSeekProvider",
+        "with_tools",
+        "reqwest",
+        "std::env",
+    ] {
+        assert!(
+            !content.contains(forbidden),
+            "lib.rs must only wire the DG adapter module, not activate runtime `{forbidden}`"
+        );
+    }
+}
+
+fn assert_no_factory_env_or_tool_activation(content: &str, label: &str) {
+    for forbidden in [
+        "resolve_production_proxy_draft_runtime",
+        "proxy_runtime_factory",
+        "with_tools",
+        "AxgaAiProxyDraftRuntime",
+        "proxy_runtime_axga",
+    ] {
+        assert!(
+            !content.contains(forbidden),
+            "{label} must not contain runtime factory/adapter activation `{forbidden}`"
+        );
+    }
+}
+
+fn assert_no_proxy_env_credential_resolution(content: &str, label: &str) {
+    for forbidden in ["OPENAI_API_KEY", "ANTHROPIC_API_KEY", "DEEPSEEK_API_KEY"] {
+        assert!(
+            !content.contains(forbidden),
+            "{label} must not resolve proxy provider credentials from environment `{forbidden}`"
+        );
+    }
+}
+
+fn assert_adapter_has_no_stub_fallback(content: &str, label: &str) {
+    for forbidden in [
+        "DeterministicStubProxyDraftRuntime",
+        "UnconfiguredProxyDraftRuntime",
+    ] {
+        assert!(
+            !content.contains(forbidden),
+            "{label} must not fall back to checkpoint C runtimes `{forbidden}`"
+        );
+    }
+}
+
+const CHECKPOINT_E_ALLOWED_CLI_FILES: &[&str] = &["proxy.rs", "proxy_runtime_factory.rs"];
+
+// Lifecycle amendment (Checkpoint E isolation patch): post-E ledger guard transfers
+// ownership of CLI factory/proxy surfaces from the pre-E global AXGA scan. Shared
+// `main.rs` may wire completed checkpoints; factory/proxy files are allowlisted.
 #[test]
-fn boundary_blocks_llm_axga_runtime_activation() {
+fn boundary_post_e_axga_adapter_and_factory_surface_isolation() {
     let core_src = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
-    let mut files = Vec::new();
-    collect_rs_files(&core_src, &mut files);
-    for path in files {
-        let Some(content) = read_if_exists(&path) else {
-            continue;
-        };
-        if path.ends_with("intelligence.rs") {
+    let root = workspace_root();
+
+    for file_name in DG_ADAPTER_ALLOWED_CORE_FILES {
+        let path = core_src.join(file_name);
+        assert!(
+            path.exists(),
+            "DG adapter module must exist: {}",
+            path.display()
+        );
+    }
+
+    for file_name in DG_ADAPTER_FORBIDDEN_CORE_FILES {
+        let path = core_src.join(file_name);
+        let content = fs::read_to_string(&path).expect("forbidden core file");
+        assert_file_excludes_axga_terms(&path, &content, "Checkpoint A–D core");
+        assert_no_factory_env_or_tool_activation(&content, file_name);
+    }
+
+    let adapter_source =
+        fs::read_to_string(core_src.join("proxy_runtime_axga.rs")).expect("adapter module");
+    assert_adapter_has_no_stub_fallback(&adapter_source, "proxy_runtime_axga.rs");
+    assert_no_proxy_env_credential_resolution(&adapter_source, "proxy_runtime_axga.rs");
+
+    let lib_rs_path = core_src.join("lib.rs");
+    let lib_rs = fs::read_to_string(&lib_rs_path).expect("lib.rs");
+    assert_lib_rs_only_wires_dg_adapter(&lib_rs);
+
+    let mut core_files = Vec::new();
+    collect_rs_files(&core_src, &mut core_files);
+    for path in core_files {
+        let file_name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or_default();
+        if DG_ADAPTER_ALLOWED_CORE_FILES.contains(&file_name)
+            || file_name == "lib.rs"
+            || file_name == "intelligence.rs"
+        {
             continue;
         }
-        for term in LLM_RUNTIME_FORBIDDEN_TERMS {
-            assert!(
-                !content.contains(term),
-                "core must not activate LLM/AXGA runtime `{term}`: {}",
-                path.display()
-            );
+        if DG_ADAPTER_FORBIDDEN_CORE_PREFIXES
+            .iter()
+            .any(|prefix| file_name.starts_with(prefix))
+        {
+            let content = fs::read_to_string(&path).expect("core module");
+            assert_file_excludes_axga_terms(&path, &content, "non-adapter core module");
         }
     }
+
+    for surface in ["crates/openmesh-cli/src", "src-tauri/src", "src"] {
+        let dir = root.join(surface);
+        if !dir.exists() {
+            continue;
+        }
+        let mut files = Vec::new();
+        collect_rs_files(&dir, &mut files);
+        if surface == "src" {
+            let mut ts_files = Vec::new();
+            collect_ts_files(&dir, &mut ts_files);
+            files.extend(ts_files);
+        }
+        for path in files {
+            let Some(content) = read_if_exists(&path) else {
+                continue;
+            };
+            let file_name = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or_default();
+            if surface == "crates/openmesh-cli/src"
+                && CHECKPOINT_E_ALLOWED_CLI_FILES.contains(&file_name)
+            {
+                continue;
+            }
+            assert_file_excludes_axga_terms(&path, &content, surface);
+            if surface == "crates/openmesh-cli/src" && file_name == "main.rs" {
+                continue;
+            }
+            assert_no_factory_env_or_tool_activation(&content, surface);
+        }
+    }
+
+    let cli_manifest =
+        fs::read_to_string(root.join("crates/openmesh-cli/Cargo.toml")).expect("cli manifest");
+    assert!(!cli_manifest.contains("axga-ai"));
+    assert!(!cli_manifest.contains("axga_ai"));
+
+    let factory_source =
+        fs::read_to_string(root.join("crates/openmesh-cli/src/proxy_runtime_factory.rs"))
+            .expect("factory");
+    assert!(factory_source.contains("resolve_production_proxy_draft_runtime"));
+    let factory_production = factory_source
+        .split("#[cfg(test)]")
+        .next()
+        .unwrap_or(&factory_source);
+    assert!(!factory_production.contains("DeterministicStubProxyDraftRuntime"));
+
+    let proxy_source =
+        fs::read_to_string(root.join("crates/openmesh-cli/src/proxy.rs")).expect("proxy");
+    assert!(!proxy_source.contains("OPENAI_API_KEY"));
+    assert!(!proxy_source.contains("std::env::var"));
+    assert!(proxy_source.contains("resolve_production_proxy_draft_runtime"));
+
+    let core_manifest = fs::read_to_string(core_src.join("../Cargo.toml")).expect("core manifest");
+    assert!(core_manifest.contains("axga-ai"));
+    assert!(core_manifest.contains("f47ebba523a0b59754e3ba2eb200e55b2e7d5d35"));
+
+    let lock = fs::read_to_string(root.join("Cargo.lock")).expect("Cargo.lock");
+    assert!(lock.contains("f47ebba523a0b59754e3ba2eb200e55b2e7d5d35"));
+    assert!(!lock.contains("name = \"axga-core\""));
+
+    let adapter_tests = include_str!("proxy_runtime_axga.rs");
+    assert!(adapter_tests.contains("AxgaAiProxyDraftRuntime"));
 
     let intelligence_rs = include_str!("../src/intelligence.rs");
     for term in [

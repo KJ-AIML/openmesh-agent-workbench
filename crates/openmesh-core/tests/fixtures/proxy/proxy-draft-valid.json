@@ -1,0 +1,36 @@
+{
+  "protocolVersion": "1.0",
+  "questionId": "proxy-q-1a2b3c4d5e6f7890-1a2b-3",
+  "generatedAt": "2026-07-18T10:00:00Z",
+  "classification": "local-proxy-draft",
+  "draftText": "Based on available context, the fixture task is in progress. This is a draft only.",
+  "authorityNotice": "Policy metadata only — no authority decision was executed.",
+  "executionBoundary": "draft-only; no authority execution in 0.1.6",
+  "trace": {
+    "protocolVersion": "1.0",
+    "workspaceId": "ws-fixture-0.1.6",
+    "profileId": "profile-ws-fixture-0.1.6",
+    "profileVersion": "1.0",
+    "contextPackId": "context-pack-fnv1a-6dd176ff3e7276a3",
+    "buildInputsHash": "fnv1a-6dd176ff3e7276a3",
+    "evidenceSummary": {
+      "evidenceIndexCount": 2,
+      "sourceCounts": {
+        "continuityItem": 1,
+        "pendingAttention": 1
+      },
+      "secretItemsOmitted": 1
+    }
+  },
+  "runtime": {
+    "runtimeKind": "local-stub",
+    "providerId": "deterministic-stub",
+    "modelId": "fixture-model",
+    "networkUsed": false,
+    "durationMs": 42
+  },
+  "limitations": [
+    "draft-only response; no authority execution",
+    "aggregate evidence metadata only"
+  ]
+}
