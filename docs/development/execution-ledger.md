@@ -2158,5 +2158,92 @@ Known limitations:
 Next recommended action: publish gate (push feature + governance commits) may proceed only after separate human authorization.
 
 ### Final Automated Status: PASS — HUMAN ACCEPTED — FEATURE COMMITTED — CLOSED LOCALLY
-### Dev Track 0.1.6 Unlocked: NO (separate unlock review and human authorization required)
+### Dev Track 0.1.6 Unlocked: YES (0.1.5 feature committed; separate human authorization received for 0.1.6 implementation)
+
+## 2026-07-24 — Dev Track 0.1.6
+
+Status: PASS — HUMAN ACCEPTED — FEATURE COMMITTED — CLOSED LOCALLY
+Human final disposition date: 2026-07-24
+Checkpoints A–H: PASS. Whole Dev Track 0.1.6: **PASS**.
+Full regression: GREEN. Live dogfood (G-B Retry #4): PASS. Architecture/dependency boundary: PASS. Product scope boundary: PASS.
+Branch: feat/openmesh-0.1.3
+Starting HEAD: `7dc2bf0bce928a295a68c491a70e550203b56c24` (Dev Track 0.1.5 governance commit)
+Feature commit: `3e8f3a9feba9f504b656beca23e1e523b2133ab4` (subject: `feat(openmesh): add Ask My Proxy local alpha`; parent `7dc2bf0bce928a295a68c491a70e550203b56c24`; verified — 10 modified/22 added/0 removed, exact accepted inventory; +14289 / -59; `git diff HEAD^ HEAD --check` clean)
+Commit verification: PASS
+Push: NOT YET (feature commit local only; governance commit pending; publish gate not yet authorized)
+Merge: NOT YET
+Tag: NOT YET
+Release: NOT YET
+Objective: Ask My Proxy — Local Alpha — configured local Work Proxy draft generation through `ProxyDraft` contracts, prompt composition, runtime seam, AXGA-backed local proxy runtime, production CLI `proxy ask` workflow with provider routing, draft-only authority boundary, zero question/draft persistence, exact DashScope compatibility routing, UTF-8-safe capture and JSON validation, and one successful production live ProxyDraft (G-B Retry #4). Executed through Checkpoints A–H.
+Product framing: OpenMesh is the memory and coordination layer for AI-assisted real teams. OpenMesh makes work continue even when people are offline. OpenMesh does not create a fake AI organization. OpenMesh 0.1.6 produces drafts only and executes no authority decision or external action.
+What changed (accepted product diff, committed in feature commit `3e8f3a9`):
+- `crates/openmesh-core/src/domain.rs`: `ProxyDraft` contracts, authority notice, execution boundary, validation entrypoints.
+- `crates/openmesh-core/src/proxy_ask.rs` (new): ask service orchestration with single runtime invocation and fail-closed safety.
+- `crates/openmesh-core/src/proxy_draft_safety.rs` (new): draft-only safety, stale limitation filtering, networked contradiction guard.
+- `crates/openmesh-core/src/proxy_prompt.rs` (new), `proxy_prompt_context.rs` (new): prompt composition from context pack/profile.
+- `crates/openmesh-core/src/proxy_question.rs` (new): proxy question type distinct from WorkSignal/WorkEvent.
+- `crates/openmesh-core/src/proxy_runtime.rs` (new), `proxy_runtime_axga.rs` (new): runtime trait and AXGA-backed adapter with exact DashScope host routing.
+- `crates/openmesh-core/src/lib.rs`, `crates/openmesh-core/Cargo.toml`, `Cargo.lock`: export proxy modules; pin `axga-ai` at revision `f47ebba523a0b59754e3ba2eb200e55b2e7d5d35`; `axga-core` absent.
+- `crates/openmesh-cli/src/proxy.rs` (new), `proxy_runtime_factory.rs` (new), `main.rs`: production `openmesh-cli proxy ask` workflow and provider routing.
+- Tests: `proxy_ask.rs`, `proxy_draft_contracts.rs`, `proxy_draft_safety.rs`, `proxy_prompt.rs`, `proxy_prompt_context.rs`, `proxy_question.rs`, `proxy_runtime.rs`, `proxy_runtime_axga.rs`, `post_g_semantic_utf8.rs`; `proxy_boundary.rs`, `proxy_compatibility.rs`, `proxy_workflow.rs`; narrow boundary updates in `context_boundary.rs`, `context_compatibility.rs`, `context_workflow.rs`, `evidence_boundary.rs`, `ledger_boundary.rs`; fixture `proxy-draft-valid.json`.
+- `profile.rs`, `context_pack*.rs`, `continuity/**`, `events.rs`, `signals.rs`, `promotion.rs`, `intelligence.rs`, `producers/**`, `src-tauri/**`, frontend source tree, root `Cargo.toml`, `crates/openmesh-cli/Cargo.toml`: **zero diff** in feature commit.
+Commands run and exact results (Checkpoint H + feature commit gate, 2026-07-24):
+- `cargo fmt --check` — PASS.
+- `cargo test -p openmesh-core --test post_g_semantic_utf8` — PASS.
+- `cargo test -p openmesh-core --test proxy_runtime` — PASS.
+- `cargo test -p openmesh-core --test proxy_runtime_axga` — PASS.
+- `cargo test -p openmesh-cli --test proxy_boundary` — PASS.
+- `cargo test -p openmesh-cli --test proxy_workflow` — PASS.
+- `cargo test -p openmesh-cli --test proxy_compatibility` — PASS.
+- `cargo test -p openmesh-core` — PASS.
+- `cargo test -p openmesh-cli` — PASS.
+- `cargo test --workspace` — PASS (1 inherited `dogfood_verify` ignore unchanged).
+- `cargo clippy -p openmesh-core -- -D warnings` — PASS.
+- `cargo clippy -p openmesh-cli -- -D warnings` — PASS.
+- `cargo clippy --workspace -- -D warnings` — PASS.
+- `cargo check --workspace` — PASS.
+- `cargo build --workspace` — PASS.
+- `npm run verify` — PASS — **212/212**, 0 type errors.
+- `git diff --check` — PASS (benign CRLF/LF autocrlf warnings only).
+G-A fresh-project workflow: PASS (offline automated workflow; evidence in `.heli-harness/state/reports/openmesh-0.1.6-proxy-dogfood-gate.md` — external to worktree git).
+G-B live dogfood Retry #4: **PASS** (one project root: `<synthetic-temp-project>`; `live_requests` 1; `retries` 0; `validation_ok` true; `network_used` true; authority/execution boundary exact match; no mojibake; no stale runtime limitation; profile/pack/inventory mutation `0 / 0 / 0`; evidence in `.heli-harness/state/reports/openmesh-0.1.6-gb-live-retry-4.md` — external to worktree git).
+G-B retry accounting:
+- Retry #2: 0 provider requests — BLOCKED (credential preflight).
+- Retry #3: 1 provider request — offline semantic/UTF-8 recovery required (not represented as successful live acceptance).
+- Retry #4: 1 provider request — **PASS** (accepted successful live run).
+Live dogfood highlights:
+- `runtimeKind`: `axga-openai`; `providerId`: `openai`; `modelId`: `qwen3.7-plus`.
+- `authorityNoticeExactMatch`: true; `executionBoundaryExactMatch`: true.
+- `staleRuntimeLimitationDetected`: false; `parsedJsonMojibakeDetected`: false.
+- Raw ProxyDraft JSON, raw `draftText`, API keys, and Bearer values not retained in permanent evidence (SHA-256 only).
+Verified properties:
+- Configured local Work Proxy draft generation through production CLI.
+- Draft-only authority boundary; no action execution.
+- No retry or provider fallback.
+- No question or draft persistence.
+- Exact DashScope compatibility routing (`coding-intl.dashscope.aliyuncs.com` host match only).
+- UTF-8-safe capture and JSON validation.
+- Zero project mutation during live dogfood.
+- AXGA revision pinned at `f47ebba523a0b59754e3ba2eb200e55b2e7d5d35`; `axga-core` absent.
+Architecture/dependency boundary:
+- Workspace members unchanged (`openmesh`, `openmesh-core`, `openmesh-cli`).
+- `#[tauri::command]` count: `src-tauri/src/lib.rs` **52** — unchanged.
+- Root `Cargo.toml` / `crates/openmesh-cli/Cargo.toml`: unchanged in feature commit.
+- `crates/openmesh-core/Cargo.toml` / `Cargo.lock`: updated only for accepted `axga-ai` pin in feature commit `3e8f3a9`.
+Product scope boundary:
+- No authority gate or deeper authority-ladder enforcement (deferred to Dev Track 0.1.7).
+- No action execution, approve/merge/deploy/send, or tool/function calling.
+- No Desktop/Tauri proxy commands.
+- No daemon/watcher/background loop.
+- No remote API/sync or Team Mesh.
+- Dev Track 0.1.7 not started.
+**Final human acceptance (2026-07-24)**: Human/Main-Brain issued the final disposition — Dev Track 0.1.6 is accepted as **PASS**. Checkpoints A–H are all accepted. G-B Retry #4 live validation accepted. Feature commit `3e8f3a9feba9f504b656beca23e1e523b2133ab4` created and verified (parent `7dc2bf0bce928a295a68c491a70e550203b56c24`; 32 files; +14289 / -59; committed diff check clean; post-commit worktree clean except external `.heli-harness/**`). Full regression was GREEN at commit time. Governance commit records local closure; push not yet authorized.
+Known limitations:
+- Full checkpoint-by-checkpoint detail is in external Heli reports under `.heli-harness/state/reports/`.
+- Authority ladder enforcement remains pattern-based in 0.1.6; full authority gate deferred to 0.1.7.
+- Networked contradiction guard matches explicit phrases only.
+- Inherited `dogfood_verify` ignore remains; not introduced by 0.1.6.
+Next recommended action: publish gate (push feature + governance commits) may proceed only after separate human authorization.
+
+### Final Automated Status: PASS — HUMAN ACCEPTED — FEATURE COMMITTED — CLOSED LOCALLY
 ### Dev Track 0.1.7 Unlocked: NO (separate unlock review and human authorization required)
