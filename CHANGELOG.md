@@ -5,6 +5,35 @@ All notable changes to OpenMesh are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.6] - 2026-07-24
+
+### Added
+
+- **OpenMesh CLI** (`openmesh-cli`): local project commands for signals, events, profile, context, state, catch-up, and proxy workflows
+- **Work Signal intake**: file-backed signal inbox with validation, deduplication, and promotion into canonical WorkEvents
+- **Evidence ledger**: append-only WorkEvent storage with correction/supersession, recovery, and boundary guards
+- **Current state & catch-up**: deterministic projections for offline continuity and human-readable catch-up summaries
+- **Work Proxy profile**: local profile contracts, validation, and CLI `profile` commands
+- **Proxy Context Pack**: deterministic secret-safe context pack builder with CLI `context build|show|validate`
+- **Ask My Proxy (Local Alpha)**: draft-only `proxy ask` workflow with configured AXGA runtime, DashScope compatibility routing, and UTF-8-safe live validation
+- **Evidence producers**: local git and Heli evidence readers with composed promotion pipeline
+- **Reporter skill**: OpenMesh Reporter agent skill for external signal production
+
+### Security / Privacy
+
+- Draft-only proxy output in 0.1.6; no authority execution or external action dispatch
+- No question or draft persistence in the proxy ask path
+- Secret-safe context pack selection with aggregate omission counts only
+- Fail-closed validation across signals, events, profile, context pack, and proxy drafts
+- Project-scoped storage boundaries preserved across CLI workflows
+
+### Technical Details
+
+- **Workspace**: `openmesh` (Tauri), `openmesh-core`, `openmesh-cli`
+- **AXGA revision**: `f47ebba523a0b59754e3ba2eb200e55b2e7d5d35` (pinned; `axga-core` absent)
+- **Test coverage**: 212 frontend tests; full Rust workspace test suite green
+- **Compatibility**: builds on 0.1.2 desktop context foundation; CLI features are additive
+
 ## [0.1.2] - 2026-07-06
 
 ### Added
@@ -52,5 +81,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Work snapshots and recent work timeline
 - Git status integration
 
-[0.1.2]: https://github.com/owner/openmesh-agent-workbench/compare/v0.1.1...v0.1.2
+[0.1.6]: https://github.com/KJ-AIML/openmesh-agent-workbench/compare/v0.1.2...v0.1.6
+[0.1.2]: https://github.com/KJ-AIML/openmesh-agent-workbench/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/owner/openmesh-agent-workbench/releases/tag/v0.1.1
