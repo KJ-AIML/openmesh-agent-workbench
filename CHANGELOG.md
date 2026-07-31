@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Post-provider fail-closed**: unsupported or stale drafts downgraded to explicit must-ask text
 - **Answer receipts**: append-only receipts under `.openmesh/proxy/receipts/` with real authority metadata
 - **CLI `proxy verify`**: read-only claim/evidence verification against persisted context packs
+- **CLI `init`**: create `.openmesh/` project marker so CLI workflows work without Desktop
 - **Adversarial eval suite**: absent / stale / conflicting / hallucination / secret / policy-deny cases
 
 ### Security / Privacy

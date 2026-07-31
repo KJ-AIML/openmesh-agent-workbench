@@ -14,6 +14,7 @@ mod catch_up;
 mod collect;
 mod context;
 mod event;
+mod init;
 mod output;
 mod profile;
 mod project;
@@ -38,6 +39,8 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
+    /// Initialize an OpenMesh project marker (`.openmesh/`) for CLI workflows.
+    Init(init::InitArgs),
     /// Report a WorkSignal of a specific semantic kind.
     #[command(subcommand)]
     Signal(SignalKindCommand),
@@ -237,6 +240,7 @@ fn run() -> i32 {
     let cli = Cli::parse();
     let cwd = std::env::current_dir().expect("failed to read current working directory");
     match cli.command {
+        Commands::Init(args) => init::run_init(&args, &cwd),
         Commands::Signal(kind) => run_signal(kind),
         Commands::Collect(cmd) => match cmd {
             CollectCommand::Git(args) => collect::run_collect_git(&args, &cwd),
