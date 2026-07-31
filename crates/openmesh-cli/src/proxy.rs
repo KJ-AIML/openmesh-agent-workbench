@@ -1,16 +1,24 @@
 // ============================================================================
-// Proxy commands — Dev Track 0.1.6 Checkpoint E
+// Proxy commands — Dev Track 0.1.6 Checkpoint E + 0.1.7 Authority Gate
 // ============================================================================
 
 use chrono::Utc;
 use clap::{Args, Subcommand};
+use openmesh_core::answer_receipt::{write_answer_receipt, AnswerReceipt};
+use openmesh_core::authority_gate::{
+    run_pre_provider_authority_gate, AuthorityGateOutcome, AuthorityOutcomeLabel,
+};
+use openmesh_core::authority_policy::{classify_question_risk, AuthorityPolicyDecision};
 use openmesh_core::context_pack::{build_proxy_context_pack, ProxyContextPackBuildOptions};
 use openmesh_core::context_pack_storage::read_proxy_context_pack;
 use openmesh_core::context_pack_validation::validate_proxy_context_pack_complete;
 use openmesh_core::domain::{ProxyContextPack, ProxyDraft, MAX_PROXY_DRAFT_TEXT_BYTES};
+use openmesh_core::pending_proxy_question::write_pending_proxy_question;
+use openmesh_core::profile::read_work_proxy_profile;
 use openmesh_core::proxy_ask::{
     ask_my_proxy_local, ProxyAskError, ProxyAskOptions, ProxyDraftClock, SystemProxyDraftClock,
 };
+use openmesh_core::proxy_post_verify::apply_post_provider_verification;
 use openmesh_core::proxy_question::{
     create_proxy_question, ProcessLocalRequestIdentityProvider, ProxyQuestionConstructionError,
     ProxyRequestIdentityProvider,
@@ -25,6 +33,7 @@ use crate::project::resolve_project;
 use crate::proxy_runtime_factory::{
     resolve_production_proxy_draft_runtime, ProxyRuntimeFactoryError,
 };
+use crate::proxy_verify::ProxyVerifyArgs;
 
 pub const HUMAN_OUTPUT_HEADER: &str = "Local Work Proxy draft — not the human owner.";
 pub const HUMAN_OUTPUT_ACTION_LINE: &str = "No action was performed.";
@@ -33,6 +42,8 @@ pub const HUMAN_OUTPUT_ACTION_LINE: &str = "No action was performed.";
 pub enum ProxyCommand {
     /// Ask the local Work Proxy for a draft answer.
     Ask(ProxyAskArgs),
+    /// Verify draft claims against persisted context pack evidence (read-only).
+    Verify(ProxyVerifyArgs),
 }
 
 #[derive(Args, Debug, Clone)]
@@ -93,6 +104,7 @@ pub struct ProxyAskHarness<'a> {
 pub fn run_proxy(cmd: ProxyCommand, cwd: &Path) -> i32 {
     match cmd {
         ProxyCommand::Ask(args) => run_proxy_ask(&args, cwd),
+        ProxyCommand::Verify(args) => crate::proxy_verify::run_proxy_verify(&args, cwd),
     }
 }
 
@@ -110,8 +122,8 @@ pub fn run_proxy_ask_with_harness(
     cwd: &Path,
     harness: &ProxyAskHarness<'_>,
 ) -> i32 {
-    let question = args.question.trim();
-    if question.is_empty() {
+    let question_text = args.question.trim();
+    if question_text.is_empty() {
         return print_proxy_error(
             "question must not be empty",
             "invalid-question",
@@ -135,12 +147,63 @@ pub fn run_proxy_ask_with_harness(
     };
     let project_path = resolved.path.to_string_lossy().to_string();
 
+    let profile = match read_work_proxy_profile(&project_path) {
+        Ok(profile) => profile,
+        Err(_) => {
+            return print_proxy_error(
+                "work proxy profile is required for authority gate",
+                "profile-missing",
+                3,
+                args.json,
+            )
+        }
+    };
+
+    let gate = run_pre_provider_authority_gate(question_text, &profile, "local-proxy-ask");
+    let decision = match &gate {
+        AuthorityGateOutcome::Proceed { decision, .. }
+        | AuthorityGateOutcome::MustAsk { decision, .. }
+        | AuthorityGateOutcome::Denied { decision, .. } => decision.clone(),
+    };
+
+    match &gate {
+        AuthorityGateOutcome::MustAsk { message, .. } => {
+            let _ = write_pending_for_question(&project_path, question_text, &decision);
+            return print_proxy_error(message, "must-ask-human", 2, args.json);
+        }
+        AuthorityGateOutcome::Denied { message, .. } => {
+            let _ = write_pending_for_question(&project_path, question_text, &decision);
+            return print_proxy_error(message, "authority-denied", 2, args.json);
+        }
+        AuthorityGateOutcome::Proceed { .. } => {}
+    }
+
     let pack = match load_context_pack(args, &project_path) {
         Ok(pack) => pack,
         Err(code) => return code,
     };
 
-    let question = match create_proxy_question(question, harness.identity_provider) {
+    // Pre-provider freshness gate for critical tiers — fail closed before provider.
+    let risk = classify_question_risk(question_text);
+    let tier = openmesh_core::authority_policy::map_risk_to_freshness_tier(risk);
+    let freshness_pre = openmesh_core::authority_freshness::evaluate_evidence_freshness(
+        &pack,
+        tier,
+        Utc::now(),
+    );
+    if matches!(tier, openmesh_core::authority_policy::FreshnessTier::Critical)
+        && !freshness_pre.is_sufficient
+    {
+        let _ = write_pending_for_question(&project_path, question_text, &decision);
+        return print_proxy_error(
+            "critical question requires fresher evidence; must ask human",
+            "freshness-insufficient",
+            2,
+            args.json,
+        );
+    }
+
+    let question = match create_proxy_question(question_text, harness.identity_provider) {
         Ok(question) => question,
         Err(err) => return print_question_construction_error(&err, args.json),
     };
@@ -157,12 +220,70 @@ pub fn run_proxy_ask_with_harness(
     let options = ProxyAskOptions::new(timeout_ms, MAX_PROXY_DRAFT_TEXT_BYTES as u32);
 
     match ask_my_proxy_local(&pack, &question, &options, runtime.as_ref(), harness.clock) {
-        Ok(draft) => {
-            print_proxy_draft_success(&draft, args.json);
-            0
+        Ok(mut draft) => {
+            let post = apply_post_provider_verification(
+                &mut draft,
+                &pack,
+                &question.text,
+                Utc::now(),
+            );
+            let _ = write_receipt(
+                &project_path,
+                &question,
+                &pack,
+                &draft,
+                &decision,
+                &post,
+            );
+            let label = match gate {
+                AuthorityGateOutcome::Proceed { label, .. } => label,
+                _ => AuthorityOutcomeLabel::Proceed,
+            };
+            print_proxy_draft_success(&draft, &label, &post, args.json);
+            if post.hard_fail {
+                2
+            } else {
+                0
+            }
         }
         Err(err) => print_proxy_ask_error(&err, args.json),
     }
+}
+
+fn write_pending_for_question(
+    project_path: &str,
+    question_text: &str,
+    decision: &AuthorityPolicyDecision,
+) -> Result<(), ()> {
+    let risk = classify_question_risk(question_text);
+    let created_at = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    write_pending_proxy_question(project_path, question_text, risk, decision, &created_at)
+        .map(|_| ())
+        .map_err(|_| ())
+}
+
+fn write_receipt(
+    project_path: &str,
+    question: &openmesh_core::domain::ProxyQuestion,
+    pack: &ProxyContextPack,
+    draft: &ProxyDraft,
+    decision: &AuthorityPolicyDecision,
+    post: &openmesh_core::proxy_post_verify::PostVerifyResult,
+) -> Result<(), ()> {
+    let receipt = AnswerReceipt {
+        receipt_id: format!("receipt-{}", question.question_id),
+        question_id: question.question_id.clone(),
+        question_text: question.text.clone(),
+        resolved_authority: decision.resolved_authority,
+        authority_decision_reason: decision.decision_reason.clone(),
+        context_pack_id: pack.context_pack_id.clone(),
+        draft_text: draft.draft_text.clone(),
+        claims_json: serde_json::to_string(&post.citations).unwrap_or_else(|_| "[]".to_string()),
+        freshness_summary: serde_json::to_string(&post.freshness).unwrap_or_default(),
+        generated_at: draft.generated_at.clone(),
+        correction_of: None,
+    };
+    write_answer_receipt(project_path, &receipt).map_err(|_| ())
 }
 
 fn load_context_pack(args: &ProxyAskArgs, project_path: &str) -> Result<ProxyContextPack, i32> {
@@ -213,8 +334,23 @@ pub fn timeout_ms_from_args(timeout_secs: Option<u64>) -> Result<u64, String> {
         .ok_or_else(|| "timeout_secs overflow".to_string())
 }
 
-fn print_proxy_draft_success(draft: &ProxyDraft, json_mode: bool) {
+fn outcome_label_wire(label: &AuthorityOutcomeLabel) -> &'static str {
+    match label {
+        AuthorityOutcomeLabel::Proceed => "proceed",
+        AuthorityOutcomeLabel::MustAskHuman => "must-ask-human",
+        AuthorityOutcomeLabel::CannotAnswer => "cannot-answer",
+        AuthorityOutcomeLabel::DeniedBeforeProvider => "denied-before-provider",
+    }
+}
+
+fn print_proxy_draft_success(
+    draft: &ProxyDraft,
+    label: &AuthorityOutcomeLabel,
+    post: &openmesh_core::proxy_post_verify::PostVerifyResult,
+    json_mode: bool,
+) {
     if json_mode {
+        // Keep wire compatible with frozen ProxyDraft JSON (no wrapper keys).
         println!(
             "{}",
             serde_json::to_string(draft).expect("serialize proxy draft")
@@ -223,6 +359,16 @@ fn print_proxy_draft_success(draft: &ProxyDraft, json_mode: bool) {
     }
 
     println!("{HUMAN_OUTPUT_HEADER}");
+    println!("authority_outcome={}", outcome_label_wire(label));
+    println!(
+        "coverage_ok={} freshness_ok={} confidence={:?}",
+        post.coverage_ok,
+        post.freshness.is_sufficient,
+        post.freshness.confidence_label
+    );
+    if post.must_ask {
+        println!("outcome=must-ask-human");
+    }
     println!("{}", draft.draft_text);
     if !draft.limitations.is_empty() {
         println!("limitations:");

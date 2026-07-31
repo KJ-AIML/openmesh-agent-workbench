@@ -19,6 +19,7 @@ mod profile;
 mod project;
 mod proxy;
 mod proxy_runtime_factory;
+mod proxy_verify;
 mod signal;
 mod state;
 

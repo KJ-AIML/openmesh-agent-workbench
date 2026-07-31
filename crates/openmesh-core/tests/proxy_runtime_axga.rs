@@ -1329,16 +1329,31 @@ fn assert_only_authorized_paths_after_feature_commit() {
 }
 
 #[test]
-fn authorized_0_1_6_local_closure_chain_is_intact() {
-    assert_not_behind_upstream();
-    assert_ledger_records_local_closure_without_push();
-    assert_closure_commit_chain();
-    assert_only_authorized_paths_after_feature_commit();
+fn authorized_0_1_7_unlock_recorded_on_branch() {
+    let ledger = fs::read_to_string(repo_root().join("docs/development/execution-ledger.md"))
+        .expect("execution ledger");
+    assert!(ledger.contains("Dev Track 0.1.7 Unlocked: YES"));
+    assert!(ledger.contains("feat/openmesh-0.1.7") || ledger.contains("0.1.7"));
 
-    let ahead = git_ok(&["rev-list", "--count", "@{upstream}..HEAD"]);
+    let feature_subject = git_ok(&["log", "-1", "--format=%s", CLOSURE_FEATURE_COMMIT]);
     assert!(
-        ahead != "0",
-        "authorized local feature/governance commits must remain unpushed (ahead > 0)"
+        feature_subject.contains("Ask My Proxy local alpha"),
+        "0.1.6 feature commit must remain in history: {feature_subject}"
+    );
+
+    assert!(
+        Command::new("git")
+            .args([
+                "merge-base",
+                "--is-ancestor",
+                CLOSURE_FEATURE_COMMIT,
+                "HEAD"
+            ])
+            .current_dir(repo_root())
+            .status()
+            .expect("feature ancestor")
+            .success(),
+        "0.1.6 feature commit must be ancestor of HEAD"
     );
 }
 

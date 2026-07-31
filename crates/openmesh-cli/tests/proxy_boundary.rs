@@ -614,8 +614,17 @@ fn from_persisted_conflicts_with_until() {
 
 #[test]
 fn since_until_follow_existing_context_window_rules() {
+    let project = temp_project_for_parser("since-until-window");
+    init_profile_for_parser(&project);
     let output = cli()
-        .args(["proxy", "ask", "--question", "hello"])
+        .args([
+            "proxy",
+            "ask",
+            "--question",
+            "hello",
+            "--project",
+            &project.to_string_lossy(),
+        ])
         .output()
         .unwrap();
     assert!(!output.status.success());
@@ -630,6 +639,7 @@ fn since_until_follow_existing_context_window_rules() {
 #[test]
 fn project_flag_uses_existing_project_resolution() {
     let project = temp_project_for_parser("project-resolution");
+    init_profile_for_parser(&project);
     let output = cli()
         .args([
             "proxy",

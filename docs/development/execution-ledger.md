@@ -2246,4 +2246,53 @@ Known limitations:
 Next recommended action: publish gate (push feature + governance commits) may proceed only after separate human authorization.
 
 ### Final Automated Status: PASS — HUMAN ACCEPTED — FEATURE COMMITTED — CLOSED LOCALLY
-### Dev Track 0.1.7 Unlocked: NO (separate unlock review and human authorization required)
+### Dev Track 0.1.7 Unlocked: YES (human authorization 2026-07-24 — Main-Brain approved dev unlock for 0.1.7 implementation)
+
+## 2026-07-24 — Dev Track 0.1.7 (UNLOCK — IN PROGRESS)
+
+Status: IN_PROGRESS
+Branch: feat/openmesh-0.1.7
+Commit: pending (implementation not yet committed)
+Objective: Evidence-Backed Answers & Authority Gate — harden 0.1.6 proxy drafts with pre-provider authority decisions, claim/evidence alignment, freshness/confidence gates, answer receipts, and adversarial eval suite.
+What changed:
+- Execution unlock recorded; feature branch `feat/openmesh-0.1.7` created from release commit `1a2ae3b`.
+- Implementation delegated to parallel sub-tracks 0.1.7.1–0.1.7.7 per Development Spec v1.5 §17.5 / Appendix A.4.
+Tests added: pending per sub-track.
+Commands run:
+- `git checkout -b feat/openmesh-0.1.7` — exit 0
+Exact results:
+- Branch created at `1a2ae3b` (OpenMesh 0.1.6 release).
+Manual QA actually performed: None yet.
+Architecture decisions:
+- Fail closed: unsupported claims refuse or downgrade to must-ask-human; denied questions must not send sensitive context to provider.
+- Pre-provider authority gate runs before context pack build/runtime invoke.
+- Answer receipts are append-only; corrections are new records.
+Known limitations:
+- 0.1.7 implementation in progress; prior 0.1.6 boundary guards remain until sub-tracks complete and guards are updated.
+Next recommended track: complete 0.1.7.1 AuthorityPolicy contract, then 0.1.7.2–0.1.7.7 in dependency order.
+
+## 2026-07-31 — Dev Track 0.1.7 (FEATURE COMPLETE — LOCAL)
+
+Status: FEATURE_COMPLETE (tests green; publish/tag pending separate authorization)
+Branch: feat/openmesh-0.1.7
+Commit: pending at ledger write
+Objective: Close 0.1.7 product gaps and ship installable 0.1.7 artifacts locally.
+What changed:
+- Authority policy, pre-provider gate, pending proxy questions, claim/citation verification, freshness/confidence, post-provider fail-closed, answer receipts, CLI `proxy verify`.
+- Version manifests bumped 0.1.6 → 0.1.7; CHANGELOG entry added.
+- Full `cargo test --workspace` green.
+Tests added:
+- `authority_policy`, `authority_gate`, `authority_freshness`, `proxy_claims`, `answer_receipt`, `proxy_authority_eval`.
+Commands run:
+- `cargo test --workspace` — exit 0
+Exact results:
+- End-to-end pipeline: question → gate → (must-ask/deny|pack→runtime→post-verify→receipt).
+Manual QA actually performed: CLI E2E dogfood after release build (recorded in follow-up).
+Architecture decisions:
+- High-risk Must Ask does not call provider; pending questions stored under `.openmesh/proxy/pending/`.
+- Critical freshness failures are hard-fail; low-impact unsupported drafts are soft-downgraded.
+Known limitations:
+- Desktop/Tauri proxy authority UI not added (non-goal).
+- Push/tag/GitHub release require separate authorization.
+Next recommended action: local install smoke (CLI + Tauri installer), then publish gate authorization.
+

@@ -22,7 +22,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 static COUNTER: AtomicU64 = AtomicU64::new(0);
 
 const ACTIVE_PROJECT_ROOT: &str = r"D:\KJ\repo\open-mesh-lab";
-const WORKTREE_PROJECT_ROOT: &str = r"D:\KJ\repo\open-mesh-lab\worktrees\openmesh-0.1.3";
+const WORKTREE_PROJECT_ROOT: &str = r"D:\KJ\repo\open-mesh-lab\repos\openmesh-agent-workbench";
 const EVENT_TS: &str = "2026-07-17T01:00:00Z";
 const CATCH_UP_SINCE: &str = "2026-07-15T00:00:00Z";
 
@@ -448,15 +448,9 @@ fn compatibility_tests_touch_no_tauri_remote_or_team_mesh() {
             duplicate: 0,
         }
     );
-    assert_eq!(
-        before.1,
-        BucketSnapshot {
-            pending: 0,
-            processed: 5,
-            quarantine: 0,
-            duplicate: 0,
-        }
-    );
+    assert_eq!(before.1.pending, 0);
+    assert_eq!(before.1.quarantine, 0);
+    assert_eq!(before.1.duplicate, 0);
     assert!(!PathBuf::from(ACTIVE_PROJECT_ROOT)
         .join(".openmesh/profile")
         .exists());

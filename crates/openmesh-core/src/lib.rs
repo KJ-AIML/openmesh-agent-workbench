@@ -107,8 +107,23 @@
 // Dev Track 0.1.6 DG — approved external runtime adapter:
 // - `proxy_runtime_axga` — `AxgaAiProxyDraftRuntime`
 //
+// Dev Track 0.1.7 — Evidence-Backed Answers & Authority Gate:
+// - `authority_policy` — question risk classification + AuthorityPolicyDecision
+// - `authority_gate` — pre-provider authority gate
+// - `proxy_claims` / `proxy_citations` — claim extraction and evidence verification
+// - `authority_freshness` — freshness/confidence evaluation
+// - `proxy_post_verify` — post-provider claim/freshness fail-closed
+// - `pending_proxy_question` — Must Ask pending question records
+// - `answer_receipt` — append-only answer receipt storage
+//
 // Ledger APIs are core-only in this track. CLI, Tauri, and Desktop do not expose
 // WorkEvent ledger commands yet.
+
+pub mod answer_receipt;
+pub mod authority_freshness;
+pub mod authority_gate;
+pub mod authority_policy;
+pub mod pending_proxy_question;
 
 pub mod context;
 pub mod context_pack;
@@ -127,6 +142,9 @@ pub mod producers;
 pub mod profile;
 pub mod profile_validation;
 pub mod promotion;
+pub mod proxy_claims;
+pub mod proxy_citations;
+pub mod proxy_post_verify;
 pub mod proxy_ask;
 pub mod proxy_draft_safety;
 pub mod proxy_prompt;

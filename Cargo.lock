@@ -2414,7 +2414,7 @@ dependencies = [
 
 [[package]]
 name = "openmesh"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "chrono",
  "git2",
@@ -2431,7 +2431,7 @@ dependencies = [
 
 [[package]]
 name = "openmesh-cli"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "chrono",
  "clap",
@@ -2441,7 +2441,7 @@ dependencies = [
 
 [[package]]
 name = "openmesh-core"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "axga-ai",
  "axga-shared",

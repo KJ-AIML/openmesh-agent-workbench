@@ -5,6 +5,33 @@ All notable changes to OpenMesh are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.7] - 2026-07-31
+
+### Added
+
+- **Authority Policy & Gate**: question risk classification and pre-provider authority decisions (deny / must-ask before provider)
+- **Pending proxy questions**: Must-Ask / denied questions stored under `.openmesh/proxy/pending/`
+- **Claim verification**: deterministic claim extraction, evidence alignment, and citations (`proxy_claims` / `proxy_citations`)
+- **Freshness & confidence**: tiered freshness evaluation (low-impact / standard / critical)
+- **Post-provider fail-closed**: unsupported or stale drafts downgraded to explicit must-ask text
+- **Answer receipts**: append-only receipts under `.openmesh/proxy/receipts/` with real authority metadata
+- **CLI `proxy verify`**: read-only claim/evidence verification against persisted context packs
+- **Adversarial eval suite**: absent / stale / conflicting / hallucination / secret / policy-deny cases
+
+### Security / Privacy
+
+- Denied and Must-Ask high-risk questions do not send sensitive context to the provider
+- Prefer must-ask / unknown over unsupported confident answers
+- Critical freshness failures block provider invocation
+- Draft remains non-executing (no authority action dispatch)
+
+### Technical Details
+
+- **Workspace**: `openmesh` (Tauri), `openmesh-core`, `openmesh-cli`
+- **Branch**: `feat/openmesh-0.1.7`
+- **AXGA revision**: unchanged from 0.1.6 (`f47ebba523a0b59754e3ba2eb200e55b2e7d5d35`)
+- **Compatibility**: additive on 0.1.6 Ask My Proxy; Desktop UI for proxy authority surfaces remains deferred
+
 ## [0.1.6] - 2026-07-24
 
 ### Added

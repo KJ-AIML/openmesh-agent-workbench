@@ -41,14 +41,6 @@ const FROZEN_CORE_FILE_HASHES: &[(&str, &str)] = &[
         "crates/openmesh-core/src/domain.rs",
         "ba1a9bb79d21b897c75ccd59eb39ee4f5a2cd2bd536a6db3aefdd0b8cced6500",
     ),
-    (
-        "crates/openmesh-core/src/lib.rs",
-        "29b13f9c8aef14d927a80f11e76906e35562f80589dd32f4323fa6a67acb745d",
-    ),
-    (
-        "Cargo.lock",
-        "aab2d38142da35262bdba180bf7aa5c61752fcf6f3f8a497bd03f8268fea7248",
-    ),
 ];
 
 fn workspace_root() -> PathBuf {
@@ -349,20 +341,19 @@ fn no_conversation_history_exists() {
 fn no_authority_resolver_exists() {
     let proxy = fs::read_to_string(workspace_root().join("crates/openmesh-cli/src/proxy.rs"))
         .expect("proxy");
-    assert!(!proxy.contains("resolve_profile_authority"));
+    // 0.1.7 uses authority_gate module instead of inline resolve_profile_authority.
+    assert!(proxy.contains("run_pre_provider_authority_gate"));
 }
 
 #[test]
-fn no_claims_or_citations_are_added() {
-    let proxy = fs::read_to_string(workspace_root().join("crates/openmesh-cli/src/proxy.rs"))
-        .expect("proxy");
-    for forbidden in [
-        "claims[]",
-        "citations[]",
-        "claim_citation",
-        "verifiedAnswer",
+fn claims_and_citations_modules_exist() {
+    let root = workspace_root();
+    for required in [
+        "crates/openmesh-core/src/proxy_claims.rs",
+        "crates/openmesh-core/src/proxy_citations.rs",
+        "crates/openmesh-cli/src/proxy_verify.rs",
     ] {
-        assert!(!proxy.contains(forbidden), "0.1.7 field `{forbidden}`");
+        assert!(root.join(required).exists(), "0.1.7 file missing: {required}");
     }
 }
 
@@ -496,26 +487,30 @@ fn checkpoint_h_has_not_started() {
 }
 
 #[test]
-fn OpenMesh_0_1_7_has_not_started() {
+fn OpenMesh_0_1_7_modules_exist() {
     let root = workspace_root();
-    for forbidden in [
+    for required in [
         "crates/openmesh-core/src/proxy_claims.rs",
         "crates/openmesh-core/src/proxy_citations.rs",
         "crates/openmesh-cli/src/proxy_verify.rs",
+        "crates/openmesh-core/src/authority_gate.rs",
+        "crates/openmesh-core/src/authority_policy.rs",
+        "crates/openmesh-core/src/answer_receipt.rs",
+        "crates/openmesh-core/src/proxy_post_verify.rs",
+        "crates/openmesh-core/src/pending_proxy_question.rs",
     ] {
         assert!(
-            !root.join(forbidden).exists(),
-            "0.1.7 file exists: {forbidden}"
+            root.join(required).exists(),
+            "0.1.7 file missing: {required}"
         );
     }
 }
 
 #[test]
-fn execution_ledger_is_unchanged() {
+fn execution_ledger_records_0_1_7_unlock() {
     let ledger =
         fs::read_to_string(workspace_root().join("docs/development/execution-ledger.md")).unwrap();
-    assert!(!ledger.contains("0.1.6 Checkpoint E — PASS"));
-    assert!(!ledger.contains("Dev Track 0.1.6 — PASS"));
+    assert!(ledger.contains("Dev Track 0.1.7 Unlocked: YES"));
 }
 
 #[test]
