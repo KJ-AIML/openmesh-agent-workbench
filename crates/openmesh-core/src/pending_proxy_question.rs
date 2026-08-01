@@ -101,13 +101,17 @@ fn simple_hash(input: &str) -> String {
     format!("{hash:016x}")
 }
 
-fn write_json_atomic<T: Serialize>(path: &Path, value: &T) -> Result<(), PendingProxyQuestionError> {
+fn write_json_atomic<T: Serialize>(
+    path: &Path,
+    value: &T,
+) -> Result<(), PendingProxyQuestionError> {
     let parent = path
         .parent()
         .ok_or(PendingProxyQuestionError::WriteFailed)?;
     fs::create_dir_all(parent).map_err(|_| PendingProxyQuestionError::WriteFailed)?;
     let temp = path.with_extension(PENDING_TEMP_EXTENSION);
-    let json = serde_json::to_string_pretty(value).map_err(|_| PendingProxyQuestionError::WriteFailed)?;
+    let json =
+        serde_json::to_string_pretty(value).map_err(|_| PendingProxyQuestionError::WriteFailed)?;
     {
         let mut file = OpenOptions::new()
             .write(true)

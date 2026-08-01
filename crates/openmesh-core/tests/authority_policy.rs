@@ -22,7 +22,13 @@ fn classifies_secret_questions() {
 
 #[test]
 fn secret_questions_deny_before_provider() {
-    let profile = default_work_proxy_profile("ws-test", "profile-ws-test", "owner", "dev", "2026-07-24T10:00:00Z");
+    let profile = default_work_proxy_profile(
+        "ws-test",
+        "profile-ws-test",
+        "owner",
+        "dev",
+        "2026-07-24T10:00:00Z",
+    );
     let input = AuthorityPolicyInput {
         question: "share the password".into(),
         risk: QuestionRiskCategory::Secret,
@@ -53,7 +59,13 @@ fn progress_maps_to_low_impact_freshness() {
 
 #[test]
 fn local_owner_can_proceed_for_status() {
-    let profile = default_work_proxy_profile("ws-test", "profile-ws-test", "owner", "dev", "2026-07-24T10:00:00Z");
+    let profile = default_work_proxy_profile(
+        "ws-test",
+        "profile-ws-test",
+        "owner",
+        "dev",
+        "2026-07-24T10:00:00Z",
+    );
     let input = AuthorityPolicyInput {
         question: "What is the current status?".into(),
         risk: QuestionRiskCategory::Status,
@@ -64,5 +76,8 @@ fn local_owner_can_proceed_for_status() {
     };
     let decision = evaluate_authority_policy(&input, &profile);
     assert!(!decision.deny_before_provider);
-    assert_ne!(decision.resolved_authority, ProxyAuthorityLevel::CannotAnswer);
+    assert_ne!(
+        decision.resolved_authority,
+        ProxyAuthorityLevel::CannotAnswer
+    );
 }

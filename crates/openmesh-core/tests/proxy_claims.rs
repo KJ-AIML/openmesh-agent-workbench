@@ -1,9 +1,9 @@
 use openmesh_core::context::Sensitivity;
-use openmesh_core::proxy_claims::{
-    extract_claims_from_draft, verify_claims_against_pack, ClaimCoverage,
-};
 use openmesh_core::domain::{
     ContextPackEvidenceIndexEntry, ContextPackEvidenceOrigin, EvidenceRef, ProxyContextPack,
+};
+use openmesh_core::proxy_claims::{
+    extract_claims_from_draft, verify_claims_against_pack, ClaimCoverage,
 };
 
 const FIXTURE: &str = include_str!("fixtures/context/proxy-context-pack-valid.json");

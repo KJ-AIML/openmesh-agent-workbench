@@ -1,23 +1,28 @@
+use chrono::{Duration, TimeZone, Utc};
 use openmesh_core::authority_freshness::{evaluate_evidence_freshness, ConfidenceLabel};
 use openmesh_core::authority_gate::{run_pre_provider_authority_gate, AuthorityGateOutcome};
 use openmesh_core::authority_policy::{
     classify_question_risk, map_risk_to_freshness_tier, FreshnessTier, QuestionRiskCategory,
 };
 use openmesh_core::domain::default_work_proxy_profile;
+use openmesh_core::proxy_citations::unsupported_claim_texts;
 use openmesh_core::proxy_claims::{
     extract_claims_from_draft, verify_claims_against_pack, ClaimCoverage,
 };
-use openmesh_core::proxy_citations::unsupported_claim_texts;
 use openmesh_core::proxy_post_verify::{apply_post_provider_verification, MUST_ASK_DRAFT_PREFIX};
-use chrono::{Duration, TimeZone, Utc};
 use serde_json::Value;
 
 const FIXTURE: &str = include_str!("fixtures/context/proxy-context-pack-valid.json");
 
 #[test]
 fn adversarial_secret_must_ask_before_provider() {
-    let profile =
-        default_work_proxy_profile("ws-test", "profile-ws-test", "owner", "dev", "2026-07-24T10:00:00Z");
+    let profile = default_work_proxy_profile(
+        "ws-test",
+        "profile-ws-test",
+        "owner",
+        "dev",
+        "2026-07-24T10:00:00Z",
+    );
     let outcome = run_pre_provider_authority_gate("What is the secret token?", &profile, "secret");
     assert!(matches!(outcome, AuthorityGateOutcome::MustAsk { .. }));
 }
@@ -84,14 +89,15 @@ fn adversarial_conflicting_labels_do_not_support_both_claims() {
         first.label = "deploy blocked".into();
         first.ref_id = "ev-blocked".into();
     }
-    pack.evidence_index.push(openmesh_core::domain::ContextPackEvidenceIndexEntry {
-        ref_id: "ev-ready".into(),
-        evidence_ref: openmesh_core::domain::EvidenceRef::FilePath("docs/a.md".into()),
-        origin: openmesh_core::domain::ContextPackEvidenceOrigin::ContinuityItem,
-        sensitivity: openmesh_core::context::Sensitivity::Private,
-        label: "deploy ready".into(),
-        timestamp: Some("2026-07-24T10:00:00Z".into()),
-    });
+    pack.evidence_index
+        .push(openmesh_core::domain::ContextPackEvidenceIndexEntry {
+            ref_id: "ev-ready".into(),
+            evidence_ref: openmesh_core::domain::EvidenceRef::FilePath("docs/a.md".into()),
+            origin: openmesh_core::domain::ContextPackEvidenceOrigin::ContinuityItem,
+            sensitivity: openmesh_core::context::Sensitivity::Private,
+            label: "deploy ready".into(),
+            timestamp: Some("2026-07-24T10:00:00Z".into()),
+        });
     let claims = extract_claims_from_draft("Deploy is blocked. Deploy is ready.");
     let verified = verify_claims_against_pack(&claims, &pack);
     // Both sentences may match different labels — conflicting evidence exists in pack.
@@ -102,8 +108,12 @@ fn adversarial_conflicting_labels_do_not_support_both_claims() {
         .count();
     assert!(supported >= 1);
     // Conflicting claim texts are both present; consumer must not treat as single truth.
-    assert!(verified.iter().any(|v| v.claim.claim_text.contains("blocked")));
-    assert!(verified.iter().any(|v| v.claim.claim_text.contains("ready")));
+    assert!(verified
+        .iter()
+        .any(|v| v.claim.claim_text.contains("blocked")));
+    assert!(verified
+        .iter()
+        .any(|v| v.claim.claim_text.contains("ready")));
 }
 
 #[test]

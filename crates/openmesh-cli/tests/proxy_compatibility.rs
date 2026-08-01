@@ -353,7 +353,10 @@ fn claims_and_citations_modules_exist() {
         "crates/openmesh-core/src/proxy_citations.rs",
         "crates/openmesh-cli/src/proxy_verify.rs",
     ] {
-        assert!(root.join(required).exists(), "0.1.7 file missing: {required}");
+        assert!(
+            root.join(required).exists(),
+            "0.1.7 file missing: {required}"
+        );
     }
 }
 

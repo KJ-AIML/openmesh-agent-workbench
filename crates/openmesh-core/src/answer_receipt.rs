@@ -45,7 +45,11 @@ pub enum AnswerReceiptError {
 
 pub trait AnswerReceiptStore {
     fn write(&self, project_path: &str, receipt: &AnswerReceipt) -> Result<(), AnswerReceiptError>;
-    fn read(&self, project_path: &str, receipt_id: &str) -> Result<AnswerReceipt, AnswerReceiptError>;
+    fn read(
+        &self,
+        project_path: &str,
+        receipt_id: &str,
+    ) -> Result<AnswerReceipt, AnswerReceiptError>;
 }
 
 #[derive(Debug, Default)]
@@ -56,7 +60,11 @@ impl AnswerReceiptStore for FileAnswerReceiptStore {
         write_answer_receipt(project_path, receipt)
     }
 
-    fn read(&self, project_path: &str, receipt_id: &str) -> Result<AnswerReceipt, AnswerReceiptError> {
+    fn read(
+        &self,
+        project_path: &str,
+        receipt_id: &str,
+    ) -> Result<AnswerReceipt, AnswerReceiptError> {
         read_answer_receipt(project_path, receipt_id)
     }
 }
@@ -103,9 +111,7 @@ pub fn append_correction(
 }
 
 fn write_json_atomic<T: Serialize>(path: &Path, value: &T) -> Result<(), AnswerReceiptError> {
-    let parent = path
-        .parent()
-        .ok_or(AnswerReceiptError::WriteFailed)?;
+    let parent = path.parent().ok_or(AnswerReceiptError::WriteFailed)?;
     fs::create_dir_all(parent).map_err(|_| AnswerReceiptError::WriteFailed)?;
     let temp = path.with_extension(RECEIPT_TEMP_EXTENSION);
     let json = serde_json::to_string_pretty(value).map_err(|_| AnswerReceiptError::WriteFailed)?;
@@ -118,7 +124,8 @@ fn write_json_atomic<T: Serialize>(path: &Path, value: &T) -> Result<(), AnswerR
             .map_err(|_| AnswerReceiptError::WriteFailed)?;
         file.write_all(json.as_bytes())
             .map_err(|_| AnswerReceiptError::WriteFailed)?;
-        file.sync_all().map_err(|_| AnswerReceiptError::WriteFailed)?;
+        file.sync_all()
+            .map_err(|_| AnswerReceiptError::WriteFailed)?;
     }
     fs::rename(&temp, path).map_err(|_| AnswerReceiptError::AtomicReplaceFailed)
 }

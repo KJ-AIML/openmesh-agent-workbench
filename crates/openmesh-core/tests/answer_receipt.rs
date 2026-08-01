@@ -1,4 +1,6 @@
-use openmesh_core::answer_receipt::{append_correction, read_answer_receipt, write_answer_receipt, AnswerReceipt};
+use openmesh_core::answer_receipt::{
+    append_correction, read_answer_receipt, write_answer_receipt, AnswerReceipt,
+};
 use openmesh_core::domain::ProxyAuthorityLevel;
 use openmesh_core::storage::init_project;
 use std::fs;
@@ -43,11 +45,7 @@ fn write_and_read_receipt_roundtrip() {
 fn correction_links_original() {
     let project = temp_project("correction");
     write_answer_receipt(&project, &sample_receipt("r-orig")).expect("write");
-    let corrected = append_correction(
-        &project,
-        "r-orig",
-        sample_receipt("r-corr"),
-    )
-    .expect("correction");
+    let corrected =
+        append_correction(&project, "r-orig", sample_receipt("r-corr")).expect("correction");
     assert_eq!(corrected.correction_of.as_deref(), Some("r-orig"));
 }

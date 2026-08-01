@@ -5,6 +5,28 @@ All notable changes to OpenMesh are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.8] - 2026-07-31
+
+### Added
+
+- **Handoff Note Engine**: evidence-backed local handoff packages under `.openmesh/handoff/{id}.json`
+- **Handoff builder**: deterministic sections from continuity snapshot + current state + catch-up window
+- **Handoff markdown export**: human-readable projection for approved or draft notes
+- **Ledger linkage**: optional `work.handoff` WorkEvent via `--link-event`
+- **CLI `handoff create|show|approve|export`**: thin CLI over core handoff scope, builder, storage, and markdown modules
+
+### Security / Privacy
+
+- Handoff storage isolated from `signals/pending` and `proxy/pending`
+- Fail-closed validation on empty handoffs (limitations required when no section items)
+- Draft vs approved lifecycle enforced at the wire contract layer
+
+### Technical Details
+
+- **Workspace**: `openmesh` (Tauri), `openmesh-core`, `openmesh-cli`
+- **Branch**: `feat/openmesh-0.1.8`
+- **Compatibility**: additive on 0.1.7; no mesh/sync/Desktop UI in this track
+
 ## [0.1.7] - 2026-07-31
 
 ### Added

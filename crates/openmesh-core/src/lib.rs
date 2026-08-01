@@ -116,6 +116,13 @@
 // - `pending_proxy_question` — Must Ask pending question records
 // - `answer_receipt` — append-only answer receipt storage
 //
+// Dev Track 0.1.8 — Handoff Note Engine:
+// - `handoff::contract` — `HandoffNote` v1.0 wire types + `validate_handoff_note`
+// - `handoff::scope` — recipient/window helpers (pure)
+// - `handoff::builder` — continuity-backed note builder (pure)
+// - `handoff::storage` — `.openmesh/handoff/` persistence + ledger linkage
+// - `handoff::markdown` — deterministic markdown projection
+//
 // Ledger APIs are core-only in this track. CLI, Tauri, and Desktop do not expose
 // WorkEvent ledger commands yet.
 
@@ -123,6 +130,7 @@ pub mod answer_receipt;
 pub mod authority_freshness;
 pub mod authority_gate;
 pub mod authority_policy;
+pub mod handoff;
 pub mod pending_proxy_question;
 
 pub mod context;
@@ -142,11 +150,11 @@ pub mod producers;
 pub mod profile;
 pub mod profile_validation;
 pub mod promotion;
-pub mod proxy_claims;
-pub mod proxy_citations;
-pub mod proxy_post_verify;
 pub mod proxy_ask;
+pub mod proxy_citations;
+pub mod proxy_claims;
 pub mod proxy_draft_safety;
+pub mod proxy_post_verify;
 pub mod proxy_prompt;
 pub mod proxy_prompt_context;
 pub mod proxy_question;

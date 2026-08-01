@@ -186,13 +186,12 @@ pub fn run_proxy_ask_with_harness(
     // Pre-provider freshness gate for critical tiers — fail closed before provider.
     let risk = classify_question_risk(question_text);
     let tier = openmesh_core::authority_policy::map_risk_to_freshness_tier(risk);
-    let freshness_pre = openmesh_core::authority_freshness::evaluate_evidence_freshness(
-        &pack,
+    let freshness_pre =
+        openmesh_core::authority_freshness::evaluate_evidence_freshness(&pack, tier, Utc::now());
+    if matches!(
         tier,
-        Utc::now(),
-    );
-    if matches!(tier, openmesh_core::authority_policy::FreshnessTier::Critical)
-        && !freshness_pre.is_sufficient
+        openmesh_core::authority_policy::FreshnessTier::Critical
+    ) && !freshness_pre.is_sufficient
     {
         let _ = write_pending_for_question(&project_path, question_text, &decision);
         return print_proxy_error(
@@ -221,20 +220,9 @@ pub fn run_proxy_ask_with_harness(
 
     match ask_my_proxy_local(&pack, &question, &options, runtime.as_ref(), harness.clock) {
         Ok(mut draft) => {
-            let post = apply_post_provider_verification(
-                &mut draft,
-                &pack,
-                &question.text,
-                Utc::now(),
-            );
-            let _ = write_receipt(
-                &project_path,
-                &question,
-                &pack,
-                &draft,
-                &decision,
-                &post,
-            );
+            let post =
+                apply_post_provider_verification(&mut draft, &pack, &question.text, Utc::now());
+            let _ = write_receipt(&project_path, &question, &pack, &draft, &decision, &post);
             let label = match gate {
                 AuthorityGateOutcome::Proceed { label, .. } => label,
                 _ => AuthorityOutcomeLabel::Proceed,
@@ -362,9 +350,7 @@ fn print_proxy_draft_success(
     println!("authority_outcome={}", outcome_label_wire(label));
     println!(
         "coverage_ok={} freshness_ok={} confidence={:?}",
-        post.coverage_ok,
-        post.freshness.is_sufficient,
-        post.freshness.confidence_label
+        post.coverage_ok, post.freshness.is_sufficient, post.freshness.confidence_label
     );
     if post.must_ask {
         println!("outcome=must-ask-human");

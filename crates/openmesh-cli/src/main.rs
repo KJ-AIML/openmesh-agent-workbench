@@ -14,6 +14,7 @@ mod catch_up;
 mod collect;
 mod context;
 mod event;
+mod handoff;
 mod init;
 mod output;
 mod profile;
@@ -63,6 +64,9 @@ pub enum Commands {
     /// Ask the local Work Proxy for a draft answer (Dev Track 0.1.6).
     #[command(subcommand)]
     Proxy(proxy::ProxyCommand),
+    /// Create, approve, show, or export local handoff notes (Dev Track 0.1.8).
+    #[command(subcommand)]
+    Handoff(handoff::HandoffCommand),
 }
 
 #[derive(Subcommand, Debug)]
@@ -255,6 +259,7 @@ fn run() -> i32 {
         Commands::Profile(cmd) => profile::run_profile(cmd, &cwd),
         Commands::Context(cmd) => context::run_context(cmd, &cwd),
         Commands::Proxy(cmd) => proxy::run_proxy(cmd, &cwd),
+        Commands::Handoff(cmd) => handoff::run_handoff(cmd, &cwd),
     }
 }
 

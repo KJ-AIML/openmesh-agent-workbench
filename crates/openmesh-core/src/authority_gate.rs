@@ -4,8 +4,8 @@
 //! send sensitive context to the provider.
 
 use crate::authority_policy::{
-    classify_question_risk, evaluate_authority_policy, AuthorityPolicyInput, AuthorityPolicyDecision,
-    QuestionRiskCategory, RequesterRelation,
+    classify_question_risk, evaluate_authority_policy, AuthorityPolicyDecision,
+    AuthorityPolicyInput, QuestionRiskCategory, RequesterRelation,
 };
 use crate::domain::{ProxyAuthorityLevel, WorkProxyProfile};
 

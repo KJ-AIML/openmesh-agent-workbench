@@ -31,7 +31,10 @@ pub fn run_init(args: &InitArgs, cwd: &Path) -> i32 {
 
     let project_str = project_path.to_string_lossy().to_string();
     if let Err(err) = std::fs::create_dir_all(&project_path) {
-        return print_init_error(&format!("failed to create project directory: {err}"), args.json);
+        return print_init_error(
+            &format!("failed to create project directory: {err}"),
+            args.json,
+        );
     }
 
     match init_project(&project_str) {

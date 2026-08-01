@@ -88,7 +88,9 @@ pub fn verify_claims_against_pack(
                     let label_tokens = significant_tokens(label);
                     token_overlap(&claim_tokens, &label_tokens) >= 2
                         || (!label_tokens.is_empty()
-                            && label_tokens.iter().all(|token| claim_tokens.contains(token)))
+                            && label_tokens
+                                .iter()
+                                .all(|token| claim_tokens.contains(token)))
                 })
                 .map(|(ref_id, _)| ref_id.clone())
                 .collect();
@@ -152,7 +154,10 @@ fn classify_claim_kind(sentence: &str) -> ClaimKind {
     let lower = sentence.to_ascii_lowercase();
     if contains_any(&lower, &["maybe", "might", "possibly", "likely", "i think"]) {
         ClaimKind::Inference
-    } else if contains_any(&lower, &["unknown", "unclear", "not sure", "cannot determine"]) {
+    } else if contains_any(
+        &lower,
+        &["unknown", "unclear", "not sure", "cannot determine"],
+    ) {
         ClaimKind::Unknown
     } else {
         ClaimKind::Fact

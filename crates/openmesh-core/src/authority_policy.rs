@@ -63,9 +63,15 @@ pub struct AuthorityPolicyDecision {
 /// Classify question risk using deterministic keyword/heuristic rules.
 pub fn classify_question_risk(question: &str) -> QuestionRiskCategory {
     let normalized = question.to_ascii_lowercase();
-    let compact: String = normalized.chars().filter(|c| c.is_ascii_alphanumeric()).collect();
+    let compact: String = normalized
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .collect();
 
-    if contains_any(&normalized, &["secret", "password", "credential", "api key", "token"]) {
+    if contains_any(
+        &normalized,
+        &["secret", "password", "credential", "api key", "token"],
+    ) {
         return QuestionRiskCategory::Secret;
     }
     if contains_any(
@@ -76,20 +82,43 @@ pub fn classify_question_risk(question: &str) -> QuestionRiskCategory {
     }
     if contains_any(
         &normalized,
-        &["deploy", "release", "merge", "ship", "production", "approve", "commit to"],
-    ) || compact.contains("candeploy") || compact.contains("deploynow")
+        &[
+            "deploy",
+            "release",
+            "merge",
+            "ship",
+            "production",
+            "approve",
+            "commit to",
+        ],
+    ) || compact.contains("candeploy")
+        || compact.contains("deploynow")
     {
         return QuestionRiskCategory::Commitment;
     }
     if contains_any(
         &normalized,
-        &["decide", "decision", "should we", "architecture", "trade-off", "choose"],
+        &[
+            "decide",
+            "decision",
+            "should we",
+            "architecture",
+            "trade-off",
+            "choose",
+        ],
     ) {
         return QuestionRiskCategory::Decision;
     }
     if contains_any(
         &normalized,
-        &["status", "blocker", "blocked", "progress", "what happened", "summary"],
+        &[
+            "status",
+            "blocker",
+            "blocked",
+            "progress",
+            "what happened",
+            "summary",
+        ],
     ) {
         return QuestionRiskCategory::Status;
     }
@@ -144,7 +173,8 @@ pub fn evaluate_authority_policy(
             ) =>
         {
             deny_before_provider = true;
-            deny_reason = Some("high-risk question requires human confirmation before provider".to_string());
+            deny_reason =
+                Some("high-risk question requires human confirmation before provider".to_string());
         }
         _ => {}
     }

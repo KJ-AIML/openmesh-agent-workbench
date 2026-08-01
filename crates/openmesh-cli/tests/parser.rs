@@ -1,5 +1,5 @@
 // Checkpoint A — CLI parser tests (approved plan §17/§19.B).
-// Verifies: all 11 kinds recognized; no other top-level command; --summary
+// Verifies: all 11 kinds recognized; phantom top-level commands absent; --summary
 // required; missing summary exits 2 (clap usage failure); --help exits 0.
 //
 // Uses std::process::Command directly against the real compiled binary (via
@@ -56,7 +56,7 @@ fn all_eleven_kinds_are_recognized_by_signal_help() {
 fn no_other_top_level_command_exists() {
     let output = cli().arg("--help").output().unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
-    for forbidden in ["status", "workspace", "process", "replay", "init"] {
+    for forbidden in ["status", "workspace", "process", "replay"] {
         assert!(
             !stdout.to_lowercase().contains(forbidden),
             "top-level --help must not mention `{forbidden}`, got:\n{stdout}"

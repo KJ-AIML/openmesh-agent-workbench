@@ -49,7 +49,11 @@ pub fn run_proxy_verify(args: &ProxyVerifyArgs, cwd: &Path) -> i32 {
         Err(err) => return crate::context::print_context_storage_error(&err, args.json),
     };
     if validate_proxy_context_pack_complete(&pack).is_err() {
-        return print_verify_error("context pack failed validation", "invalid-context-pack", args.json);
+        return print_verify_error(
+            "context pack failed validation",
+            "invalid-context-pack",
+            args.json,
+        );
     }
 
     let claims = extract_claims_from_draft(&draft_text);
@@ -125,10 +129,7 @@ fn load_draft_text(args: &ProxyVerifyArgs) -> Result<String, i32> {
 
 fn print_verify_error(message: &str, category: &str, json_mode: bool) -> i32 {
     if json_mode {
-        println!(
-            "{}",
-            json!({ "error": message, "category": category })
-        );
+        println!("{}", json!({ "error": message, "category": category }));
     } else {
         eprintln!("Error: {message}");
     }

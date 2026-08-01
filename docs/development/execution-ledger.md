@@ -2296,3 +2296,88 @@ Known limitations:
 - Push/tag/GitHub release require separate authorization.
 Next recommended action: local install smoke (CLI + Tauri installer), then publish gate authorization.
 
+## 2026-07-31 — Program Plan 0.1.8→0.1.10 + Dev Track 0.1.8 UNLOCK
+
+Status: PLAN_FROZEN — 0.1.8 UNLOCKED FOR IMPLEMENTATION
+Branch: feat/openmesh-0.1.8
+Commit: pending (plan/governance docs; Checkpoint A not started)
+Objective: Authorize sequential development through Two-Person Mesh (0.1.10) with non-spaghetti module seams and mandatory E2E per version; start Handoff Note Engine now.
+What changed:
+- Program plan written: `.heli-harness/state/reports/openmesh-0.1.8-to-0.1.10-program-plan.md` (external heli report).
+- Branch `feat/openmesh-0.1.8` created from `main` @ `4b3837c`.
+- Unlock matrix: 0.1.8 YES; 0.1.9/0.1.10 planned-only until prior PASS.
+Tests added: None yet (planning/unlock only).
+Commands run:
+- `git checkout -b feat/openmesh-0.1.8` — exit 0
+Exact results:
+- Senior decisions locked: sequential releases; three pending namespaces distinct; domain wire-only; CLI-first; E2E required for PASS; mesh local-envelope only.
+Manual QA actually performed: None.
+Architecture decisions:
+- Handoff storage under `.openmesh/handoff/`; do not overload `proxy/pending` or `signals/pending`.
+- Prefer `domain_handoff.rs` / feature modules over further `domain.rs` bloat.
+- 0.1.9 bridges pending sources by projection; 0.1.10 is file envelope exchange (no network).
+Known limitations:
+- Desktop UI still deferred.
+- 0.1.9/0.1.10 code must not land before their unlock.
+Next recommended track: **0.1.8 Checkpoint A — Handoff domain contract**.
+
+## 2026-07-31 — Dev Track 0.1.8 Checkpoint A (GREEN)
+
+Status: CHECKPOINT_A_GREEN — COMMIT PENDING
+Branch: feat/openmesh-0.1.8
+Commit: pending (working tree; baseline still `4b3837c`)
+Objective: Freeze Handoff Note v1.0 wire contract + fail-closed pure validators with no I/O.
+What changed:
+- Added `crates/openmesh-core/src/handoff/{mod,contract}.rs` — `HandoffNote` protocol 1.0, sections, recipient, freshness, `validate_handoff_note`.
+- Wired `pub mod handoff` in `crates/openmesh-core/src/lib.rs`.
+- Added `crates/openmesh-core/tests/handoff_contract.rs` (11 tests).
+- External report: `.heli-harness/state/reports/openmesh-0.1.8-checkpoint-a.md`.
+Tests added:
+- valid draft; serde roundtrip; deny unknown fields; protocol/recipient/window rejects; draft/approved rules; empty-without-limitations; empty item summary; `work.handoff` kind stability.
+Commands run:
+- `cargo test -p openmesh-core --test handoff_contract` — exit 0, **11 passed**
+Exact results:
+- Module compiles; validators fail closed on empty handoff without limitations; Draft forbids `approvedAt`; Approved requires it.
+Manual QA actually performed: None.
+Architecture decisions:
+- New `handoff` module seam (do not grow `domain.rs` for this track).
+- Reuse existing `EvidenceRef` / `CatchUpWindow` validators.
+- No storage, builder, markdown, or CLI in Checkpoint A.
+Known limitations:
+- Version still `0.1.7` until Checkpoint G release harden.
+- Checkpoints B–G not started; 0.1.9/0.1.10 remain locked.
+Next recommended track: **0.1.8 Checkpoint B — recipient/scope**.
+
+## 2026-07-31 — Dev Track 0.1.8 (FEATURE COMPLETE — LOCAL)
+
+Status: FEATURE_COMPLETE_LOCAL — COMMIT PENDING
+Branch: feat/openmesh-0.1.8
+Commit: pending (working tree; baseline `4b3837c` + Checkpoints A–G)
+Objective: Ship Handoff Note Engine with CLI create/show/approve/export; bump to 0.1.8 locally.
+What changed:
+- Checkpoint A: `handoff/contract.rs` — HandoffNote v1.0 wire types + validators.
+- Checkpoint B: `handoff/scope.rs` — recipient + 7-day default window helpers.
+- Checkpoint C: `handoff/builder.rs` — continuity-backed draft note builder.
+- Checkpoint D: `handoff/storage.rs` — `.openmesh/handoff/` persistence + approve + ledger link.
+- Checkpoint E: `handoff/markdown.rs` — deterministic markdown projection.
+- Checkpoint F: `crates/openmesh-cli/src/handoff.rs` — `handoff create|show|approve|export`.
+- Checkpoint G: version bump 0.1.7 → 0.1.8; CHANGELOG; execution ledger; implementation report.
+Tests added:
+- `openmesh-core/tests/handoff_{contract,scope,builder,storage,markdown}.rs`
+- `openmesh-cli/tests/handoff_workflow.rs`
+Commands run:
+- `cargo test -p openmesh-cli --test handoff_workflow` — exit 0, **9 passed**
+- `cargo test --workspace` — exit 0, **all suites green** (retry after parallel flake in `ingestion::all_six_sources_ingested_and_searchable`)
+Exact results:
+- Core handoff module seam complete; CLI wired in `main.rs`; no mesh/sync/Desktop UI.
+Manual QA actually performed: None (automated tests only).
+Architecture decisions:
+- Storage under `.openmesh/handoff/` only; never `proxy/pending` or `signals/pending`.
+- Top-level `handoff` command distinct from `signal handoff` WorkSignal kind.
+- Thin CLI — all logic in `openmesh-core::handoff`.
+Known limitations:
+- No GitHub tag/release/push in this checkpoint.
+- 0.1.9/0.1.10 remain locked until human unlock.
+- Desktop UI for handoff surfaces deferred.
+Next recommended track: human review → local tag/release 0.1.8; then 0.1.9 unlock when authorized.
+
