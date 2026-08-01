@@ -2381,3 +2381,32 @@ Known limitations:
 - Desktop UI for handoff surfaces deferred.
 Next recommended track: human review → local tag/release 0.1.8; then 0.1.9 unlock when authorized.
 
+## 2026-08-01 — Dev Track 0.1.8 RELEASED (v0.1.8)
+
+Status: RELEASED
+Branch: main @ `75ecc9e` (fast-forward from `feat/openmesh-0.1.8`)
+Tag: `v0.1.8`
+Release: https://github.com/KJ-AIML/openmesh-agent-workbench/releases/tag/v0.1.8
+Objective: Publish Handoff Note Engine as OpenMesh 0.1.8 with installable Windows + CLI artifacts.
+What changed:
+- Pushed `feat/openmesh-0.1.8`, FF-merged to `main`, annotated tag `v0.1.8`.
+- Release assets: NSIS setup, MSI, `openmesh-cli.exe`, `checksums-0.1.8.txt`.
+- Local `cargo install --path crates/openmesh-cli` → `openmesh-cli 0.1.8`.
+Commands run:
+- `cargo build --release -p openmesh-cli` — exit 0
+- `npx tauri build` — exit 0 (MSI + NSIS 0.1.8)
+- `cargo install --path crates/openmesh-cli --force` — exit 0
+- `powershell -File scripts/e2e-0.1.8.ps1` — exit 0 (prior session)
+- `git push origin feat/openmesh-0.1.8`; FF `main`; `git push origin main`; `git push origin v0.1.8`
+- `gh release create v0.1.8` with four assets — exit 0
+Exact results:
+- Tag `v0.1.8` → commit `75ecc9e`
+- Assets published on GitHub release page
+Manual QA actually performed: automated E2E dogfood script (init → signal → handoff create/show/approve/export).
+Architecture decisions:
+- Release follows 0.1.7 publish pattern (FF main + annotated tag + installer assets).
+Known limitations:
+- Desktop UI still does not surface handoff workflows.
+- 0.1.9 remains locked until separate unlock authorization.
+Next recommended track: unlock **0.1.9 Pending Questions & Return Digest** when authorized.
+
