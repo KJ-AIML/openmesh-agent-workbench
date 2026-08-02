@@ -4,12 +4,13 @@
 //! Checkpoint B: local peer registry under `.openmesh/mesh/peers/`.
 //! Checkpoint C: export builder + outbox write.
 //! Checkpoint D: import into inbox.
-//! Later: list/show peer evidence read model.
+//! Checkpoint E: list/show peer evidence read model.
 
 pub mod contract;
 pub mod export;
 pub mod import;
 pub mod peers;
+pub mod view;
 
 pub use contract::{
     validate_envelope_id_for_storage, validate_mesh_envelope, validate_mesh_peer_ref, MeshEnvelope,
@@ -31,4 +32,8 @@ pub use peers::{
     add_peer, list_peer_ids, list_peers, peer_id_from_label, peer_path, peers_dir, read_peer,
     validate_mesh_peer_record, validate_peer_id_for_storage, write_peer, MeshPeerError,
     MeshPeerRecord, MESH_PEER_RECORD_PROTOCOL_VERSION,
+};
+pub use view::{
+    list_envelope_summaries, list_outbox_envelope_ids, show_envelope, MeshEnvelopeSummary,
+    MeshMailbox, MeshViewError,
 };

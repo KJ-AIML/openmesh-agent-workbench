@@ -5,6 +5,29 @@ All notable changes to OpenMesh are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.10] - 2026-08-02
+
+### Added
+
+- **Two-Person Mesh (local prototype)**: file-envelope exchange between local Work Proxies (no network)
+- **Mesh peer registry**: `.openmesh/mesh/peers/` with CLI `mesh peer add|list|show`
+- **Mesh export**: build `MeshEnvelope` from continuity + optional handoff ids → `.openmesh/mesh/outbox/`
+- **Mesh import**: validate + store foreign envelopes under `.openmesh/mesh/inbox/` (self-workspace refuse by default)
+- **Mesh list/show**: attributed envelope summaries and full evidence listing
+- CLI surface: `mesh peer|export|import|list|show`
+
+### Security / Privacy
+
+- Envelopes cannot express secret sensitivity_max
+- Imported evidence is foreign + attributed; no auto-promotion into local WorkEvent ledger
+- Self-workspace import refused unless `--allow-self`
+
+### Technical Details
+
+- **Module**: `openmesh_core::mesh` (contract, peers, export, import, view)
+- **Branch**: `feat/openmesh-0.1.10`
+- **Compatibility**: additive on 0.1.9; Desktop UI deferred
+
 ## [0.1.9] - 2026-08-02
 
 ### Added

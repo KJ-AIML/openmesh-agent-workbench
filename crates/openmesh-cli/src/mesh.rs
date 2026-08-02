@@ -7,10 +7,11 @@ use clap::{Args, Subcommand, ValueEnum};
 use openmesh_core::continuity::load_continuity_input_snapshot;
 use openmesh_core::domain::CatchUpWindow;
 use openmesh_core::mesh::{
-    add_peer, export_mesh_envelope_to_outbox, import_mesh_envelope_from_file, list_peers,
-    peer_id_from_label, read_peer, to_peer_from_registry, BuildMeshExportRequest, ImportMeshOptions,
-    MeshExportError, MeshImportError, MeshPeerError, MeshPeerRecord, MeshPeerRef,
-    MeshSensitivityMax, MESH_PEER_RECORD_PROTOCOL_VERSION,
+    add_peer, export_mesh_envelope_to_outbox, import_mesh_envelope_from_file,
+    list_envelope_summaries, list_peers, peer_id_from_label, read_peer, show_envelope,
+    to_peer_from_registry, BuildMeshExportRequest, ImportMeshOptions, MeshExportError,
+    MeshImportError, MeshMailbox, MeshPeerError, MeshPeerRecord, MeshPeerRef, MeshSensitivityMax,
+    MeshViewError, MESH_PEER_RECORD_PROTOCOL_VERSION,
 };
 use openmesh_core::profile::{profile_exists, read_work_proxy_profile};
 use openmesh_core::storage::read_project;
@@ -31,6 +32,10 @@ pub enum MeshCommand {
     Export(MeshExportArgs),
     /// Import a mesh envelope file into local inbox (Checkpoint D).
     Import(MeshImportArgs),
+    /// List imported/exported mesh envelopes (Checkpoint E).
+    List(MeshListArgs),
+    /// Show one mesh envelope with attributed evidence (Checkpoint E).
+    Show(MeshShowArgs),
 }
 
 #[derive(Subcommand, Debug)]
@@ -168,6 +173,50 @@ pub struct MeshImportArgs {
     pub json: bool,
 }
 
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub enum MeshMailboxArg {
+    Inbox,
+    Outbox,
+}
+
+impl From<MeshMailboxArg> for MeshMailbox {
+    fn from(value: MeshMailboxArg) -> Self {
+        match value {
+            MeshMailboxArg::Inbox => MeshMailbox::Inbox,
+            MeshMailboxArg::Outbox => MeshMailbox::Outbox,
+        }
+    }
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct MeshListArgs {
+    /// Limit listing to inbox or outbox (default: both).
+    #[arg(long, value_enum)]
+    pub mailbox: Option<MeshMailboxArg>,
+
+    #[arg(long)]
+    pub project: Option<String>,
+
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct MeshShowArgs {
+    #[arg(long = "id")]
+    pub envelope_id: String,
+
+    /// Prefer a mailbox when the same id exists in both (default: inbox then outbox).
+    #[arg(long, value_enum)]
+    pub mailbox: Option<MeshMailboxArg>,
+
+    #[arg(long)]
+    pub project: Option<String>,
+
+    #[arg(long)]
+    pub json: bool,
+}
+
 pub fn run_mesh(command: MeshCommand, cwd: &Path) -> i32 {
     match command {
         MeshCommand::Peer(peer) => match peer {
@@ -177,6 +226,8 @@ pub fn run_mesh(command: MeshCommand, cwd: &Path) -> i32 {
         },
         MeshCommand::Export(args) => run_export(&args, cwd),
         MeshCommand::Import(args) => run_import(&args, cwd),
+        MeshCommand::List(args) => run_list(&args, cwd),
+        MeshCommand::Show(args) => run_show(&args, cwd),
     }
 }
 
@@ -516,6 +567,125 @@ fn print_import_error(err: &MeshImportError, json_mode: bool) -> i32 {
         MeshImportError::ReadFailed
         | MeshImportError::WriteFailed
         | MeshImportError::AtomicReplaceFailed => (4, "io"),
+    };
+    let message = err.to_string();
+    if json_mode {
+        println!(
+            "{}",
+            json!({"status":"error","category":category,"message":message})
+        );
+    } else {
+        eprintln!("ERROR {category}: {message}");
+    }
+    code
+}
+
+fn run_list(args: &MeshListArgs, cwd: &Path) -> i32 {
+    let resolved = match resolve_project(args.project.as_deref(), cwd) {
+        Ok(r) => r,
+        Err(err) => return output::print_project_resolution_error(&err.describe(), args.json),
+    };
+    let project_path = resolved.path.to_string_lossy().to_string();
+    let mailbox = args.mailbox.map(Into::into);
+    match list_envelope_summaries(&project_path, mailbox) {
+        Ok(rows) => {
+            if args.json {
+                println!("{}", serde_json::to_value(&rows).unwrap_or(json!([])));
+            } else if rows.is_empty() {
+                println!("(no mesh envelopes)");
+            } else {
+                for row in rows {
+                    let mb = match row.mailbox {
+                        MeshMailbox::Inbox => "inbox",
+                        MeshMailbox::Outbox => "outbox",
+                    };
+                    println!(
+                        "[{mb}] {} | from={} | evidence={} | handoffs={} | at={}",
+                        row.envelope_id,
+                        row.attributed_to,
+                        row.evidence_item_count,
+                        row.handoff_id_count,
+                        row.generated_at
+                    );
+                }
+            }
+            0
+        }
+        Err(err) => print_view_error(&err, args.json),
+    }
+}
+
+fn run_show(args: &MeshShowArgs, cwd: &Path) -> i32 {
+    let resolved = match resolve_project(args.project.as_deref(), cwd) {
+        Ok(r) => r,
+        Err(err) => return output::print_project_resolution_error(&err.describe(), args.json),
+    };
+    let project_path = resolved.path.to_string_lossy().to_string();
+    let mailbox = args.mailbox.map(Into::into);
+    match show_envelope(&project_path, &args.envelope_id, mailbox) {
+        Ok((envelope, mb)) => {
+            if args.json {
+                let mut payload = serde_json::to_value(&envelope).unwrap_or(json!({}));
+                if let Some(obj) = payload.as_object_mut() {
+                    obj.insert(
+                        "mailbox".into(),
+                        json!(match mb {
+                            MeshMailbox::Inbox => "inbox",
+                            MeshMailbox::Outbox => "outbox",
+                        }),
+                    );
+                }
+                println!("{payload}");
+            } else {
+                let mb = match mb {
+                    MeshMailbox::Inbox => "inbox",
+                    MeshMailbox::Outbox => "outbox",
+                };
+                println!("mailbox={mb}");
+                println!("envelope_id={}", envelope.envelope_id);
+                println!("attributed_to={}", envelope.from_peer.label);
+                println!(
+                    "from_workspace={}",
+                    envelope
+                        .from_peer
+                        .workspace_id
+                        .as_deref()
+                        .unwrap_or("-")
+                );
+                println!("generated_at={}", envelope.generated_at);
+                println!("evidence_items:");
+                if envelope.evidence_items.is_empty() {
+                    println!("  (none)");
+                } else {
+                    for item in &envelope.evidence_items {
+                        println!(
+                            "  - [{}] {} ({})",
+                            item.source_id,
+                            item.summary,
+                            item.source_kind.as_str()
+                        );
+                    }
+                }
+                if !envelope.handoff_ids.is_empty() {
+                    println!("handoff_ids={}", envelope.handoff_ids.join(","));
+                }
+                for limitation in &envelope.limitations {
+                    println!("limitation: {limitation}");
+                }
+            }
+            0
+        }
+        Err(err) => print_view_error(&err, args.json),
+    }
+}
+
+fn print_view_error(err: &MeshViewError, json_mode: bool) -> i32 {
+    let (code, category) = match err {
+        MeshViewError::ProjectNotInitialized => (1, "project"),
+        MeshViewError::NotFound => (3, "not-found"),
+        MeshViewError::Import(i) => return print_import_error(i, json_mode),
+        MeshViewError::Export(e) => return print_export_error(e, json_mode),
+        MeshViewError::ReadFailed => (4, "io"),
     };
     let message = err.to_string();
     if json_mode {

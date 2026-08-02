@@ -40,6 +40,19 @@ pub enum MeshEvidenceSourceKind {
     Other,
 }
 
+impl MeshEvidenceSourceKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            MeshEvidenceSourceKind::WorkEvent => "work-event",
+            MeshEvidenceSourceKind::ContinuityItem => "continuity-item",
+            MeshEvidenceSourceKind::Handoff => "handoff",
+            MeshEvidenceSourceKind::PendingQuestion => "pending-question",
+            MeshEvidenceSourceKind::ContextPack => "context-pack",
+            MeshEvidenceSourceKind::Other => "other",
+        }
+    }
+}
+
 /// Local peer label for envelope from/to (not network authentication).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

@@ -140,6 +140,9 @@
 // Dev Track 0.1.10 Checkpoint D — import:
 // - `mesh::import` — validate + store under `mesh/inbox/`
 //
+// Dev Track 0.1.10 Checkpoint E — read model:
+// - `mesh::view` — list/show attributed envelope summaries
+//
 // Ledger APIs are core-only in this track. CLI, Tauri, and Desktop do not expose
 // WorkEvent ledger commands yet.
 

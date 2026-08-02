@@ -2549,3 +2549,20 @@ Commands run:
 - `cargo test -p openmesh-core --test mesh_import -p openmesh-cli --test mesh_import_workflow` — exit 0, **6 passed**
 Next recommended track: **0.1.10 Checkpoint E — peer evidence read model (list/show)**.
 
+## 2026-08-02 — Dev Track 0.1.10 Checkpoints E–G (FEATURE COMPLETE LOCAL)
+
+Status: FEATURE_COMPLETE_LOCAL
+Branch: feat/openmesh-0.1.10
+Commit: pending
+Objective: Finish Two-Person Mesh local prototype through list/show, E2E, and 0.1.10 release harden.
+What changed:
+- Checkpoint E: `mesh/view.rs` + CLI `mesh list|show` attributed read model.
+- Checkpoint F: `mesh_e2e_workflow` two-project peer→export→import→list→show.
+- Checkpoint G: version manifests 0.1.9 → 0.1.10; CHANGELOG; ledger.
+Commands run:
+- `cargo test --workspace` — exit 0 (macOS)
+- mesh E2E peer→export→import→list→show green.
+Known limitations:
+- Desktop UI deferred; no network mesh; Windows installers separate.
+Next recommended track: human review → tag/release 0.1.10; then 0.1.11 unlock when authorized.
+
