@@ -5,6 +5,32 @@ All notable changes to OpenMesh are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.13] - 2026-08-02
+
+### Added
+
+- **Desktop Continuity Surfaces**: Tauri + Vue hub for 0.1.9–0.1.12 continuity capabilities
+- **Continuity page** (`/continuity`) with tabs: Pending | Digest | Mesh | Relay | Online Proxy
+- **Tauri IPC** peers over `openmesh-core` (not CLI subprocess):
+  - `continuity_pending`, `continuity_digest`, `continuity_hub_summary`
+  - `mesh_list_peers`, `mesh_list_envelopes`
+  - `relay_list_audit`
+  - `online_proxy_status`, `online_proxy_init`, `online_proxy_ask`
+- Sidebar nav + client `src/lib/continuityClient.ts`
+
+### Security / Privacy
+
+- Relay pack/approve/send/receive remain CLI-first (Desktop is read-only audit)
+- Online-proxy answers still carry mandatory `EvidenceFreshnessStatement`
+- No generic unrestricted `proxy_ask` / ask-my-proxy surface
+
+### Technical Details
+
+- Module: `src-tauri/src/continuity_desktop.rs`
+- Vitest: `tests/pages/ContinuityPage.test.ts`
+- Compatibility: `proxy_compatibility` exact-token gate for `proxy_ask`
+- Dev Spec domain track **Two-Person Mesh Beta (Ter × Yo)** remains next domain mission after this UI track
+
 ## [0.1.12] - 2026-08-02
 
 ### Added

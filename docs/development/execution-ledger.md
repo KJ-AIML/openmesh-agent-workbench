@@ -2666,3 +2666,29 @@ Release: https://github.com/KJ-AIML/openmesh-agent-workbench/releases/tag/v0.1.1
 PR: https://github.com/KJ-AIML/openmesh-agent-workbench/pull/4
 Next recommended track: human direction (Desktop UI deferred; roadmap after 0.1.12 as authorized).
 
+## 2026-08-02 — Dev Track 0.1.13 UNLOCK (Desktop Continuity Surfaces)
+
+Status: PLAN_FROZEN — 0.1.13 UNLOCKED FOR IMPLEMENTATION
+Branch: feat/openmesh-0.1.13-desktop-continuity
+Objective: Surface 0.1.9–0.1.12 CLI continuity capabilities in Tauri Desktop as peers over openmesh-core.
+What changed:
+- Human unlock authorized for Desktop Continuity Surfaces (user selected Desktop UI).
+- Execution plan: `docs/development/openmesh-0.1.13-execution-plan.md`
+- Note: Dev Spec “0.1.13 Two-Person Mesh Beta (Ter × Yo)” remains the next *domain* mission; this release is a Desktop productization slice numbered 0.1.13.
+Next: implement Tauri commands + Continuity page through ship.
+
+## 2026-08-02 — Dev Track 0.1.13 FEATURE COMPLETE
+
+Status: FEATURE_COMPLETE_LOCAL
+Branch: feat/openmesh-0.1.13-desktop-continuity
+Objective: Desktop Continuity Surfaces — Pending/Digest/Mesh/Relay/Online Proxy hub.
+What changed:
+- `src-tauri/src/continuity_desktop.rs` + generate_handler wiring
+- `src/pages/ContinuityPage.vue`, `src/lib/continuityClient.ts`, sidebar/router
+- Vitest ContinuityPage; proxy_compatibility exact-token fix
+- Version 0.1.12 → 0.1.13; CHANGELOG
+Commands run:
+- `npm run verify` — typecheck/lint/test green
+- `cargo test --workspace` — exit 0 (macOS; DEVELOPER_DIR=CommandLineTools)
+Next: push/PR/tag/release when authorized.
+

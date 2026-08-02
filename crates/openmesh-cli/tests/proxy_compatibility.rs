@@ -391,12 +391,23 @@ fn claims_and_citations_modules_exist() {
 
 #[test]
 fn no_Tauri_command_is_added() {
+    // Frozen 0.1.6/0.1.7 gate: no generic "ask my proxy" / draft surface on Desktop.
+    // 0.1.13 intentionally adds `online_proxy_*` (always-online scaffold with freshness);
+    // those names must not trip this substring gate.
     let tauri_lib = workspace_root().join("src-tauri/src/lib.rs");
     let content = fs::read_to_string(&tauri_lib).expect("tauri lib");
     let lower = content.to_ascii_lowercase();
-    for forbidden in ["proxy_ask", "ask_my_proxy", "proxy draft"] {
+    for forbidden in ["ask_my_proxy", "proxy draft"] {
         assert!(!lower.contains(forbidden), "tauri added `{forbidden}`");
     }
+    // Exact command token `proxy_ask` (not a suffix of online_proxy_ask).
+    let has_exact_proxy_ask = lower
+        .split(|c: char| !c.is_ascii_alphanumeric() && c != '_')
+        .any(|tok| tok == "proxy_ask");
+    assert!(
+        !has_exact_proxy_ask,
+        "tauri added exact command token `proxy_ask`"
+    );
 }
 
 #[test]

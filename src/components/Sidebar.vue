@@ -19,6 +19,7 @@ import {
   Search,
   GitBranch,
   Zap,
+  Network,
 } from "lucide-vue-next";
 import { useRoute, useRouter } from "vue-router";
 import { useStore } from "../lib/useStore";
@@ -74,6 +75,7 @@ const workspaceNav = [
   { label: "Docs", icon: FileText, route: "/docs" },
   { label: "Notes", icon: FileEdit, route: "/notes" },
   { label: "Context", icon: Search, route: "/context" },
+  { label: "Continuity", icon: Network, route: "/continuity" },
   { label: "Sprint", icon: ListTodo, route: "/sprint" },
 ];
 
