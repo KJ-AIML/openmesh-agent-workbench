@@ -5,6 +5,30 @@ All notable changes to OpenMesh are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.11] - 2026-08-02
+
+### Added
+
+- **Private Relay Alpha**: selective egress of sensitivity-classified mesh envelopes
+- **Relay package** wire contract with policy snapshot + content hash
+- **CLI** `relay pack|show|approve|send|receive|audit`
+- **Filesystem relay root** transport (`relay-root/drop/`)
+- **Append-only audit** under `.openmesh/relay/audit/`
+
+### Security / Privacy
+
+- Secret never expressed as package sensitivity max
+- **Approve required** before send
+- Denied class `secret` always recorded in policy
+- Received packages quarantine under `relay/received/` (no auto ledger merge)
+
+### Technical Details
+
+- Module: `openmesh_core::relay`
+- Storage: `.openmesh/relay/{staging,approved,sent,received,audit}/`
+- Builds on 0.1.10 mesh envelopes
+- Desktop UI deferred; no always-online cloud proxy (0.1.12)
+
 ## [0.1.10] - 2026-08-02
 
 ### Added
