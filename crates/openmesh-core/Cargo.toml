@@ -1,6 +1,6 @@
 [package]
 name = "openmesh-core"
-version = "0.1.19"
+version = "0.1.20"
 rust-version = "1.92.0"
 description = "Shared OpenMesh domain and storage logic used by the Desktop app and future CLI"
 authors = ["Openmesh Team"]

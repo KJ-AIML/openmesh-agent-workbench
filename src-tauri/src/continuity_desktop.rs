@@ -29,6 +29,7 @@ use openmesh_core::team_cloud::{
 };
 use openmesh_core::connectors::{list_connectors, ConnectorDescriptor};
 use openmesh_core::org_graph::{build_org_graph, OrgGraph};
+use openmesh_core::pilot::{build_pilot_pack, PilotPack};
 use openmesh_core::trust_admin::{
     list_audit_events as list_trust_audit_events, read_trust_policy, AdminAuditEvent,
     TeamTrustPolicy,
@@ -338,4 +339,10 @@ pub fn org_graph_show(project_path: String) -> Result<Option<OrgGraph>, String> 
         Err(openmesh_core::org_graph::OrgGraphError::TeamRequired) => Ok(None),
         Err(e) => Err(e.to_string()),
     }
+}
+
+/// Enterprise Pilot Readiness (0.1.20) — evaluates local evidence pack.
+#[tauri::command]
+pub fn pilot_status(project_path: String) -> Result<PilotPack, String> {
+    build_pilot_pack(&project_path).map_err(|e| e.to_string())
 }

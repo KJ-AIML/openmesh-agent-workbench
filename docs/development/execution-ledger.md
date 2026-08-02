@@ -2836,3 +2836,13 @@ Release: https://github.com/KJ-AIML/openmesh-agent-workbench/releases/tag/v0.1.1
 PR: https://github.com/KJ-AIML/openmesh-agent-workbench/pull/11
 Next recommended track: **0.1.20 Enterprise Pilot Readiness** (unlocked).
 
+## 2026-08-03 — Dev Track 0.1.20 FEATURE COMPLETE (Enterprise Pilot Readiness)
+
+Status: FEATURE_COMPLETE_LOCAL
+Branch: feat/openmesh-0.1.20-enterprise-pilot
+Objective: Pilot checklist pack with threat notes + runbooks from local evidence.
+What changed:
+- openmesh_core::pilot + CLI pilot + Tauri pilot_status + Continuity Pilot tab
+- Version 0.1.19 → 0.1.20
+Next: ship v0.1.20 then 0.1.21 RC Program.
+

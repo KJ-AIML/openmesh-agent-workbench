@@ -351,3 +351,28 @@ export async function getOrgGraph(
 ): Promise<OrgGraphView | null> {
   return invoke<OrgGraphView | null>("org_graph_show", { projectPath });
 }
+
+
+export interface PilotPackView {
+  protocolVersion: string;
+  workspaceId: string;
+  generatedAt: string;
+  pilotReady: boolean;
+  passCount: number;
+  warnCount: number;
+  failCount: number;
+  checks: Array<{
+    id: string;
+    title: string;
+    status: string;
+    evidence: string;
+    detail?: string;
+  }>;
+  threatNotes: Array<{ id: string; title: string; summary: string; residual: string }>;
+  runbook: Array<{ id: string; title: string; commandOrAction: string; purpose: string }>;
+  limitations: string[];
+}
+
+export async function getPilotStatus(projectPath: string): Promise<PilotPackView> {
+  return invoke<PilotPackView>("pilot_status", { projectPath });
+}

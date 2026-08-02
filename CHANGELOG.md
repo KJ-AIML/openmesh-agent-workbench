@@ -5,7 +5,29 @@ All notable changes to OpenMesh are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.20] - 2026-08-03
+
+### Added
+
+- **Enterprise Pilot Readiness**: evidence-backed pilot checklist pack
+- **CLI** `pilot check|show|runbook|threats`
+- **Core** `openmesh_core::pilot` (contract, evaluate, storage)
+- **Desktop** Continuity → Pilot tab + Tauri `pilot_status`
+- Threat-model notes + pilot runbook embedded in pack
+- Storage: `.openmesh/pilot/pack.json`
+
+### Security / Privacy
+
+- Pack evaluates fail-closed trust, selective sync, evidence-only connectors
+- Explicit non-goal: no customer production SLA / multi-region HA
+
+### Technical Details
+
+- Tests: pilot_contract (4), pilot_workflow (3)
+- `pilot check` exit 2 when not ready
+
 ## [0.1.19] - 2026-08-03
+
 
 ### Added
 
