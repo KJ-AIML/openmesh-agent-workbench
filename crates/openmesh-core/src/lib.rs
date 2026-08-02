@@ -164,6 +164,7 @@ pub mod trust_admin;
 pub mod connectors;
 pub mod org_graph;
 pub mod pilot;
+pub mod rc;
 pub mod pending_proxy_question;
 pub mod relay;
 pub mod return_digest;

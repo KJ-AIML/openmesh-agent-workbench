@@ -1500,6 +1500,7 @@ pub fn run() {
             continuity_desktop::connector_list,
             continuity_desktop::org_graph_show,
             continuity_desktop::pilot_status,
+            continuity_desktop::rc_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
