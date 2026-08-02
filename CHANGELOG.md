@@ -5,7 +5,38 @@ All notable changes to OpenMesh are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.16] - 2026-08-03
+
+### Added
+
+- **Team Cloud Beta**: team-scoped always-online / cloud-tier scaffold (local-sim first)
+- **CLI** `team cloud init|show|sync-scaffold`
+- **Core** `openmesh_core::team_cloud` (contract + storage + dry-run selective sync)
+- **Desktop IPC** `team_cloud_status`, `team_cloud_sync_scaffold`
+- Default selective paths: `.openmesh/team|mesh|online-proxy|relay` only
+
+### Changed
+
+- **Desktop chrome (macOS)**: Overlay titlebar, traffic lights lower/inset, full-height sidebar rail
+- **Nav**: active project name on the right of the top bar (replaces generic Projects tab)
+- **Dock icon**: ~10% safe padding so the glyph matches peer Dock size
+- **Sprint board**: real empty sprints (`source: local`), no mock seed tasks; Home quick-start sprint
+- Always-visible first-task input when the board is empty; backlog column + control
+
+### Security / Privacy
+
+- `selective_sync` is **required true** (full-repo upload forbidden)
+- `sync-scaffold` is **dry-run only** (no network upload)
+- Not multi-tenant multi-region SaaS
+
+### Technical Details
+
+- Module: `crates/openmesh-core/src/team_cloud/`
+- Tests: `team_cloud_contract` (5), `team_cloud_workflow` (3)
+- macOS: `src-tauri/tauri.macos.conf.json` trafficLightPosition `{x:16,y:20}`
+
 ## [0.1.15] - 2026-08-02
+
 
 ### Added
 

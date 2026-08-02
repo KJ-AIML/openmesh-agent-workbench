@@ -9,6 +9,9 @@ use openmesh_core::team::{
     add_team_member, init_team_workspace, list_team_members, read_team_workspace, remove_team_member,
     TeamMember, TeamMemberRole, TeamStorageError,
 };
+use openmesh_core::team_cloud::{
+    build_sync_scaffold, init_team_cloud, read_team_cloud, TeamCloudMode, TeamCloudStorageError,
+};
 use serde_json::json;
 use std::path::Path;
 
@@ -26,6 +29,66 @@ pub enum TeamCommand {
     Member(TeamMemberCommand),
     /// Query a team member's offline proxy (read-only; uses linked mesh peer).
     Query(TeamQueryArgs),
+    /// Team cloud beta (local-sim / selective sync scaffold).
+    #[command(subcommand)]
+    Cloud(TeamCloudCommand),
+}
+
+#[derive(Subcommand, Debug)]
+pub enum TeamCloudCommand {
+    /// Initialize team-scoped cloud tier config (requires team init).
+    Init(TeamCloudInitArgs),
+    /// Show team cloud config.
+    Show(TeamCloudShowArgs),
+    /// Dry-run selective sync plan (no network upload).
+    #[command(name = "sync-scaffold")]
+    SyncScaffold(TeamCloudSyncArgs),
+}
+
+#[derive(Clone, Copy, Debug, Default, ValueEnum)]
+pub enum TeamCloudModeArg {
+    #[default]
+    #[value(name = "local-sim")]
+    LocalSim,
+    #[value(name = "cloud-scaffold")]
+    CloudScaffold,
+}
+
+impl From<TeamCloudModeArg> for TeamCloudMode {
+    fn from(v: TeamCloudModeArg) -> Self {
+        match v {
+            TeamCloudModeArg::LocalSim => TeamCloudMode::LocalSim,
+            TeamCloudModeArg::CloudScaffold => TeamCloudMode::CloudScaffold,
+        }
+    }
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct TeamCloudInitArgs {
+    #[arg(long, value_enum, default_value_t = TeamCloudModeArg::LocalSim)]
+    pub mode: TeamCloudModeArg,
+    #[arg(long = "online-proxy-id")]
+    pub online_proxy_id: Option<String>,
+    #[arg(long)]
+    pub project: Option<String>,
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct TeamCloudShowArgs {
+    #[arg(long)]
+    pub project: Option<String>,
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct TeamCloudSyncArgs {
+    #[arg(long)]
+    pub project: Option<String>,
+    #[arg(long)]
+    pub json: bool,
 }
 
 #[derive(Subcommand, Debug)]
@@ -136,6 +199,9 @@ pub fn run_team(command: TeamCommand, cwd: &Path) -> i32 {
         TeamCommand::Member(TeamMemberCommand::List(a)) => run_member_list(&a, cwd),
         TeamCommand::Member(TeamMemberCommand::Remove(a)) => run_member_remove(&a, cwd),
         TeamCommand::Query(a) => run_query(&a, cwd),
+        TeamCommand::Cloud(TeamCloudCommand::Init(a)) => run_cloud_init(&a, cwd),
+        TeamCommand::Cloud(TeamCloudCommand::Show(a)) => run_cloud_show(&a, cwd),
+        TeamCommand::Cloud(TeamCloudCommand::SyncScaffold(a)) => run_cloud_sync(&a, cwd),
     }
 }
 
@@ -361,6 +427,95 @@ fn slug(s: &str) -> String {
         .chars()
         .take(32)
         .collect()
+}
+
+
+fn run_cloud_init(args: &TeamCloudInitArgs, cwd: &Path) -> i32 {
+    let resolved = match resolve_project(args.project.as_deref(), cwd) {
+        Ok(r) => r,
+        Err(e) => return output::print_project_resolution_error(&e.describe(), args.json),
+    };
+    let project_path = resolved.path.to_string_lossy().to_string();
+    match init_team_cloud(
+        &project_path,
+        args.mode.into(),
+        args.online_proxy_id.clone(),
+    ) {
+        Ok(cfg) => {
+            if args.json {
+                println!("{}", serde_json::to_value(&cfg).unwrap_or(json!({})));
+            } else {
+                println!("status=ok");
+                println!("team_id={}", cfg.team_id);
+                println!("mode={:?}", cfg.mode);
+                println!("selective_sync={}", cfg.selective_sync);
+                println!("sync_paths={}", cfg.sync_paths.len());
+            }
+            0
+        }
+        Err(e) => err_cloud(e, args.json),
+    }
+}
+
+fn run_cloud_show(args: &TeamCloudShowArgs, cwd: &Path) -> i32 {
+    let resolved = match resolve_project(args.project.as_deref(), cwd) {
+        Ok(r) => r,
+        Err(e) => return output::print_project_resolution_error(&e.describe(), args.json),
+    };
+    let project_path = resolved.path.to_string_lossy().to_string();
+    match read_team_cloud(&project_path) {
+        Ok(cfg) => {
+            if args.json {
+                println!("{}", serde_json::to_value(&cfg).unwrap_or(json!({})));
+            } else {
+                println!("team_id={}", cfg.team_id);
+                println!("mode={:?}", cfg.mode);
+                println!("selective_sync={}", cfg.selective_sync);
+                println!(
+                    "online_proxy_id={}",
+                    cfg.online_proxy_id.as_deref().unwrap_or("-")
+                );
+                println!("last_sync_at={}", cfg.last_sync_at.as_deref().unwrap_or("-"));
+                for p in &cfg.sync_paths {
+                    println!("  path={p}");
+                }
+                for l in &cfg.limitations {
+                    println!("  limit={l}");
+                }
+            }
+            0
+        }
+        Err(e) => err_cloud(e, args.json),
+    }
+}
+
+fn run_cloud_sync(args: &TeamCloudSyncArgs, cwd: &Path) -> i32 {
+    let resolved = match resolve_project(args.project.as_deref(), cwd) {
+        Ok(r) => r,
+        Err(e) => return output::print_project_resolution_error(&e.describe(), args.json),
+    };
+    let project_path = resolved.path.to_string_lossy().to_string();
+    match build_sync_scaffold(&project_path) {
+        Ok(plan) => {
+            if args.json {
+                println!("{}", serde_json::to_value(&plan).unwrap_or(json!({})));
+            } else {
+                println!("status=ok");
+                println!("scaffold_only={}", plan.scaffold_only);
+                println!("team_id={}", plan.team_id);
+                println!("note={}", plan.note);
+                for p in &plan.planned_paths {
+                    println!("  planned={p}");
+                }
+            }
+            0
+        }
+        Err(e) => err_msg(args.json, "cloud_sync", &e.to_string()),
+    }
+}
+
+fn err_cloud(e: TeamCloudStorageError, json: bool) -> i32 {
+    err_msg(json, "team_cloud", &e.to_string())
 }
 
 fn err_team(e: TeamStorageError, json: bool) -> i32 {

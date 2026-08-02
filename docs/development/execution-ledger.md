@@ -2753,3 +2753,19 @@ Release: https://github.com/KJ-AIML/openmesh-agent-workbench/releases/tag/v0.1.1
 PR: https://github.com/KJ-AIML/openmesh-agent-workbench/pull/7
 Also: unlock-matrix-all.md authorizes 0.1.16→1.0.0.
 Next: implement **0.1.16 Team Cloud Beta** (unlocked).
+
+## 2026-08-03 — Dev Track 0.1.16 FEATURE COMPLETE (Team Cloud Beta + Desktop polish)
+
+Status: FEATURE_COMPLETE_LOCAL
+Branch: feat/openmesh-0.1.16-team-cloud-desktop
+Objective: Team Cloud Beta (local-sim selective sync scaffold) + Desktop chrome/sprint harden (A+B+C).
+What changed:
+- openmesh_core::team_cloud + CLI team cloud + Tauri team_cloud_*
+- macOS chrome, dock icon padding, project name on nav right
+- Sprint/Home empty real board (no mock seeds)
+- Version 0.1.15 → 0.1.16; CHANGELOG
+Commands run:
+- cargo test team_cloud_contract + team_cloud_workflow — pass
+- cargo test --workspace + npm verify (pre-ship)
+Next: tag v0.1.16 when authorized; then 0.1.17 Trust/Admin.
+

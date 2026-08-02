@@ -40,6 +40,12 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! Welcome to Openmesh.", name)
 }
 
+/// Reliable host OS for chrome layout (frontend UA can be wrong in WKWebView).
+#[tauri::command]
+fn get_host_os() -> String {
+    std::env::consts::OS.to_string()
+}
+
 #[derive(Serialize)]
 struct PathValidation {
     exists: bool,
@@ -1416,6 +1422,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .invoke_handler(tauri::generate_handler![
             greet,
+            get_host_os,
             validate_path,
             open_folder,
             get_git_status,
@@ -1483,6 +1490,9 @@ pub fn run() {
             // Team Workspace Foundation (0.1.15)
             continuity_desktop::team_workspace_status,
             continuity_desktop::team_list_members,
+            // Team Cloud Beta (0.1.16)
+            continuity_desktop::team_cloud_status,
+            continuity_desktop::team_cloud_sync_scaffold,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

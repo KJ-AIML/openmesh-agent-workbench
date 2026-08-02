@@ -43,7 +43,8 @@ export type Sprint = {
 	projectId: string;
 	name: string;
 	status: "planned" | "active" | "completed" | "archived";
-	source: "mock" | "azure-devops";
+	/** local = OpenMesh-owned board; mock kept for legacy files; azure-devops reserved */
+	source: "local" | "mock" | "azure-devops";
 	createdAt: string;
 	updatedAt: string;
 };

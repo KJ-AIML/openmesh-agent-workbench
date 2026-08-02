@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, onMounted, computed } from "vue";
 import { Minus, Square, X, LayoutGrid } from "lucide-vue-next";
 import {
   minimizeWindow,
@@ -8,265 +8,344 @@ import {
   startWindowDrag,
   isMaximized,
 } from "../lib/adapters/windowAdapter";
+import { isMacOS, isTauriRuntime, resolveIsMacOS } from "../lib/adapters/environment";
+import { useStore } from "../lib/useStore";
 
+const { currentProject } = useStore();
+
+const macOS = ref(
+  (window as unknown as { __OPENMESH_IS_MACOS__?: boolean }).__OPENMESH_IS_MACOS__ ??
+    isMacOS(),
+);
 const maximized = ref(false);
 
+const showCustomWindowControls = computed(
+  () => isTauriRuntime() && !macOS.value,
+);
+
+const projectLabel = computed(() => currentProject.value?.name ?? null);
+
+/** Edit page when a project is open; otherwise add/select flow. */
+const projectNavTo = computed(() => {
+  const p = currentProject.value;
+  if (p?.id) return `/projects/${p.id}/edit`;
+  return "/projects/new";
+});
+
 onMounted(async () => {
-  console.log("[Titlebar] mounted");
-  maximized.value = await isMaximized();
-  console.log("[Titlebar] isMaximized:", maximized.value);
+  macOS.value = await resolveIsMacOS();
+  document.documentElement.dataset.platform = macOS.value ? "macos" : "other";
+  document.documentElement.classList.toggle("is-macos", macOS.value);
+  if (showCustomWindowControls.value) {
+    maximized.value = await isMaximized();
+  }
 });
 
 async function handleMinimize(e: MouseEvent) {
-  console.log("[Titlebar] minimize button clicked");
   e.stopPropagation();
   e.preventDefault();
-  const result = await minimizeWindow();
-  console.log("[Titlebar] minimize result:", result);
+  await minimizeWindow();
 }
 
 async function handleToggleMaximize(e: MouseEvent) {
-  console.log("[Titlebar] maximize button clicked");
   e.stopPropagation();
   e.preventDefault();
-  const result = await toggleMaximizeWindow();
-  console.log("[Titlebar] toggleMaximize result:", result);
+  await toggleMaximizeWindow();
   setTimeout(async () => {
     maximized.value = await isMaximized();
   }, 100);
 }
 
 async function handleClose(e: MouseEvent) {
-  console.log("[Titlebar] close button clicked");
   e.stopPropagation();
   e.preventDefault();
-  const result = await closeWindow();
-  console.log("[Titlebar] close result:", result);
+  await closeWindow();
 }
 
-async function handleDragAreaMouseDown(e: MouseEvent) {
-  console.log("[Titlebar] drag area mousedown");
+async function handleDrag(e: MouseEvent) {
+  if (e.button !== 0) return;
+  const t = e.target as HTMLElement | null;
+  if (t?.closest("a,button,input,textarea,select,[data-no-drag]")) return;
   e.preventDefault();
-  const result = await startWindowDrag();
-  console.log("[Titlebar] drag result:", result);
+  await startWindowDrag();
 }
 </script>
 
 <template>
   <!--
-    Titlebar structure:
-    - Dedicated drag area in the center only
-    - Buttons/nav are OUTSIDE the drag area
-    - No -webkit-app-region CSS anywhere
+    macOS shell: titlebar sits ONLY on the main column (right of full-height sidebar).
+    Traffic lights live over the sidebar top — same physical layer as the left rail.
   -->
-  <header class="titlebar">
-    <!-- Left: Logo + App Name (no drag) -->
-    <div class="titlebar-left" data-no-drag>
-      <div
-        class="flex h-5 w-5 items-center justify-center rounded-md"
-        style="background: var(--foreground)"
-      >
-        <span
-          class="text-[10px] font-bold"
-          style="color: var(--background); letter-spacing: -0.02em"
-          >O</span
-        >
-      </div>
-      <span class="text-[12px] font-semibold" style="color: var(--foreground)">
-        OpenMesh
-      </span>
+  <header
+    class="tb"
+    :class="macOS ? 'tb--mac' : 'tb--win'"
+    data-tauri-drag-region
+    @mousedown="handleDrag"
+  >
+    <div v-if="!macOS" class="tb__brand" data-no-drag>
+      <span class="tb__mark" aria-hidden="true">O</span>
+      <span class="tb__name">OpenMesh</span>
     </div>
 
-    <!-- Center: Navigation Tabs (no drag) -->
-    <nav class="titlebar-nav" data-no-drag>
-      <router-link
-        to="/"
-        class="titlebar-tab"
-        :class="{ 'titlebar-tab-active': $route.path === '/' }"
-      >
-        <LayoutGrid class="h-3 w-3" />
+    <nav class="tb__nav" data-no-drag>
+      <router-link to="/" class="tb__tab" :class="{ 'is-active': $route.path === '/' }">
+        <LayoutGrid class="tb__tab-icon" />
         Work
       </router-link>
       <router-link
-        to="/projects/new"
-        class="titlebar-tab"
-        :class="{ 'titlebar-tab-active': $route.path.startsWith('/projects') }"
-      >
-        Projects
-      </router-link>
-      <router-link
         to="/docs"
-        class="titlebar-tab"
-        :class="{ 'titlebar-tab-active': $route.path === '/docs' }"
+        class="tb__tab"
+        :class="{ 'is-active': $route.path === '/docs' }"
       >
         Docs
       </router-link>
       <router-link
         to="/agent-sessions"
-        class="titlebar-tab"
-        :class="{ 'titlebar-tab-active': $route.path === '/agent-sessions' }"
+        class="tb__tab"
+        :class="{ 'is-active': $route.path === '/agent-sessions' }"
       >
         Agents
       </router-link>
       <router-link
         to="/sprint"
-        class="titlebar-tab"
-        :class="{ 'titlebar-tab-active': $route.path === '/sprint' }"
+        class="tb__tab"
+        :class="{ 'is-active': $route.path === '/sprint' }"
       >
         Sprint
       </router-link>
     </nav>
 
-    <!-- Dedicated drag area — ONLY this div triggers window dragging -->
-    <div class="titlebar-drag-area" @mousedown="handleDragAreaMouseDown"></div>
+    <div class="tb__spacer" data-tauri-drag-region />
 
-    <!-- Right: Status + Window Controls (no drag) -->
-    <div class="titlebar-right" data-no-drag>
-      <!-- Desktop badge -->
-      <div
-        class="chip chip-success"
-        style="font-size: 0.625rem; padding: 0.15rem 0.4rem"
-        data-no-drag
+    <div class="tb__end" data-no-drag>
+      <!-- Active project name on the right of the nav (replaces generic Projects tab) -->
+      <router-link
+        v-if="projectLabel"
+        :to="projectNavTo"
+        class="tb__project"
+        :class="{ 'is-active': $route.path.startsWith('/projects') }"
+        :title="currentProject?.folderPath || projectLabel"
       >
-        Desktop
-      </div>
-
-      <!-- Window controls -->
-      <button
-        class="titlebar-btn"
-        title="Minimize"
-        aria-label="Minimize window"
-        data-no-drag
-        @click="handleMinimize"
+        <span class="tb__project-dot" aria-hidden="true" />
+        <span class="tb__project-name">{{ projectLabel }}</span>
+      </router-link>
+      <router-link
+        v-else
+        to="/projects/new"
+        class="tb__tab tb__tab--ghost"
+        :class="{ 'is-active': $route.path.startsWith('/projects') }"
       >
-        <Minus class="h-3.5 w-3.5" />
-      </button>
-      <button
-        class="titlebar-btn"
-        :title="maximized ? 'Restore' : 'Maximize'"
-        :aria-label="maximized ? 'Restore window' : 'Maximize window'"
-        data-no-drag
-        @click="handleToggleMaximize"
-      >
-        <Square class="h-3 w-3" />
-      </button>
-      <button
-        class="titlebar-btn titlebar-btn-close"
-        title="Close"
-        aria-label="Close window"
-        data-no-drag
-        @click="handleClose"
-      >
-        <X class="h-3.5 w-3.5" />
-      </button>
+        Projects
+      </router-link>
+      <span class="tb__badge">Desktop</span>
+      <template v-if="showCustomWindowControls">
+        <button class="tb__winbtn" title="Minimize" aria-label="Minimize" @click="handleMinimize">
+          <Minus class="h-3.5 w-3.5" />
+        </button>
+        <button
+          class="tb__winbtn"
+          :title="maximized ? 'Restore' : 'Maximize'"
+          @click="handleToggleMaximize"
+        >
+          <Square class="h-3 w-3" />
+        </button>
+        <button class="tb__winbtn tb__winbtn--close" title="Close" @click="handleClose">
+          <X class="h-3.5 w-3.5" />
+        </button>
+      </template>
     </div>
   </header>
 </template>
 
 <style scoped>
-.titlebar {
-  position: relative;
-  z-index: 100;
+.tb {
+  z-index: 50;
+  box-sizing: border-box;
   height: 40px;
-  background: var(--surface-1);
+  min-height: 40px;
+  background: var(--sidebar);
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
-  padding: 0 0.75rem;
+  gap: 10px;
+  padding: 0 12px;
   user-select: none;
-  cursor: default;
+  -webkit-user-select: none;
 }
 
-.titlebar-left {
+.tb--mac {
+  /* Match sidebar-mac-top exactly — one continuous top seam */
+  height: var(--chrome-top, 44px);
+  min-height: var(--chrome-top, 44px);
+  padding: 0 14px 0 12px;
+  background: var(--sidebar);
+  border-bottom: 1px solid var(--border);
+}
+
+.tb__brand {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 8px;
   flex-shrink: 0;
-  position: relative;
-  z-index: 2;
-  pointer-events: auto;
 }
 
-.titlebar-nav {
+.tb__mark {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  display: grid;
+  place-items: center;
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--foreground);
+  color: var(--background);
+}
+
+.tb__name {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--foreground);
+}
+
+.tb__nav {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: 2px;
   flex-shrink: 0;
-  position: relative;
-  z-index: 2;
-  pointer-events: auto;
 }
 
-.titlebar-tab {
-  display: flex;
+.tb__tab {
+  display: inline-flex;
   align-items: center;
-  gap: 0.375rem;
-  padding: 0.25rem 0.625rem;
-  border-radius: 6px;
-  font-size: 11px;
+  gap: 5px;
+  height: 28px;
+  padding: 0 11px;
+  border-radius: 7px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--muted-foreground);
   text-decoration: none;
-  transition: all 0.15s ease;
+  white-space: nowrap;
+  transition: background 0.12s ease, color 0.12s ease;
 }
 
-.titlebar-tab:hover {
+.tb__tab-icon {
+  width: 12px;
+  height: 12px;
+  opacity: 0.85;
+}
+
+.tb__tab:hover {
   color: var(--foreground);
   background: var(--surface-highlight);
 }
 
-.titlebar-tab-active {
+.tb__tab.is-active {
   color: var(--foreground);
   background: var(--surface-3);
   font-weight: 600;
 }
 
-/* Dedicated drag area — takes up remaining space between nav and controls */
-.titlebar-drag-area {
+.tb__tab.is-active .tb__tab-icon {
+  opacity: 1;
+}
+
+.tb__spacer {
   flex: 1;
+  min-width: 12px;
   height: 100%;
-  cursor: default;
-  min-width: 20px;
 }
 
-.titlebar-right {
+.tb__end {
   display: flex;
   align-items: center;
-  gap: 0.375rem;
+  gap: 8px;
   flex-shrink: 0;
-  position: relative;
-  z-index: 2;
-  pointer-events: auto;
+  min-width: 0;
 }
 
-.titlebar-btn {
-  width: 32px;
-  height: 28px;
-  display: flex;
+.tb__project {
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  border-radius: 6px;
+  gap: 6px;
+  max-width: 200px;
+  min-width: 0;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 7px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  text-decoration: none;
+  color: inherit;
+  transition: background 0.12s ease, border-color 0.12s ease;
+  cursor: pointer;
+}
+
+.tb__project:hover {
+  background: var(--surface-3);
+  border-color: var(--border-strong, var(--border));
+}
+
+.tb__project.is-active {
+  background: var(--surface-3);
+  border-color: var(--border-strong, var(--border));
+}
+
+.tb__project-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--accent-green);
+  flex-shrink: 0;
+}
+
+.tb__project-name {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--foreground);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1;
+}
+
+.tb__tab--ghost {
+  /* same as tab; used when no project selected */
+}
+
+.tb__badge {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 5px 9px;
+  border-radius: 999px;
+  color: #4ade80;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.28);
+  flex-shrink: 0;
+}
+
+.tb__winbtn {
+  width: 36px;
+  height: 28px;
+  display: grid;
+  place-items: center;
   border: none;
+  border-radius: 6px;
   background: transparent;
   color: var(--muted-foreground);
   cursor: pointer;
-  transition: all 0.15s ease;
-  padding: 0;
-  pointer-events: auto;
 }
 
-.titlebar-btn:hover {
+.tb__winbtn:hover {
   background: var(--surface-hover);
   color: var(--foreground);
 }
 
-.titlebar-btn-close:hover {
+.tb__winbtn--close:hover {
   background: var(--accent-red);
-  color: white;
-}
-
-.titlebar-btn:focus-visible {
-  outline: 2px solid var(--accent-blue);
-  outline-offset: -2px;
+  color: #fff;
 }
 </style>
