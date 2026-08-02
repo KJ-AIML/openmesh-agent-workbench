@@ -31,6 +31,7 @@ mod signal;
 mod state;
 mod team;
 mod trust_admin;
+mod connector;
 
 use clap::{Args, Parser, Subcommand};
 
@@ -93,6 +94,9 @@ pub enum Commands {
     /// Trust, privacy & admin beta (0.1.17).
     #[command(subcommand, name = "trust-admin")]
     TrustAdmin(trust_admin::TrustAdminCommand),
+    /// Connector Layer evidence producers (0.1.18).
+    #[command(subcommand)]
+    Connector(connector::ConnectorCommand),
 }
 
 #[derive(Subcommand, Debug)]
@@ -293,6 +297,7 @@ fn run() -> i32 {
         Commands::OnlineProxy(cmd) => online_proxy::run_online_proxy(cmd, &cwd),
         Commands::Team(cmd) => team::run_team(cmd, &cwd),
         Commands::TrustAdmin(cmd) => trust_admin::run_trust_admin(cmd, &cwd),
+        Commands::Connector(cmd) => connector::run_connector(cmd, &cwd),
     }
 }
 

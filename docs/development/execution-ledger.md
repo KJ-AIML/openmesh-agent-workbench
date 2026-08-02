@@ -2797,3 +2797,15 @@ Release: https://github.com/KJ-AIML/openmesh-agent-workbench/releases/tag/v0.1.1
 PR: https://github.com/KJ-AIML/openmesh-agent-workbench/pull/9
 Next recommended track: **0.1.18 Connector Layer** (unlocked).
 
+## 2026-08-03 — Dev Track 0.1.18 FEATURE COMPLETE (Connector Layer)
+
+Status: FEATURE_COMPLETE_LOCAL
+Branch: feat/openmesh-0.1.18-connector-layer
+Objective: Connector trait/contracts + GitHub-shaped stub evidence producer.
+What changed:
+- openmesh_core::connectors
+- CLI connector register|list|show|collect
+- Tauri connector_list
+- Version 0.1.17 → 0.1.18
+Next: ship v0.1.18 then 0.1.19 Organization Graph Preview.
+

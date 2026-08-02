@@ -27,6 +27,7 @@ use openmesh_core::team::{list_team_members, read_team_workspace, TeamMember, Te
 use openmesh_core::team_cloud::{
     build_sync_scaffold, read_team_cloud, TeamCloudConfig, TeamCloudSyncPlan,
 };
+use openmesh_core::connectors::{list_connectors, ConnectorDescriptor};
 use openmesh_core::trust_admin::{
     list_audit_events as list_trust_audit_events, read_trust_policy, AdminAuditEvent,
     TeamTrustPolicy,
@@ -320,5 +321,11 @@ pub fn team_trust_audit_list(
     limit: Option<usize>,
 ) -> Result<Vec<AdminAuditEvent>, String> {
     list_trust_audit_events(&project_path, limit).map_err(|e| e.to_string())
+}
+
+/// Connector Layer (0.1.18) — list registered evidence producers.
+#[tauri::command]
+pub fn connector_list(project_path: String) -> Result<Vec<ConnectorDescriptor>, String> {
+    list_connectors(&project_path).map_err(|e| e.to_string())
 }
 

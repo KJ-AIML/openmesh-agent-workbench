@@ -5,7 +5,30 @@ All notable changes to OpenMesh are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.18] - 2026-08-03
+
+### Added
+
+- **Connector Layer**: external SoR connectors as **evidence producers only**
+- **Core** `openmesh_core::connectors` (descriptor, GitHub stub collector, registry storage)
+- **CLI** `connector register|list|show|collect`
+- **Desktop IPC** `connector_list`
+- Offline **github-stub** producer (no live API; deterministic evidence items)
+
+### Security / Privacy
+
+- Role fixed to `evidence-producer-only` (not SoR replacement)
+- Collect runs require `evidence_only=true`
+- Path traversal rejected on `external_ref`
+- No live GitHub network calls in beta stub
+
+### Technical Details
+
+- Storage: `.openmesh/connectors/registry.json` + `runs/`
+- Tests: connector_contract (6), connector_workflow (2)
+
 ## [0.1.17] - 2026-08-03
+
 
 ### Added
 
