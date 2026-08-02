@@ -44,6 +44,7 @@ const emit = defineEmits<{
 }>();
 
 const projectsExpanded = ref(true);
+const systemExpanded = ref(false);
 const projectNames = ref<Record<string, string>>({});
 const macOS = ref(
   (window as unknown as { __OPENMESH_IS_MACOS__?: boolean }).__OPENMESH_IS_MACOS__ ??
@@ -86,22 +87,22 @@ watch(projectPaths, () => {
   loadProjectNames();
 });
 
-// Reordered navigation for productivity
-const workspaceNav = [
+// Information architecture: Work → Team/Mesh → Agents → System (collapsed)
+const workNav = [
   { label: "Home", icon: Home, route: "/" },
+  { label: "Sprint", icon: ListTodo, route: "/sprint" },
   { label: "Docs", icon: FileText, route: "/docs" },
   { label: "Notes", icon: FileEdit, route: "/notes" },
   { label: "Context", icon: Search, route: "/context" },
-  { label: "Continuity", icon: Network, route: "/continuity" },
-  { label: "Sprint", icon: ListTodo, route: "/sprint" },
 ];
 
-const aiAgentsNav = [
+const teamMeshNav = [
+  { label: "Continuity", icon: Network, route: "/continuity" },
+];
+
+const agentsNav = [
   { label: "Agent Sessions", icon: Bot, route: "/agent-sessions" },
   { label: "Models", icon: Circle, route: "/models" },
-];
-
-const devNav = [
   { label: "Dev Connector", icon: Terminal, route: "/dev-connector" },
 ];
 
@@ -281,11 +282,11 @@ async function handleDeleteProject(projectPath: string) {
         </template>
       </div>
 
-      <!-- WORKSPACE -->
+      <!-- WORK -->
       <div>
-        <div class="sidebar-section-label">Workspace</div>
+        <div class="sidebar-section-label">Work</div>
         <router-link
-          v-for="item in workspaceNav"
+          v-for="item in workNav"
           :key="item.label"
           :to="item.route"
           class="nav-item no-underline"
@@ -296,11 +297,11 @@ async function handleDeleteProject(projectPath: string) {
         </router-link>
       </div>
 
-      <!-- AI / AGENTS -->
+      <!-- TEAM / MESH -->
       <div>
-        <div class="sidebar-section-label">AI / Agents</div>
+        <div class="sidebar-section-label">Team / Mesh</div>
         <router-link
-          v-for="item in aiAgentsNav"
+          v-for="item in teamMeshNav"
           :key="item.label"
           :to="item.route"
           class="nav-item no-underline"
@@ -311,11 +312,11 @@ async function handleDeleteProject(projectPath: string) {
         </router-link>
       </div>
 
-      <!-- DEV -->
+      <!-- AGENTS -->
       <div>
-        <div class="sidebar-section-label">Dev</div>
+        <div class="sidebar-section-label">Agents</div>
         <router-link
-          v-for="item in devNav"
+          v-for="item in agentsNav"
           :key="item.label"
           :to="item.route"
           class="nav-item no-underline"
@@ -326,19 +327,37 @@ async function handleDeleteProject(projectPath: string) {
         </router-link>
       </div>
 
-      <!-- SYSTEM -->
+      <!-- SYSTEM (collapsed by default) -->
       <div>
-        <div class="sidebar-section-label">System</div>
-        <router-link
-          v-for="item in systemNav"
-          :key="item.label"
-          :to="item.route"
-          class="nav-item no-underline"
-          :class="{ active: isActive(item.route) }"
+        <button
+          type="button"
+          class="flex w-full items-center justify-between px-2 py-1"
+          @click="systemExpanded = !systemExpanded"
         >
-          <component :is="item.icon" class="h-3.5 w-3.5 flex-shrink-0" />
-          <span class="truncate text-[12px]">{{ item.label }}</span>
-        </router-link>
+          <span class="sidebar-section-label !mb-0">System</span>
+          <ChevronDown
+            v-if="systemExpanded"
+            class="h-3 w-3"
+            style="color: var(--muted-foreground); opacity: 0.6"
+          />
+          <ChevronRight
+            v-else
+            class="h-3 w-3"
+            style="color: var(--muted-foreground); opacity: 0.6"
+          />
+        </button>
+        <template v-if="systemExpanded">
+          <router-link
+            v-for="item in systemNav"
+            :key="item.label"
+            :to="item.route"
+            class="nav-item no-underline"
+            :class="{ active: isActive(item.route) }"
+          >
+            <component :is="item.icon" class="h-3.5 w-3.5 flex-shrink-0" />
+            <span class="truncate text-[12px]">{{ item.label }}</span>
+          </router-link>
+        </template>
       </div>
     </nav>
 

@@ -2817,3 +2817,14 @@ Release: https://github.com/KJ-AIML/openmesh-agent-workbench/releases/tag/v0.1.1
 PR: https://github.com/KJ-AIML/openmesh-agent-workbench/pull/10
 Next recommended track: **0.1.19 Organization Graph Preview** (unlocked).
 
+## 2026-08-03 — Dev Track 0.1.19 FEATURE COMPLETE (Org Graph + GUI IA)
+
+Status: FEATURE_COMPLETE_LOCAL
+Branch: feat/openmesh-0.1.19-org-graph-and-gui-ia
+Objective: Org graph preview + desktop information architecture / Continuity wiring.
+What changed:
+- openmesh_core::org_graph + CLI org graph show + Tauri org_graph_show
+- Sidebar Work/Team/Agents/System; Agent Sessions mock cleanup; Continuity Team/Trust/Connectors/Org
+- Version 0.1.18 → 0.1.19
+Next: ship v0.1.19 then 0.1.20 Enterprise Pilot.
+

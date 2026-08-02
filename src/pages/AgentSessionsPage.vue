@@ -22,6 +22,7 @@ const isScanning = ref(false);
 const lastScanTime = ref<string | null>(null);
 const starredScanIds = ref<Set<string>>(new Set());
 
+/** Saved project sessions. Prefer scanned disk sessions in the list order. */
 const filteredSessions = computed(() => {
   let sessions = projectSessions.value;
   if (toolFilter.value !== "all")
@@ -35,6 +36,10 @@ const filteredScannedSessions = computed(() => {
     sessions = sessions.filter((s) => s.toolName === toolFilter.value);
   return sessions;
 });
+
+const hasAnySessions = computed(
+  () => filteredSessions.value.length > 0 || filteredScannedSessions.value.length > 0,
+);
 
 const selectedSession = computed(() =>
   projectSessions.value.find((s) => s.id === selectedSessionId.value),
@@ -243,33 +248,70 @@ function formatBytes(bytes: number): string {
       </button>
     </div>
 
-    <div
-      v-if="filteredSessions.length === 0 && filteredScannedSessions.length === 0"
-      class="workbench-card p-12 text-center"
-    >
+    <div v-if="!hasAnySessions" class="workbench-card p-12 text-center space-y-3">
       <div
-        class="flex h-16 w-16 mx-auto mb-4 items-center justify-center rounded-2xl"
+        class="flex h-16 w-16 mx-auto mb-2 items-center justify-center rounded-2xl"
         style="background: var(--surface-2); border: 1px solid var(--border)"
       >
         <Bot class="h-7 w-7 text-subtle" />
       </div>
-      <p class="text-[15px] font-semibold">No agent sessions found</p>
-      <p class="text-sm mt-1 text-muted">
+      <p class="text-[15px] font-semibold">No agent sessions yet</p>
+      <p class="text-sm text-muted max-w-md mx-auto">
         {{
           currentProject
-            ? "No sessions for this project yet."
-            : "Select a project to see sessions."
+            ? "Scan local tool session directories, or launch an agent from Home / Dev Connector."
+            : "Select a project, then scan session directories."
         }}
       </p>
-      <p class="text-[12px] mt-2 text-subtle">
-        Configure session directories in Settings and click "Scan Sessions" to find real sessions.
+      <button
+        type="button"
+        class="btn-primary inline-flex items-center gap-2 mx-auto mt-2"
+        :disabled="isScanning || !settings.sessionDirs"
+        @click="handleScanSessions"
+      >
+        <Scan class="h-4 w-4" />
+        {{ isScanning ? "Scanning…" : "Scan sessions" }}
+      </button>
+      <p class="text-[11px] text-subtle">
+        Configure directories in Settings → Session dirs.
       </p>
     </div>
 
     <div v-else class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <!-- Session list -->
+      <!-- Session list: disk first, then project-saved -->
       <div class="lg:col-span-2 space-y-2">
-        <!-- Mock sessions -->
+        <button
+          v-for="session in filteredScannedSessions"
+          :key="session.id"
+          @click="selectScannedSession(session.id)"
+          class="w-full text-left workbench-card-compact p-4 transition-all"
+          :class="
+            selectedSessionId === session.id
+              ? '!border-[rgba(255,255,255,0.12)]'
+              : ''
+          "
+        >
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2.5">
+              <span class="text-[16px]">{{ toolIcon(session.toolName) }}</span>
+              <span class="text-[13px] font-medium">{{ session.title }}</span>
+            </div>
+            <span class="text-[12px] text-muted">{{
+              timeAgo(session.lastActiveAt)
+            }}</span>
+          </div>
+          <div class="flex items-center gap-2 mt-2">
+            <span class="text-[11px] text-muted">{{
+              session.toolName
+            }}</span>
+            <span class="text-[11px] text-muted">{{
+              formatBytes(session.fileSizeBytes)
+            }}</span>
+            <span v-if="starredScanIds.has(session.id)" class="text-[12px]">⭐</span>
+            <span class="badge badge-success">On disk</span>
+          </div>
+        </button>
+
         <button
           v-for="session in filteredSessions"
           :key="session.id"
@@ -306,58 +348,16 @@ function formatBytes(bytes: number): string {
               session.tool
             }}</span>
             <span v-if="session.isImportant" class="text-[12px]">⭐</span>
-            <span
-              class="badge badge-warning"
-              >Mock</span
-            >
-          </div>
-        </button>
-
-        <!-- Real scanned sessions -->
-        <button
-          v-for="session in filteredScannedSessions"
-          :key="session.id"
-          @click="selectScannedSession(session.id)"
-          class="w-full text-left workbench-card-compact p-4 transition-all"
-          :class="
-            selectedSessionId === session.id
-              ? '!border-[rgba(255,255,255,0.12)]'
-              : ''
-          "
-        >
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2.5">
-              <span class="text-[16px]">{{ toolIcon(session.toolName) }}</span>
-              <span class="text-[13px] font-medium">{{ session.title }}</span>
-            </div>
-            <span class="text-[12px] text-muted">{{
-              timeAgo(session.lastActiveAt)
-            }}</span>
-          </div>
-          <div class="flex items-center gap-2 mt-2">
-            <span class="text-[11px] text-muted">{{
-              session.toolName
-            }}</span>
-            <span class="text-[11px] text-muted">{{
-              formatBytes(session.fileSizeBytes)
-            }}</span>
-            <span v-if="starredScanIds.has(session.id)" class="text-[12px]">⭐</span>
-            <span
-              class="badge badge-success"
-              >Real</span
-            >
+            <span class="badge chip-muted">Saved</span>
           </div>
         </button>
       </div>
 
-      <!-- Session detail: mock session -->
+      <!-- Session detail: saved -->
       <div v-if="selectedSession" class="workbench-card-compact p-5 space-y-4 self-start">
         <div class="flex items-center justify-between">
           <h3 class="text-[14px] font-semibold">{{ selectedSession.title }}</h3>
-          <span
-            class="badge badge-warning"
-            >Mock</span
-          >
+          <span class="badge chip-muted">Saved</span>
         </div>
         <div class="text-[12px] space-y-1.5 text-muted">
           <p>Tool: {{ selectedSession.tool }}</p>

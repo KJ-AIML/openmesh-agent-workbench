@@ -261,3 +261,93 @@ export async function askOnlineProxy(
     },
   });
 }
+
+// ── Team / Trust / Connectors / Org (0.1.15–0.1.19) ─────────────────
+
+export interface TeamWorkspaceView {
+  protocolVersion: string;
+  teamId: string;
+  displayName: string;
+  hostWorkspaceId: string;
+  members: Array<{
+    memberId: string;
+    label: string;
+    role: string;
+    meshPeerId?: string;
+    joinedAt: string;
+  }>;
+  createdAt: string;
+  updatedAt: string;
+  limitations: string[];
+}
+
+export interface TeamTrustPolicyView {
+  protocolVersion: string;
+  teamId: string;
+  remoteQueryEnabled: boolean;
+  queryAllowlistMode: string;
+  queryAllowlist: unknown[];
+  secretTopicsFailClosed: boolean;
+  allowSecretExport: boolean;
+  syncRequireSelective: boolean;
+  adminMemberIds: string[];
+  limitations: string[];
+}
+
+export interface ConnectorDescriptorView {
+  protocolVersion: string;
+  connectorId: string;
+  kind: string;
+  displayName: string;
+  role: string;
+  enabled: boolean;
+  externalRef?: string;
+  limitations: string[];
+}
+
+export interface OrgGraphView {
+  protocolVersion: string;
+  teamId: string;
+  generatedAt: string;
+  nodes: Array<{
+    id: string;
+    kind: string;
+    label: string;
+    evidence: string;
+  }>;
+  edges: Array<{
+    from: string;
+    to: string;
+    kind: string;
+    evidence: string;
+  }>;
+  limitations: string[];
+}
+
+export async function getTeamWorkspace(
+  projectPath: string,
+): Promise<TeamWorkspaceView | null> {
+  return invoke<TeamWorkspaceView | null>("team_workspace_status", {
+    projectPath,
+  });
+}
+
+export async function getTeamTrustPolicy(
+  projectPath: string,
+): Promise<TeamTrustPolicyView | null> {
+  return invoke<TeamTrustPolicyView | null>("team_trust_policy_status", {
+    projectPath,
+  });
+}
+
+export async function listConnectors(
+  projectPath: string,
+): Promise<ConnectorDescriptorView[]> {
+  return invoke<ConnectorDescriptorView[]>("connector_list", { projectPath });
+}
+
+export async function getOrgGraph(
+  projectPath: string,
+): Promise<OrgGraphView | null> {
+  return invoke<OrgGraphView | null>("org_graph_show", { projectPath });
+}

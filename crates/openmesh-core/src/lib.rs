@@ -162,6 +162,7 @@ pub mod online_proxy;
 pub mod team_cloud;
 pub mod trust_admin;
 pub mod connectors;
+pub mod org_graph;
 pub mod pending_proxy_question;
 pub mod relay;
 pub mod return_digest;

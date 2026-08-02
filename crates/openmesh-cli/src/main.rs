@@ -32,6 +32,7 @@ mod state;
 mod team;
 mod trust_admin;
 mod connector;
+mod org;
 
 use clap::{Args, Parser, Subcommand};
 
@@ -97,6 +98,9 @@ pub enum Commands {
     /// Connector Layer evidence producers (0.1.18).
     #[command(subcommand)]
     Connector(connector::ConnectorCommand),
+    /// Organization graph preview (0.1.19).
+    #[command(subcommand)]
+    Org(org::OrgCommand),
 }
 
 #[derive(Subcommand, Debug)]
@@ -298,6 +302,7 @@ fn run() -> i32 {
         Commands::Team(cmd) => team::run_team(cmd, &cwd),
         Commands::TrustAdmin(cmd) => trust_admin::run_trust_admin(cmd, &cwd),
         Commands::Connector(cmd) => connector::run_connector(cmd, &cwd),
+        Commands::Org(cmd) => org::run_org(cmd, &cwd),
     }
 }
 
