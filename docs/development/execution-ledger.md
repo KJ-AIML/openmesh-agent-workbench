@@ -2769,3 +2769,11 @@ Commands run:
 - cargo test --workspace + npm verify (pre-ship)
 Next: tag v0.1.16 when authorized; then 0.1.17 Trust/Admin.
 
+## 2026-08-03 — Dev Track 0.1.16 RELEASED (v0.1.16)
+
+Status: RELEASED
+Tag: `v0.1.16`
+Release: https://github.com/KJ-AIML/openmesh-agent-workbench/releases/tag/v0.1.16
+PR: https://github.com/KJ-AIML/openmesh-agent-workbench/pull/8
+Next recommended track: **0.1.17 Trust, Privacy & Admin Beta** (unlocked).
+
