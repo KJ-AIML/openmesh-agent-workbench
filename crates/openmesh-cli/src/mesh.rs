@@ -1,0 +1,700 @@
+// ============================================================================
+// Mesh commands — Dev Track 0.1.10 Checkpoints B–D (peers + export + import)
+// ============================================================================
+
+use chrono::{Duration, Utc};
+use clap::{Args, Subcommand, ValueEnum};
+use openmesh_core::continuity::load_continuity_input_snapshot;
+use openmesh_core::domain::CatchUpWindow;
+use openmesh_core::mesh::{
+    add_peer, export_mesh_envelope_to_outbox, import_mesh_envelope_from_file,
+    list_envelope_summaries, list_peers, peer_id_from_label, read_peer, show_envelope,
+    to_peer_from_registry, BuildMeshExportRequest, ImportMeshOptions, MeshExportError,
+    MeshImportError, MeshMailbox, MeshPeerError, MeshPeerRecord, MeshPeerRef, MeshSensitivityMax,
+    MeshViewError, MESH_PEER_RECORD_PROTOCOL_VERSION,
+};
+use openmesh_core::profile::{profile_exists, read_work_proxy_profile};
+use openmesh_core::storage::read_project;
+use openmesh_core::storage::Project;
+use serde_json::json;
+use std::path::{Path, PathBuf};
+
+use crate::output;
+use crate::project::resolve_project;
+use crate::state::load_current_state_projection;
+
+#[derive(Subcommand, Debug)]
+pub enum MeshCommand {
+    /// Manage local mesh peers (Checkpoint B).
+    #[command(subcommand)]
+    Peer(MeshPeerCommand),
+    /// Export a local mesh envelope to outbox (Checkpoint C).
+    Export(MeshExportArgs),
+    /// Import a mesh envelope file into local inbox (Checkpoint D).
+    Import(MeshImportArgs),
+    /// List imported/exported mesh envelopes (Checkpoint E).
+    List(MeshListArgs),
+    /// Show one mesh envelope with attributed evidence (Checkpoint E).
+    Show(MeshShowArgs),
+}
+
+#[derive(Subcommand, Debug)]
+pub enum MeshPeerCommand {
+    /// Register a local peer label for mesh exchange.
+    Add(MeshPeerAddArgs),
+    /// List registered mesh peers.
+    List(MeshPeerListArgs),
+    /// Show one registered mesh peer.
+    Show(MeshPeerShowArgs),
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct MeshPeerAddArgs {
+    #[arg(long)]
+    pub label: String,
+
+    #[arg(long = "id")]
+    pub peer_id: Option<String>,
+
+    #[arg(long = "profile-id")]
+    pub profile_id: Option<String>,
+
+    #[arg(long = "workspace-id")]
+    pub workspace_id: Option<String>,
+
+    #[arg(long)]
+    pub notes: Option<String>,
+
+    #[arg(long)]
+    pub project: Option<String>,
+
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct MeshPeerListArgs {
+    #[arg(long)]
+    pub project: Option<String>,
+
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct MeshPeerShowArgs {
+    #[arg(long = "id")]
+    pub peer_id: String,
+
+    #[arg(long)]
+    pub project: Option<String>,
+
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Clone, Copy, Debug, Default, ValueEnum)]
+pub enum MeshSensitivityArg {
+    Public,
+    Team,
+    #[default]
+    Private,
+}
+
+impl From<MeshSensitivityArg> for MeshSensitivityMax {
+    fn from(value: MeshSensitivityArg) -> Self {
+        match value {
+            MeshSensitivityArg::Public => MeshSensitivityMax::Public,
+            MeshSensitivityArg::Team => MeshSensitivityMax::Team,
+            MeshSensitivityArg::Private => MeshSensitivityMax::Private,
+        }
+    }
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct MeshExportArgs {
+    /// Registered peer id to address (required).
+    #[arg(long)]
+    pub peer: String,
+
+    /// Optional RFC 3339 UTC window start (default: now - 24h). With --no-window, omit window.
+    #[arg(long)]
+    pub since: Option<String>,
+
+    /// Export without a catch-up window (current-state sections only).
+    #[arg(long = "no-window")]
+    pub no_window: bool,
+
+    /// Optional envelope id (default: env-<timestamp>).
+    #[arg(long = "envelope-id")]
+    pub envelope_id: Option<String>,
+
+    /// Max sensitivity for the envelope body.
+    #[arg(long, value_enum, default_value_t = MeshSensitivityArg::Private)]
+    pub sensitivity: MeshSensitivityArg,
+
+    /// Include local handoff note ids in the envelope.
+    #[arg(long = "include-handoffs", default_value_t = true)]
+    pub include_handoffs: bool,
+
+    /// Skip including handoff ids.
+    #[arg(long = "no-handoffs")]
+    pub no_handoffs: bool,
+
+    /// From-peer label override (default: profile owner_label or "local").
+    #[arg(long = "from-label")]
+    pub from_label: Option<String>,
+
+    #[arg(long)]
+    pub project: Option<String>,
+
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct MeshImportArgs {
+    /// Path to a MeshEnvelope JSON file (typically another project's outbox).
+    #[arg(long)]
+    pub file: PathBuf,
+
+    /// Auto-register from_peer into the local peer registry if missing.
+    #[arg(long = "register-peer")]
+    pub register_peer: bool,
+
+    /// Allow import when from workspace matches this project (default: refuse).
+    #[arg(long = "allow-self")]
+    pub allow_self: bool,
+
+    #[arg(long)]
+    pub project: Option<String>,
+
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Clone, Copy, Debug, ValueEnum)]
+pub enum MeshMailboxArg {
+    Inbox,
+    Outbox,
+}
+
+impl From<MeshMailboxArg> for MeshMailbox {
+    fn from(value: MeshMailboxArg) -> Self {
+        match value {
+            MeshMailboxArg::Inbox => MeshMailbox::Inbox,
+            MeshMailboxArg::Outbox => MeshMailbox::Outbox,
+        }
+    }
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct MeshListArgs {
+    /// Limit listing to inbox or outbox (default: both).
+    #[arg(long, value_enum)]
+    pub mailbox: Option<MeshMailboxArg>,
+
+    #[arg(long)]
+    pub project: Option<String>,
+
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct MeshShowArgs {
+    #[arg(long = "id")]
+    pub envelope_id: String,
+
+    /// Prefer a mailbox when the same id exists in both (default: inbox then outbox).
+    #[arg(long, value_enum)]
+    pub mailbox: Option<MeshMailboxArg>,
+
+    #[arg(long)]
+    pub project: Option<String>,
+
+    #[arg(long)]
+    pub json: bool,
+}
+
+pub fn run_mesh(command: MeshCommand, cwd: &Path) -> i32 {
+    match command {
+        MeshCommand::Peer(peer) => match peer {
+            MeshPeerCommand::Add(args) => run_peer_add(&args, cwd),
+            MeshPeerCommand::List(args) => run_peer_list(&args, cwd),
+            MeshPeerCommand::Show(args) => run_peer_show(&args, cwd),
+        },
+        MeshCommand::Export(args) => run_export(&args, cwd),
+        MeshCommand::Import(args) => run_import(&args, cwd),
+        MeshCommand::List(args) => run_list(&args, cwd),
+        MeshCommand::Show(args) => run_show(&args, cwd),
+    }
+}
+
+fn run_peer_add(args: &MeshPeerAddArgs, cwd: &Path) -> i32 {
+    let resolved = match resolve_project(args.project.as_deref(), cwd) {
+        Ok(r) => r,
+        Err(err) => return output::print_project_resolution_error(&err.describe(), args.json),
+    };
+    let project_path = resolved.path.to_string_lossy().to_string();
+    let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let peer_id = args
+        .peer_id
+        .clone()
+        .unwrap_or_else(|| peer_id_from_label(&args.label));
+    let record = MeshPeerRecord {
+        protocol_version: MESH_PEER_RECORD_PROTOCOL_VERSION.into(),
+        peer_id: peer_id.clone(),
+        label: args.label.clone(),
+        proxy_profile_id: args.profile_id.clone(),
+        remote_workspace_id: args.workspace_id.clone(),
+        notes: args.notes.clone(),
+        created_at: now.clone(),
+        updated_at: now,
+    };
+    match add_peer(&project_path, &record) {
+        Ok(stored) => {
+            if args.json {
+                println!("{}", serde_json::to_value(&stored).unwrap_or(json!({})));
+            } else {
+                println!("status=ok");
+                println!("peer_id={}", stored.peer_id);
+                println!("label={}", stored.label);
+                println!("path=.openmesh/mesh/peers/{}.json", stored.peer_id);
+            }
+            0
+        }
+        Err(err) => print_mesh_peer_error(&err, args.json),
+    }
+}
+
+fn run_peer_list(args: &MeshPeerListArgs, cwd: &Path) -> i32 {
+    let resolved = match resolve_project(args.project.as_deref(), cwd) {
+        Ok(r) => r,
+        Err(err) => return output::print_project_resolution_error(&err.describe(), args.json),
+    };
+    let project_path = resolved.path.to_string_lossy().to_string();
+    match list_peers(&project_path) {
+        Ok(peers) => {
+            if args.json {
+                println!("{}", serde_json::to_value(&peers).unwrap_or(json!([])));
+            } else if peers.is_empty() {
+                println!("(no mesh peers registered)");
+            } else {
+                for peer in peers {
+                    println!(
+                        "{} | {} | workspace={}",
+                        peer.peer_id,
+                        peer.label,
+                        peer.remote_workspace_id.as_deref().unwrap_or("-")
+                    );
+                }
+            }
+            0
+        }
+        Err(err) => print_mesh_peer_error(&err, args.json),
+    }
+}
+
+fn run_peer_show(args: &MeshPeerShowArgs, cwd: &Path) -> i32 {
+    let resolved = match resolve_project(args.project.as_deref(), cwd) {
+        Ok(r) => r,
+        Err(err) => return output::print_project_resolution_error(&err.describe(), args.json),
+    };
+    let project_path = resolved.path.to_string_lossy().to_string();
+    match read_peer(&project_path, &args.peer_id) {
+        Ok(peer) => {
+            if args.json {
+                println!("{}", serde_json::to_value(&peer).unwrap_or(json!({})));
+            } else {
+                println!("peer_id={}", peer.peer_id);
+                println!("label={}", peer.label);
+                println!(
+                    "proxy_profile_id={}",
+                    peer.proxy_profile_id.as_deref().unwrap_or("-")
+                );
+                println!(
+                    "remote_workspace_id={}",
+                    peer.remote_workspace_id.as_deref().unwrap_or("-")
+                );
+                println!("notes={}", peer.notes.as_deref().unwrap_or("-"));
+                println!("created_at={}", peer.created_at);
+                println!("updated_at={}", peer.updated_at);
+            }
+            0
+        }
+        Err(err) => print_mesh_peer_error(&err, args.json),
+    }
+}
+
+fn run_export(args: &MeshExportArgs, cwd: &Path) -> i32 {
+    let resolved = match resolve_project(args.project.as_deref(), cwd) {
+        Ok(r) => r,
+        Err(err) => return output::print_project_resolution_error(&err.describe(), args.json),
+    };
+    let project_path = resolved.path.to_string_lossy().to_string();
+
+    let project: Project = match read_project(&project_path, "project.json") {
+        Some(p) => p,
+        None => {
+            return print_export_error(&MeshExportError::ProjectNotInitialized, args.json);
+        }
+    };
+
+    let to_peer = match to_peer_from_registry(&project_path, &args.peer) {
+        Ok(p) => p,
+        Err(err) => return print_export_error(&err, args.json),
+    };
+
+    let from_peer = resolve_from_peer(&project_path, &project.id, args.from_label.as_deref());
+    let now = Utc::now();
+    let now_str = now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let envelope_id = args
+        .envelope_id
+        .clone()
+        .unwrap_or_else(|| format!("env-{}", now.format("%Y%m%dT%H%M%SZ")));
+
+    let window = if args.no_window {
+        None
+    } else {
+        match build_window(args.since.as_deref(), &now_str) {
+            Ok(w) => Some(w),
+            Err(msg) => {
+                if args.json {
+                    println!(
+                        "{}",
+                        json!({"status":"error","category":"validation","message":msg})
+                    );
+                } else {
+                    eprintln!("ERROR validation: {msg}");
+                }
+                return 3;
+            }
+        }
+    };
+
+    let snapshot = match load_continuity_input_snapshot(&project_path) {
+        Ok(s) => s,
+        Err(err) => {
+            return print_export_error(
+                &MeshExportError::Continuity(err.to_string()),
+                args.json,
+            );
+        }
+    };
+    let current_state = match load_current_state_projection(&project_path, false) {
+        Ok(s) => s,
+        Err(err) => {
+            return print_export_error(
+                &MeshExportError::Continuity(err.to_string()),
+                args.json,
+            );
+        }
+    };
+
+    let include_handoffs = args.include_handoffs && !args.no_handoffs;
+    let request = BuildMeshExportRequest {
+        workspace_id: project.id,
+        from_peer,
+        to_peer: Some(to_peer),
+        window,
+        now_rfc3339: now_str,
+        envelope_id,
+        sensitivity_max: args.sensitivity.into(),
+        include_handoff_ids: include_handoffs,
+    };
+
+    match export_mesh_envelope_to_outbox(&project_path, &snapshot, &current_state, &request) {
+        Ok(envelope) => {
+            if args.json {
+                println!("{}", serde_json::to_value(&envelope).unwrap_or(json!({})));
+            } else {
+                println!("status=ok");
+                println!("envelope_id={}", envelope.envelope_id);
+                println!(
+                    "path=.openmesh/mesh/outbox/{}.json",
+                    envelope.envelope_id
+                );
+                println!("evidence_items={}", envelope.evidence_items.len());
+                println!("handoff_ids={}", envelope.handoff_ids.len());
+                println!("limitations={}", envelope.limitations.len());
+            }
+            0
+        }
+        Err(err) => print_export_error(&err, args.json),
+    }
+}
+
+fn resolve_from_peer(project_path: &str, workspace_id: &str, label_override: Option<&str>) -> MeshPeerRef {
+    let label = if let Some(l) = label_override {
+        l.to_string()
+    } else if profile_exists(project_path).unwrap_or(false) {
+        read_work_proxy_profile(project_path)
+            .map(|p| p.owner_label)
+            .unwrap_or_else(|_| "local".into())
+    } else {
+        "local".into()
+    };
+    let profile_id = read_work_proxy_profile(project_path)
+        .ok()
+        .map(|p| p.profile_id);
+    MeshPeerRef {
+        label,
+        proxy_profile_id: profile_id,
+        workspace_id: Some(workspace_id.to_string()),
+    }
+}
+
+fn build_window(since_override: Option<&str>, until: &str) -> Result<CatchUpWindow, String> {
+    let since = match since_override {
+        Some(raw) => {
+            validate_utc(raw)?;
+            raw.to_string()
+        }
+        None => {
+            let until_dt = chrono::DateTime::parse_from_rfc3339(until)
+                .map_err(|e| e.to_string())?
+                .with_timezone(&Utc);
+            let since_dt = until_dt - Duration::hours(24);
+            since_dt.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+        }
+    };
+    Ok(CatchUpWindow {
+        since,
+        until: until.to_string(),
+    })
+}
+
+fn validate_utc(raw: &str) -> Result<(), String> {
+    let parsed = chrono::DateTime::parse_from_rfc3339(raw)
+        .map_err(|_| format!("invalid --since value `{raw}` (expected RFC 3339 UTC)"))?;
+    if parsed.offset().local_minus_utc() != 0 {
+        return Err(format!(
+            "invalid --since value `{raw}` (timestamp must use UTC Z offset)"
+        ));
+    }
+    Ok(())
+}
+
+fn print_mesh_peer_error(err: &MeshPeerError, json_mode: bool) -> i32 {
+    let (code, category) = match err {
+        MeshPeerError::ProjectNotInitialized => (1, "project"),
+        MeshPeerError::NotFound => (3, "not-found"),
+        MeshPeerError::AlreadyExists(_) => (3, "conflict"),
+        MeshPeerError::ValidationFailed(_) | MeshPeerError::MalformedJson => (3, "validation"),
+        MeshPeerError::ReadFailed
+        | MeshPeerError::WriteFailed
+        | MeshPeerError::AtomicReplaceFailed => (4, "io"),
+    };
+    let message = err.to_string();
+    if json_mode {
+        println!(
+            "{}",
+            json!({"status":"error","category":category,"message":message})
+        );
+    } else {
+        eprintln!("ERROR {category}: {message}");
+    }
+    code
+}
+
+fn run_import(args: &MeshImportArgs, cwd: &Path) -> i32 {
+    let resolved = match resolve_project(args.project.as_deref(), cwd) {
+        Ok(r) => r,
+        Err(err) => return output::print_project_resolution_error(&err.describe(), args.json),
+    };
+    let project_path = resolved.path.to_string_lossy().to_string();
+    let file = if args.file.is_absolute() {
+        args.file.clone()
+    } else {
+        cwd.join(&args.file)
+    };
+    let options = ImportMeshOptions {
+        register_from_peer: args.register_peer,
+        allow_self_workspace: args.allow_self,
+    };
+    match import_mesh_envelope_from_file(&project_path, &file, &options) {
+        Ok(envelope) => {
+            if args.json {
+                println!("{}", serde_json::to_value(&envelope).unwrap_or(json!({})));
+            } else {
+                println!("status=ok");
+                println!("envelope_id={}", envelope.envelope_id);
+                println!(
+                    "path=.openmesh/mesh/inbox/{}.json",
+                    envelope.envelope_id
+                );
+                println!("from={}", envelope.from_peer.label);
+                println!("evidence_items={}", envelope.evidence_items.len());
+            }
+            0
+        }
+        Err(err) => print_import_error(&err, args.json),
+    }
+}
+
+fn print_export_error(err: &MeshExportError, json_mode: bool) -> i32 {
+    let (code, category) = match err {
+        MeshExportError::ProjectNotInitialized => (1, "project"),
+        MeshExportError::NotFound => (3, "not-found"),
+        MeshExportError::AlreadyExists(_) => (3, "conflict"),
+        MeshExportError::WorkspaceMismatch | MeshExportError::Validation(_) => (3, "validation"),
+        MeshExportError::Peer(p) => return print_mesh_peer_error(p, json_mode),
+        MeshExportError::Continuity(_) | MeshExportError::Handoff(_) => (4, "read-failed"),
+        MeshExportError::WriteFailed | MeshExportError::AtomicReplaceFailed => (4, "io"),
+    };
+    let message = err.to_string();
+    if json_mode {
+        println!(
+            "{}",
+            json!({"status":"error","category":category,"message":message})
+        );
+    } else {
+        eprintln!("ERROR {category}: {message}");
+    }
+    code
+}
+
+fn print_import_error(err: &MeshImportError, json_mode: bool) -> i32 {
+    let (code, category) = match err {
+        MeshImportError::ProjectNotInitialized => (1, "project"),
+        MeshImportError::FileNotFound => (3, "not-found"),
+        MeshImportError::AlreadyExists(_) => (3, "conflict"),
+        MeshImportError::SelfWorkspaceImport
+        | MeshImportError::Validation(_)
+        | MeshImportError::MalformedJson => (3, "validation"),
+        MeshImportError::Peer(p) => return print_mesh_peer_error(p, json_mode),
+        MeshImportError::ReadFailed
+        | MeshImportError::WriteFailed
+        | MeshImportError::AtomicReplaceFailed => (4, "io"),
+    };
+    let message = err.to_string();
+    if json_mode {
+        println!(
+            "{}",
+            json!({"status":"error","category":category,"message":message})
+        );
+    } else {
+        eprintln!("ERROR {category}: {message}");
+    }
+    code
+}
+
+fn run_list(args: &MeshListArgs, cwd: &Path) -> i32 {
+    let resolved = match resolve_project(args.project.as_deref(), cwd) {
+        Ok(r) => r,
+        Err(err) => return output::print_project_resolution_error(&err.describe(), args.json),
+    };
+    let project_path = resolved.path.to_string_lossy().to_string();
+    let mailbox = args.mailbox.map(Into::into);
+    match list_envelope_summaries(&project_path, mailbox) {
+        Ok(rows) => {
+            if args.json {
+                println!("{}", serde_json::to_value(&rows).unwrap_or(json!([])));
+            } else if rows.is_empty() {
+                println!("(no mesh envelopes)");
+            } else {
+                for row in rows {
+                    let mb = match row.mailbox {
+                        MeshMailbox::Inbox => "inbox",
+                        MeshMailbox::Outbox => "outbox",
+                    };
+                    println!(
+                        "[{mb}] {} | from={} | evidence={} | handoffs={} | at={}",
+                        row.envelope_id,
+                        row.attributed_to,
+                        row.evidence_item_count,
+                        row.handoff_id_count,
+                        row.generated_at
+                    );
+                }
+            }
+            0
+        }
+        Err(err) => print_view_error(&err, args.json),
+    }
+}
+
+fn run_show(args: &MeshShowArgs, cwd: &Path) -> i32 {
+    let resolved = match resolve_project(args.project.as_deref(), cwd) {
+        Ok(r) => r,
+        Err(err) => return output::print_project_resolution_error(&err.describe(), args.json),
+    };
+    let project_path = resolved.path.to_string_lossy().to_string();
+    let mailbox = args.mailbox.map(Into::into);
+    match show_envelope(&project_path, &args.envelope_id, mailbox) {
+        Ok((envelope, mb)) => {
+            if args.json {
+                let mut payload = serde_json::to_value(&envelope).unwrap_or(json!({}));
+                if let Some(obj) = payload.as_object_mut() {
+                    obj.insert(
+                        "mailbox".into(),
+                        json!(match mb {
+                            MeshMailbox::Inbox => "inbox",
+                            MeshMailbox::Outbox => "outbox",
+                        }),
+                    );
+                }
+                println!("{payload}");
+            } else {
+                let mb = match mb {
+                    MeshMailbox::Inbox => "inbox",
+                    MeshMailbox::Outbox => "outbox",
+                };
+                println!("mailbox={mb}");
+                println!("envelope_id={}", envelope.envelope_id);
+                println!("attributed_to={}", envelope.from_peer.label);
+                println!(
+                    "from_workspace={}",
+                    envelope
+                        .from_peer
+                        .workspace_id
+                        .as_deref()
+                        .unwrap_or("-")
+                );
+                println!("generated_at={}", envelope.generated_at);
+                println!("evidence_items:");
+                if envelope.evidence_items.is_empty() {
+                    println!("  (none)");
+                } else {
+                    for item in &envelope.evidence_items {
+                        println!(
+                            "  - [{}] {} ({})",
+                            item.source_id,
+                            item.summary,
+                            item.source_kind.as_str()
+                        );
+                    }
+                }
+                if !envelope.handoff_ids.is_empty() {
+                    println!("handoff_ids={}", envelope.handoff_ids.join(","));
+                }
+                for limitation in &envelope.limitations {
+                    println!("limitation: {limitation}");
+                }
+            }
+            0
+        }
+        Err(err) => print_view_error(&err, args.json),
+    }
+}
+
+fn print_view_error(err: &MeshViewError, json_mode: bool) -> i32 {
+    let (code, category) = match err {
+        MeshViewError::ProjectNotInitialized => (1, "project"),
+        MeshViewError::NotFound => (3, "not-found"),
+        MeshViewError::Import(i) => return print_import_error(i, json_mode),
+        MeshViewError::Export(e) => return print_export_error(e, json_mode),
+        MeshViewError::ReadFailed => (4, "io"),
+    };
+    let message = err.to_string();
+    if json_mode {
+        println!(
+            "{}",
+            json!({"status":"error","category":category,"message":message})
+        );
+    } else {
+        eprintln!("ERROR {category}: {message}");
+    }
+    code
+}

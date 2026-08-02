@@ -128,6 +128,21 @@
 // - `return_digest::pending` — project proxy/continuity/signal sources
 // - `return_digest::digest` — absence-window return digest builder
 //
+// Dev Track 0.1.10 Checkpoint A — Two-Person Mesh wire contract:
+// - `mesh::contract` — `MeshEnvelope` v1.0 + fail-closed pure validators (no I/O)
+//
+// Dev Track 0.1.10 Checkpoint B — local peer registry:
+// - `mesh::peers` — `.openmesh/mesh/peers/` add/list/read
+//
+// Dev Track 0.1.10 Checkpoint C — export builder:
+// - `mesh::export` — build envelope from continuity + write `mesh/outbox/`
+//
+// Dev Track 0.1.10 Checkpoint D — import:
+// - `mesh::import` — validate + store under `mesh/inbox/`
+//
+// Dev Track 0.1.10 Checkpoint E — read model:
+// - `mesh::view` — list/show attributed envelope summaries
+//
 // Ledger APIs are core-only in this track. CLI, Tauri, and Desktop do not expose
 // WorkEvent ledger commands yet.
 
@@ -136,6 +151,7 @@ pub mod authority_freshness;
 pub mod authority_gate;
 pub mod authority_policy;
 pub mod handoff;
+pub mod mesh;
 pub mod pending_proxy_question;
 pub mod return_digest;
 

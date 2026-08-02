@@ -2465,3 +2465,104 @@ Known limitations:
 - No Desktop UI for pending/digest.
 Next recommended track: unlock **0.1.10 Two-Person Mesh — Local Prototype** when authorized.
 
+## 2026-08-02 — Dev Track 0.1.10 UNLOCK (Two-Person Mesh — Local Prototype)
+
+Status: PLAN_FROZEN — 0.1.10 UNLOCKED FOR IMPLEMENTATION
+Branch: feat/openmesh-0.1.10
+Commit: pending (unlock + plan only)
+Objective: Authorize Two-Person Mesh local prototype after 0.1.9 PASS; freeze CLI-first file-envelope architecture before code.
+What changed:
+- Human unlock authorized for 0.1.10.
+- Execution plan: parent workspace `.heli-harness/state/reports/openmesh-0.1.10-execution-plan.md`.
+- Branch `feat/openmesh-0.1.10` created from `main` @ post-v0.1.9.
+- Heli task `0.1.10-two-person-mesh` created/claimed (write).
+- Unlock matrix: 0.1.8/0.1.9 RELEASED; **0.1.10 YES**; 0.1.11+ locked.
+Tests added: None (unlock/planning only).
+Commands run:
+- `git checkout -b feat/openmesh-0.1.10` from main
+Exact results:
+- Mission: two local Work Proxies reference each other's evidence via controlled file envelopes.
+- Non-goals: no cloud, no network sync, no Desktop UI required, no authority invention.
+Architecture decisions (locked):
+- Storage under `.openmesh/mesh/{outbox,inbox,peers}/` only — do not overload signals/proxy/handoff pending namespaces.
+- Module seam `openmesh_core::mesh`; CLI `mesh peer|export|import|list|show`.
+- File envelope exchange only; imported evidence is foreign + attributed; read-only by default.
+- E2E two-project export→import required for PASS.
+Known limitations:
+- Implementation not started (Checkpoint A next).
+- Windows installers for 0.1.10 deferred until release track.
+Next recommended track: **0.1.10 Checkpoint A — Mesh envelope domain contract**.
+
+## 2026-08-02 — Dev Track 0.1.10 Checkpoint A (GREEN)
+
+Status: CHECKPOINT_A_GREEN
+Branch: feat/openmesh-0.1.10
+Commit: bf17fb8
+Objective: Freeze MeshEnvelope v1.0 wire contract + fail-closed pure validators with no I/O.
+What changed:
+- `crates/openmesh-core/src/mesh/{mod,contract}.rs` — MeshEnvelope, MeshPeerRef, MeshEvidenceItem, MeshSensitivityMax, validators, path constants.
+- `pub mod mesh` in lib.rs; tests `mesh_contract.rs` (12) + sensitivity unit tests (2).
+Commands run:
+- `cargo test -p openmesh-core --test mesh_contract` — exit 0, 12 passed
+Exact results: pure contract only; no I/O/CLI/peers yet.
+Next recommended track: **0.1.10 Checkpoint B — peer registry**.
+
+## 2026-08-02 — Dev Track 0.1.10 Checkpoint B (GREEN)
+
+Status: CHECKPOINT_B_GREEN
+Branch: feat/openmesh-0.1.10
+Commit: 2a92a33
+Objective: Local mesh peer registry under `.openmesh/mesh/peers/` with CLI add/list/show.
+What changed:
+- `mesh/peers.rs` + CLI `mesh peer add|list|show`; tests mesh_peers (6) + mesh_peer_workflow (4).
+Commands run:
+- `cargo test -p openmesh-core --test mesh_peers -p openmesh-cli --test mesh_peer_workflow` — exit 0, 10 passed
+Next recommended track: **0.1.10 Checkpoint C — export builder**.
+
+## 2026-08-02 — Dev Track 0.1.10 Checkpoint C (GREEN)
+
+Status: CHECKPOINT_C_GREEN
+Branch: feat/openmesh-0.1.10
+Commit: pending
+Objective: Build mesh envelopes from continuity (+ handoff ids) and write `.openmesh/mesh/outbox/`.
+What changed:
+- `mesh/export.rs` — build_mesh_export_envelope, export_mesh_envelope_to_outbox, outbox paths.
+- CLI `mesh export --peer …` with window/sensitivity/handoffs options.
+- Tests: mesh_export (2), mesh_export_workflow (2).
+Commands run:
+- `cargo test -p openmesh-core --test mesh_export -p openmesh-cli --test mesh_export_workflow` — exit 0, **4 passed**
+Exact results:
+- Export materializes MeshEnvelope under outbox; duplicate envelope id conflicts; empty content gets limitation.
+Next recommended track: **0.1.10 Checkpoint D — import + inbox**.
+
+## 2026-08-02 — Dev Track 0.1.10 Checkpoint D (GREEN)
+
+Status: CHECKPOINT_D_GREEN
+Branch: feat/openmesh-0.1.10
+Commit: pending
+Objective: Import MeshEnvelope files into `.openmesh/mesh/inbox/` with fail-closed validation.
+What changed:
+- `mesh/import.rs` — load/validate/import, self-workspace refusal, optional peer auto-register.
+- CLI `mesh import --file … [--register-peer] [--allow-self]`.
+- Tests: mesh_import (4), mesh_import_workflow (2) including two-project E2E export→import.
+Commands run:
+- `cargo test -p openmesh-core --test mesh_import -p openmesh-cli --test mesh_import_workflow` — exit 0, **6 passed**
+Next recommended track: **0.1.10 Checkpoint E — peer evidence read model (list/show)**.
+
+## 2026-08-02 — Dev Track 0.1.10 Checkpoints E–G (FEATURE COMPLETE LOCAL)
+
+Status: FEATURE_COMPLETE_LOCAL
+Branch: feat/openmesh-0.1.10
+Commit: pending
+Objective: Finish Two-Person Mesh local prototype through list/show, E2E, and 0.1.10 release harden.
+What changed:
+- Checkpoint E: `mesh/view.rs` + CLI `mesh list|show` attributed read model.
+- Checkpoint F: `mesh_e2e_workflow` two-project peer→export→import→list→show.
+- Checkpoint G: version manifests 0.1.9 → 0.1.10; CHANGELOG; ledger.
+Commands run:
+- `cargo test --workspace` — exit 0 (macOS)
+- mesh E2E peer→export→import→list→show green.
+Known limitations:
+- Desktop UI deferred; no network mesh; Windows installers separate.
+Next recommended track: human review → tag/release 0.1.10; then 0.1.11 unlock when authorized.
+
