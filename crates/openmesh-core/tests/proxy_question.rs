@@ -47,13 +47,17 @@ fn question_id_counter_segment(question_id: &str) -> u64 {
 
 #[test]
 fn process_local_counter_is_shared_across_provider_instances() {
+    // Process-local counter is global; other parallel tests may interleave, so
+    // assert monotonic increase across instances rather than exact +1.
     let first_provider = ProcessLocalRequestIdentityProvider::new();
     let second_provider = ProcessLocalRequestIdentityProvider::new();
     let first_id = first_provider.next_question_id().expect("first");
     let second_id = second_provider.next_question_id().expect("second");
-    assert_eq!(
-        question_id_counter_segment(&second_id),
-        question_id_counter_segment(&first_id) + 1
+    let first = question_id_counter_segment(&first_id);
+    let second = question_id_counter_segment(&second_id);
+    assert!(
+        second > first,
+        "shared process counter must advance across instances: first={first} second={second}"
     );
 }
 
