@@ -123,6 +123,11 @@
 // - `handoff::storage` — `.openmesh/handoff/` persistence + ledger linkage
 // - `handoff::markdown` — deterministic markdown projection
 //
+// Dev Track 0.1.9 — Pending Questions & Return Digest:
+// - `return_digest::contract` — pending-questions + return-digest wire types
+// - `return_digest::pending` — project proxy/continuity/signal sources
+// - `return_digest::digest` — absence-window return digest builder
+//
 // Ledger APIs are core-only in this track. CLI, Tauri, and Desktop do not expose
 // WorkEvent ledger commands yet.
 
@@ -132,6 +137,7 @@ pub mod authority_gate;
 pub mod authority_policy;
 pub mod handoff;
 pub mod pending_proxy_question;
+pub mod return_digest;
 
 pub mod context;
 pub mod context_pack;

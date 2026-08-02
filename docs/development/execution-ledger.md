@@ -2410,3 +2410,34 @@ Known limitations:
 - 0.1.9 remains locked until separate unlock authorization.
 Next recommended track: unlock **0.1.9 Pending Questions & Return Digest** when authorized.
 
+## 2026-08-02 — Dev Track 0.1.9 (FEATURE COMPLETE — LOCAL)
+
+Status: FEATURE_COMPLETE_LOCAL — COMMIT PENDING
+Branch: feat/openmesh-0.1.9
+Commit: pending
+Objective: Pending Questions & Return Digest — formalize "what needs me" and "what did I miss" beyond Catch-up baseline; bridge pending sources by projection; CLI-first, local-only.
+What changed:
+- `crates/openmesh-core/src/return_digest/{contract,pending,digest,mod}.rs` — wire contracts, multi-source pending projection, return digest builder.
+- `crates/openmesh-core/src/pending_proxy_question.rs` — `list_pending_proxy_questions` / `read_pending_proxy_question`.
+- `crates/openmesh-cli` — top-level `pending` and `digest` commands.
+- Version manifests 0.1.8 → 0.1.9; CHANGELOG entry.
+Tests added:
+- `openmesh-core/tests/return_digest_contracts.rs`
+- `openmesh-core/tests/return_digest_builder.rs`
+- `openmesh-cli/tests/return_digest_workflow.rs`
+Commands run:
+- `cargo test -p openmesh-core --test return_digest_contracts --test return_digest_builder -p openmesh-cli --test return_digest_workflow` — exit 0 (10 passed)
+Exact results:
+- Pending projection bridges proxy pending + continuity attention + unresolved signals (deduped by source_id).
+- Return digest includes needs_me, what_i_missed (Catch-up sections), handoff refs, summary.
+Manual QA actually performed: automated CLI workflow tests only.
+Architecture decisions:
+- Projection over existing stores; do not overload signals/pending, proxy/pending, or handoff namespaces with a fourth inbox.
+- CLI-first; Desktop UI deferred.
+- Local-only; 0.1.10 mesh remains locked.
+Known limitations:
+- No resolve/acknowledge mutation API for pending questions in this track (read/project only).
+- No Desktop surfaces.
+- Full `cargo test --workspace` not required for local feature-complete claim if scoped tests green; broader gate recommended before release.
+Next recommended track: human review → full workspace test → local tag/release 0.1.9; then 0.1.10 unlock when authorized.
+

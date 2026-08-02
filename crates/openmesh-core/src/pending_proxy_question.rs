@@ -29,6 +29,12 @@ pub enum PendingProxyQuestionError {
     WriteFailed,
     #[error("atomic pending write failed")]
     AtomicReplaceFailed,
+    #[error("failed to read pending proxy questions")]
+    ReadFailed,
+    #[error("pending proxy question not found")]
+    NotFound,
+    #[error("failed to parse pending proxy question")]
+    ParseFailed,
 }
 
 pub fn pending_questions_dir(project_path: &str) -> PathBuf {
@@ -68,6 +74,48 @@ pub fn write_pending_proxy_question(
     let path = pending_question_path(project_path, &pending_id);
     write_json_atomic(&path, &record)?;
     Ok(record)
+}
+
+/// Read a single pending proxy question file (fail-closed on parse errors).
+pub fn read_pending_proxy_question(
+    project_path: &str,
+    pending_id: &str,
+) -> Result<PendingProxyQuestion, PendingProxyQuestionError> {
+    let path = pending_question_path(project_path, pending_id);
+    if !path.exists() {
+        return Err(PendingProxyQuestionError::NotFound);
+    }
+    let raw = fs::read_to_string(&path).map_err(|_| PendingProxyQuestionError::ReadFailed)?;
+    serde_json::from_str(&raw).map_err(|_| PendingProxyQuestionError::ParseFailed)
+}
+
+/// List all pending proxy questions in deterministic lexicographic id order.
+/// Skips unreadable/malformed files (caller may surface limitations).
+pub fn list_pending_proxy_questions(
+    project_path: &str,
+) -> Result<Vec<PendingProxyQuestion>, PendingProxyQuestionError> {
+    let dir = pending_questions_dir(project_path);
+    if !dir.exists() {
+        return Ok(Vec::new());
+    }
+    let mut items = Vec::new();
+    let entries = fs::read_dir(&dir).map_err(|_| PendingProxyQuestionError::ReadFailed)?;
+    for entry in entries {
+        let entry = entry.map_err(|_| PendingProxyQuestionError::ReadFailed)?;
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
+            continue;
+        }
+        let Ok(raw) = fs::read_to_string(&path) else {
+            continue;
+        };
+        let Ok(record) = serde_json::from_str::<PendingProxyQuestion>(&raw) else {
+            continue;
+        };
+        items.push(record);
+    }
+    items.sort_by(|a, b| a.pending_id.cmp(&b.pending_id));
+    Ok(items)
 }
 
 fn risk_wire(risk: QuestionRiskCategory) -> &'static str {
