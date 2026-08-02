@@ -17,6 +17,7 @@ mod digest;
 mod event;
 mod handoff;
 mod init;
+mod mesh;
 mod output;
 mod pending;
 mod profile;
@@ -73,6 +74,9 @@ pub enum Commands {
     Pending(pending::PendingArgs),
     /// Build a return digest for an absence window (Dev Track 0.1.9).
     Digest(digest::DigestArgs),
+    /// Local two-person mesh (Dev Track 0.1.10) — peer registry first.
+    #[command(subcommand)]
+    Mesh(mesh::MeshCommand),
 }
 
 #[derive(Subcommand, Debug)]
@@ -268,6 +272,7 @@ fn run() -> i32 {
         Commands::Handoff(cmd) => handoff::run_handoff(cmd, &cwd),
         Commands::Pending(args) => pending::run_pending(&args, &cwd),
         Commands::Digest(args) => digest::run_digest(&args, &cwd),
+        Commands::Mesh(cmd) => mesh::run_mesh(cmd, &cwd),
     }
 }
 

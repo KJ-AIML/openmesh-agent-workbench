@@ -131,6 +131,9 @@
 // Dev Track 0.1.10 Checkpoint A — Two-Person Mesh wire contract:
 // - `mesh::contract` — `MeshEnvelope` v1.0 + fail-closed pure validators (no I/O)
 //
+// Dev Track 0.1.10 Checkpoint B — local peer registry:
+// - `mesh::peers` — `.openmesh/mesh/peers/` add/list/read
+//
 // Ledger APIs are core-only in this track. CLI, Tauri, and Desktop do not expose
 // WorkEvent ledger commands yet.
 
