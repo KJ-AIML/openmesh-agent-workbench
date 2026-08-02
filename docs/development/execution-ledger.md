@@ -2658,3 +2658,11 @@ Commands run:
 - online_proxy contract + workflow green
 Next: push/PR/tag/release when authorized.
 
+## 2026-08-02 — Dev Track 0.1.12 RELEASED (v0.1.12)
+
+Status: RELEASED
+Tag: `v0.1.12`
+Release: https://github.com/KJ-AIML/openmesh-agent-workbench/releases/tag/v0.1.12
+PR: https://github.com/KJ-AIML/openmesh-agent-workbench/pull/4
+Next recommended track: human direction (Desktop UI deferred; roadmap after 0.1.12 as authorized).
+

@@ -1,6 +1,6 @@
 # OpenMesh 0.1.12 — Always-Online Work Proxy Alpha
 
-**Status:** FEATURE_COMPLETE_LOCAL  
+**Status:** RELEASED  
 **Depends on:** 0.1.11 RELEASED  
 **Branch:** `feat/openmesh-0.1.12`  
 **Gate:** Cloud/always-online proxy answers with **explicit evidence-freshness**; never silently stale.
@@ -39,4 +39,4 @@
 
 - [x] Domain + CLI + tests
 - [x] Version 0.1.12 + CHANGELOG + ledger
-- [ ] PR merge + tag `v0.1.12` + release assets
+- [x] PR merge + tag `v0.1.12` + release assets
