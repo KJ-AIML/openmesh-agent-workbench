@@ -2714,3 +2714,10 @@ Commands run:
 - cargo test --workspace + npm verify (pre-ship)
 Next: tag v0.1.14 when authorized.
 
+## 2026-08-02 — Dev Track 0.1.14 RELEASED (v0.1.14)
+
+Status: RELEASED
+Tag: `v0.1.14`
+Release: https://github.com/KJ-AIML/openmesh-agent-workbench/releases/tag/v0.1.14
+PR: https://github.com/KJ-AIML/openmesh-agent-workbench/pull/6
+Next: Team Workspace Foundation (0.1.15) or Desktop polish / human GUI QA.

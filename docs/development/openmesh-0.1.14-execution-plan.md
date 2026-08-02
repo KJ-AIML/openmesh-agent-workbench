@@ -1,6 +1,6 @@
 # OpenMesh 0.1.14 — Two-Person Mesh Beta (Ter × Yo Proof)
 
-**Status:** FEATURE_COMPLETE_LOCAL  
+**Status:** RELEASED  
 **Depends on:** 0.1.13 RELEASED  
 **Branch:** `feat/openmesh-0.1.14-ter-yo-mesh-beta`  
 **Gate:** Ask teammate offline Work Proxy with real imported evidence, freshness disclosure, read-only-by-default.
