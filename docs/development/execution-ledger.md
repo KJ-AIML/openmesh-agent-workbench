@@ -2493,3 +2493,17 @@ Known limitations:
 - Windows installers for 0.1.10 deferred until release track.
 Next recommended track: **0.1.10 Checkpoint A — Mesh envelope domain contract**.
 
+## 2026-08-02 — Dev Track 0.1.10 Checkpoint A (GREEN)
+
+Status: CHECKPOINT_A_GREEN
+Branch: feat/openmesh-0.1.10
+Commit: bf17fb8
+Objective: Freeze MeshEnvelope v1.0 wire contract + fail-closed pure validators with no I/O.
+What changed:
+- `crates/openmesh-core/src/mesh/{mod,contract}.rs` — MeshEnvelope, MeshPeerRef, MeshEvidenceItem, MeshSensitivityMax, validators, path constants.
+- `pub mod mesh` in lib.rs; tests `mesh_contract.rs` (12) + sensitivity unit tests (2).
+Commands run:
+- `cargo test -p openmesh-core --test mesh_contract` — exit 0, 12 passed
+Exact results: pure contract only; no I/O/CLI/peers yet.
+Next recommended track: **0.1.10 Checkpoint B — peer registry**.
+
