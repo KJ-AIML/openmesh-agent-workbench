@@ -2871,3 +2871,12 @@ Release: https://github.com/KJ-AIML/openmesh-agent-workbench/releases/tag/v0.1.2
 PR: https://github.com/KJ-AIML/openmesh-agent-workbench/pull/13
 Next: **1.0.0** gate verification package when RC holds at real team scale.
 
+## 2026-08-03 — Handoff docs (post v0.1.21)
+
+Status: DOCS
+Added:
+- `docs/development/handoff-post-0.1.21.md` — full session/product handoff
+- `docs/development/handoff-dogfood-rc-1.0.md` — RC dogfood → 1.0.0 runbook
+Parent workspace pointer: `openmesh-ws/docs/handoff-openmesh-agent-workbench-post-0.1.21.md`
+Next: dogfood RC / 1.0.0 gate.
+
