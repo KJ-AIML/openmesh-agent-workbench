@@ -5,7 +5,31 @@ All notable changes to OpenMesh are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.17] - 2026-08-03
+
+### Added
+
+- **Trust, Privacy & Admin Beta**: explicit team policy over query + sync privacy invariants
+- **CLI** `trust-admin init|show|set-query-mode|set-remote-query|allowlist|audit`
+- **Core** `openmesh_core::trust_admin` (policy, allowlist gate, append-only admin audit)
+- **Desktop IPC** `team_trust_policy_status`, `team_trust_audit_list`
+- Query modes: `allow-all` | `allowlist-only` | `deny-all`
+- `team query` enforces policy when present (fail-closed deny + audit)
+
+### Security / Privacy
+
+- `secret_topics_fail_closed` always true (validator + storage)
+- `allow_secret_export` always false
+- `sync_require_selective` always true
+- No IdP/SSO (explicit non-goal)
+
+### Technical Details
+
+- Storage: `.openmesh/trust-admin/policy.json` + `audit.jsonl`
+- Tests: trust_admin_contract (8), trust_admin_workflow (3)
+
 ## [0.1.16] - 2026-08-03
+
 
 ### Added
 

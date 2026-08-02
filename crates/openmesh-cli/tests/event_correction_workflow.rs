@@ -678,8 +678,8 @@ fn cli_workflow_does_not_touch_tauri_or_0_1_4() {
     let tauri_content = fs::read_to_string(&tauri_lib).expect("read tauri lib");
     assert_eq!(
         tauri_content.matches("#[tauri::command]").count(),
-        52,
-        "Tauri command count must remain 52"
+        53,
+        "Tauri command count must remain 53 (get_host_os)"
     );
 }
 

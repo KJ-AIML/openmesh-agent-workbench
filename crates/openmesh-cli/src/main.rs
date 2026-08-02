@@ -30,6 +30,7 @@ mod relay;
 mod signal;
 mod state;
 mod team;
+mod trust_admin;
 
 use clap::{Args, Parser, Subcommand};
 
@@ -89,6 +90,9 @@ pub enum Commands {
     /// Team workspace foundation (Dev Track 0.1.15).
     #[command(subcommand)]
     Team(team::TeamCommand),
+    /// Trust, privacy & admin beta (0.1.17).
+    #[command(subcommand, name = "trust-admin")]
+    TrustAdmin(trust_admin::TrustAdminCommand),
 }
 
 #[derive(Subcommand, Debug)]
@@ -288,6 +292,7 @@ fn run() -> i32 {
         Commands::Relay(cmd) => relay::run_relay(cmd, &cwd),
         Commands::OnlineProxy(cmd) => online_proxy::run_online_proxy(cmd, &cwd),
         Commands::Team(cmd) => team::run_team(cmd, &cwd),
+        Commands::TrustAdmin(cmd) => trust_admin::run_trust_admin(cmd, &cwd),
     }
 }
 
