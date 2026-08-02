@@ -434,7 +434,7 @@ fn no_frontend_behavior_is_added() {
 fn Tauri_command_count_remains_52() {
     let tauri_lib = fs::read_to_string(workspace_root().join("src-tauri/src/lib.rs")).unwrap();
     let count = tauri_lib.matches("#[tauri::command]").count();
-    assert_eq!(count, 52);
+    assert_eq!(count, 53);
 }
 
 fn harness_reports_dir() -> PathBuf {

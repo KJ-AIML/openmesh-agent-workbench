@@ -721,7 +721,7 @@ fn checkpoint_a_does_not_change_tauri_surface() {
     let tauri_lib = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../src-tauri/src/lib.rs");
     let content = fs::read_to_string(tauri_lib).expect("read tauri lib");
     let count = content.matches("#[tauri::command]").count();
-    assert_eq!(count, 52, "Tauri command count must remain 52");
+    assert_eq!(count, 53, "Tauri command count must remain 53 (get_host_os)");
 }
 
 #[test]

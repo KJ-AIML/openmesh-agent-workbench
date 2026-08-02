@@ -344,8 +344,8 @@ fn checkpoint_e_does_not_touch_tauri_remote_or_team_mesh() {
     let tauri_content = fs::read_to_string(tauri_lib).expect("read tauri lib");
     assert_eq!(
         tauri_content.matches("#[tauri::command]").count(),
-        52,
-        "Tauri command count must remain 52"
+        53,
+        "Tauri command count must remain 53 (get_host_os)"
     );
 }
 

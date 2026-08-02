@@ -18,6 +18,14 @@ pub enum TeamCloudSyncError {
 /// Build a scaffold-only selective sync plan. Never uploads.
 pub fn build_sync_scaffold(project_path: &str) -> Result<TeamCloudSyncPlan, TeamCloudSyncError> {
     let mut cfg = read_team_cloud(project_path)?;
+    // Honor trust-admin selective sync invariant when policy present.
+    if let Ok(policy) = crate::trust_admin::read_trust_policy(project_path) {
+        if policy.sync_require_selective && !cfg.selective_sync {
+            return Err(TeamCloudSyncError::Validation(
+                "trust policy requires selective_sync".into(),
+            ));
+        }
+    }
     let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
 
     // Filter planned paths to those that currently exist under the project root.

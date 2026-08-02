@@ -556,8 +556,8 @@ fn checkpoint_e_cli_surface_does_not_add_tauri_commands() {
             let tauri_rs = fs::read_to_string(&tauri_lib).unwrap_or_default();
             assert_eq!(
                 tauri_rs.matches("#[tauri::command]").count(),
-                52,
-                "Tauri command count must remain 52"
+                53,
+                "Tauri command count must remain 53 (get_host_os)"
             );
         }
     }

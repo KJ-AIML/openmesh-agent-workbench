@@ -12,6 +12,11 @@ use openmesh_core::team::{
 use openmesh_core::team_cloud::{
     build_sync_scaffold, init_team_cloud, read_team_cloud, TeamCloudMode, TeamCloudStorageError,
 };
+use openmesh_core::trust_admin::{
+    append_audit_event, evaluate_remote_query, read_trust_policy, AdminAuditEvent, AuditAction,
+    QueryPermission,
+};
+
 use serde_json::json;
 use std::path::Path;
 
@@ -385,6 +390,40 @@ fn run_query(args: &TeamQueryArgs, cwd: &Path) -> i32 {
         "critical" | "Critical" => FreshnessTier::Critical,
         _ => FreshnessTier::Standard,
     };
+    // 0.1.17 trust-admin: enforce query allowlist when policy present
+    if let Ok(policy) = read_trust_policy(&project_path) {
+        let decision = evaluate_remote_query(
+            &policy,
+            Some(&member.member_id),
+            member.mesh_peer_id.as_deref(),
+        );
+        let now_audit = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        let action = if decision.permission == QueryPermission::Allowed {
+            AuditAction::QueryAllowed
+        } else {
+            AuditAction::QueryDenied
+        };
+        let _ = append_audit_event(
+            &project_path,
+            &AdminAuditEvent {
+                event_id: format!("tq-auth-{}", now_audit.replace(':', "")),
+                team_id: policy.team_id.clone(),
+                actor_member_id: "local-query".into(),
+                action,
+                detail: format!(
+                    "member={} peer={} reason={}",
+                    member.member_id,
+                    member.mesh_peer_id.as_deref().unwrap_or("-"),
+                    decision.reason
+                ),
+                at: now_audit,
+            },
+        );
+        if decision.permission == QueryPermission::Denied {
+            return err_msg(args.json, "trust_admin", &decision.reason);
+        }
+    }
+
     let now = Utc::now();
     let req = MeshRemoteQueryRequest {
         peer,

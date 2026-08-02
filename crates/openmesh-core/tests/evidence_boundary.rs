@@ -645,8 +645,8 @@ fn checkpoint_f_does_not_touch_tauri_desktop_or_0_1_3_8() {
         let content = fs::read_to_string(&tauri_lib).expect("tauri lib");
         assert_eq!(
             content.matches("#[tauri::command]").count(),
-            52,
-            "Tauri command count must remain 52"
+            53,
+            "Tauri command count must remain 53 (get_host_os)"
         );
         for term in ["run_state", "run_catch_up", "build_catch_up_view"] {
             assert!(

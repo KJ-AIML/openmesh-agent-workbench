@@ -27,6 +27,10 @@ use openmesh_core::team::{list_team_members, read_team_workspace, TeamMember, Te
 use openmesh_core::team_cloud::{
     build_sync_scaffold, read_team_cloud, TeamCloudConfig, TeamCloudSyncPlan,
 };
+use openmesh_core::trust_admin::{
+    list_audit_events as list_trust_audit_events, read_trust_policy, AdminAuditEvent,
+    TeamTrustPolicy,
+};
 use openmesh_core::return_digest::{
     build_pending_questions_view, build_return_digest, PendingQuestionsView, ReturnDigest,
 };
@@ -299,3 +303,22 @@ pub fn continuity_hub_summary(project_path: String) -> Result<ContinuityHubSumma
         online_proxy_initialized,
     })
 }
+
+/// Trust Admin Beta (0.1.17) — None when not initialized.
+#[tauri::command]
+pub fn team_trust_policy_status(project_path: String) -> Result<Option<TeamTrustPolicy>, String> {
+    match read_trust_policy(&project_path) {
+        Ok(p) => Ok(Some(p)),
+        Err(openmesh_core::trust_admin::TrustAdminStorageError::Missing) => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[tauri::command]
+pub fn team_trust_audit_list(
+    project_path: String,
+    limit: Option<usize>,
+) -> Result<Vec<AdminAuditEvent>, String> {
+    list_trust_audit_events(&project_path, limit).map_err(|e| e.to_string())
+}
+

@@ -99,7 +99,7 @@ fn tauri_command_count_remains_52() {
     let tauri_lib = workspace_root().join("src-tauri/src/lib.rs");
     let content = read_if_exists(&tauri_lib).expect("src-tauri/src/lib.rs");
     let count = content.matches("#[tauri::command]").count();
-    assert_eq!(count, 52, "unexpected Tauri command surface expansion");
+    assert_eq!(count, 53, "unexpected Tauri command surface expansion");
 }
 
 #[test]

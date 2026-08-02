@@ -1493,6 +1493,9 @@ pub fn run() {
             // Team Cloud Beta (0.1.16)
             continuity_desktop::team_cloud_status,
             continuity_desktop::team_cloud_sync_scaffold,
+            // Trust Admin Beta (0.1.17)
+            continuity_desktop::team_trust_policy_status,
+            continuity_desktop::team_trust_audit_list,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

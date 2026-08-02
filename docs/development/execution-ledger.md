@@ -2777,3 +2777,15 @@ Release: https://github.com/KJ-AIML/openmesh-agent-workbench/releases/tag/v0.1.1
 PR: https://github.com/KJ-AIML/openmesh-agent-workbench/pull/8
 Next recommended track: **0.1.17 Trust, Privacy & Admin Beta** (unlocked).
 
+## 2026-08-03 — Dev Track 0.1.17 FEATURE COMPLETE (Trust Privacy Admin Beta)
+
+Status: FEATURE_COMPLETE_LOCAL
+Branch: feat/openmesh-0.1.17-trust-admin
+Objective: Policy snapshot, query allowlists, admin audit; fail-closed secrets; selective sync required.
+What changed:
+- openmesh_core::trust_admin
+- CLI trust-admin + team query gate
+- Tauri team_trust_policy_status / team_trust_audit_list
+- Version 0.1.16 → 0.1.17; CHANGELOG
+Next: ship v0.1.17 then 0.1.18 Connector Layer.
+
