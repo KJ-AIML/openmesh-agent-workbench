@@ -27,10 +27,12 @@ import {
   getReturnDigest,
   listMeshPeers,
   listMeshEnvelopes,
+  queryMeshPeer,
   listRelayAudit,
   getOnlineProxyStatus,
   initOnlineProxy,
   askOnlineProxy,
+  type MeshRemoteQueryAnswer,
 } from "../lib/continuityClient";
 
 type TabId = "pending" | "digest" | "mesh" | "relay" | "online-proxy";
@@ -52,6 +54,10 @@ const onlineConfig = ref<OnlineProxyConfig | null>(null);
 const askQuestion = ref("");
 const askTier = ref("standard");
 const lastAnswer = ref<OnlineProxyAnswer | null>(null);
+const meshPeer = ref("");
+const meshQuestion = ref("");
+const meshTier = ref("low-impact");
+const meshAnswer = ref<MeshRemoteQueryAnswer | null>(null);
 const acting = ref(false);
 
 const hasProject = computed(() => !!currentProjectPath.value);
@@ -143,6 +149,27 @@ async function handleAsk() {
       currentProjectPath.value,
       askQuestion.value.trim(),
       { tier: askTier.value },
+    );
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    acting.value = false;
+  }
+}
+
+async function handleMeshQuery() {
+  if (!currentProjectPath.value || !meshPeer.value.trim() || !meshQuestion.value.trim()) {
+    return;
+  }
+  acting.value = true;
+  error.value = null;
+  meshAnswer.value = null;
+  try {
+    meshAnswer.value = await queryMeshPeer(
+      currentProjectPath.value,
+      meshPeer.value.trim(),
+      meshQuestion.value.trim(),
+      { tier: meshTier.value },
     );
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
@@ -366,14 +393,63 @@ onMounted(() => {
           <div
             v-for="p in peers"
             :key="p.peerId"
-            class="rounded-lg p-3 text-[12px]"
+            class="rounded-lg p-3 text-[12px] cursor-pointer"
             style="background: var(--surface-2); border: 1px solid var(--border)"
+            @click="meshPeer = p.peerId"
           >
             <div class="font-medium text-[13px]">{{ p.label }}</div>
             <div class="text-muted">id={{ p.peerId }}</div>
             <div v-if="p.remoteWorkspaceId" class="text-muted">
               workspace={{ p.remoteWorkspaceId }}
             </div>
+          </div>
+        </div>
+        <div class="workbench-card p-4 space-y-3">
+          <h3 class="section-label">Ask offline peer (Ter × Yo)</h3>
+          <p class="text-[12px] text-muted">
+            Read-only remote query against imported mesh envelopes. Does not
+            write the local ledger.
+          </p>
+          <input
+            v-model="meshPeer"
+            class="input-sm w-full"
+            placeholder="Peer id or label (e.g. yo)"
+          />
+          <textarea
+            v-model="meshQuestion"
+            rows="2"
+            class="input-area w-full"
+            placeholder="What did Yo finish while offline?"
+          />
+          <div class="flex items-center gap-2">
+            <select v-model="meshTier" class="input-sm">
+              <option value="low-impact">low-impact</option>
+              <option value="standard">standard</option>
+              <option value="critical">critical</option>
+            </select>
+            <button
+              type="button"
+              class="btn-primary"
+              :disabled="acting || !meshPeer.trim() || !meshQuestion.trim()"
+              @click="handleMeshQuery"
+            >
+              Query peer
+            </button>
+          </div>
+          <div
+            v-if="meshAnswer"
+            class="rounded-lg p-3 space-y-2"
+            style="background: var(--surface-2); border: 1px solid var(--border)"
+          >
+            <div class="flex items-center gap-2 text-[12px]">
+              <span class="badge">{{ meshAnswer.peerLabel }}</span>
+              <span v-if="meshAnswer.readOnly" class="badge">read-only</span>
+              <span v-if="meshAnswer.refused" class="badge">refused</span>
+            </div>
+            <div class="text-[12px] text-muted">{{ meshAnswer.freshness.statement }}</div>
+            <pre class="text-[12px] whitespace-pre-wrap font-sans">{{
+              meshAnswer.answerText
+            }}</pre>
           </div>
         </div>
         <div class="workbench-card p-4 space-y-3">

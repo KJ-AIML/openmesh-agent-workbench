@@ -1,15 +1,18 @@
 //! Dev Track 0.1.10 — Two-Person Mesh (local file envelopes).
+//! Dev Track 0.1.14 — Ter × Yo remote peer query (read-only).
 //!
 //! Checkpoint A: domain contract + pure validators (no I/O).
 //! Checkpoint B: local peer registry under `.openmesh/mesh/peers/`.
 //! Checkpoint C: export builder + outbox write.
 //! Checkpoint D: import into inbox.
 //! Checkpoint E: list/show peer evidence read model.
+//! 0.1.14: query offline peer proxy from imported envelopes.
 
 pub mod contract;
 pub mod export;
 pub mod import;
 pub mod peers;
+pub mod query;
 pub mod view;
 
 pub use contract::{
@@ -32,6 +35,11 @@ pub use peers::{
     add_peer, list_peer_ids, list_peers, peer_id_from_label, peer_path, peers_dir, read_peer,
     validate_mesh_peer_record, validate_peer_id_for_storage, write_peer, MeshPeerError,
     MeshPeerRecord, MESH_PEER_RECORD_PROTOCOL_VERSION,
+};
+pub use query::{
+    query_remote_peer_proxy, read_query_answer, resolve_peer, validate_mesh_remote_query_answer,
+    write_query_answer, MeshQueryError, MeshRemoteQueryAnswer, MeshRemoteQueryRequest,
+    MESH_QUERIES_DIR, MESH_QUERY_PROTOCOL_VERSION,
 };
 pub use view::{
     list_envelope_summaries, list_outbox_envelope_ids, show_envelope, MeshEnvelopeSummary,
