@@ -2745,3 +2745,11 @@ What changed:
 - Version 0.1.14 → 0.1.15; CHANGELOG; unlock-matrix-all.md
 Next: ship v0.1.15 then continue 0.1.16+ as unlocked.
 
+## 2026-08-02 — Dev Track 0.1.15 RELEASED (v0.1.15)
+
+Status: RELEASED
+Tag: `v0.1.15`
+Release: https://github.com/KJ-AIML/openmesh-agent-workbench/releases/tag/v0.1.15
+PR: https://github.com/KJ-AIML/openmesh-agent-workbench/pull/7
+Also: unlock-matrix-all.md authorizes 0.1.16→1.0.0.
+Next: implement **0.1.16 Team Cloud Beta** (unlocked).

@@ -1,6 +1,6 @@
 # OpenMesh 0.1.15 — Team Workspace Foundation
 
-**Status:** FEATURE_COMPLETE_LOCAL + UNLOCKED  
+**Status:** RELEASED  
 **Human unlock:** 2026-08-02 (“Unlock all”)  
 **Depends on:** prior package track RELEASED (sequential ship)  
 **Branch (suggested):** `feat/openmesh-0.1.15`
