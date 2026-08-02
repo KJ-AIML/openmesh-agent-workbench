@@ -2863,3 +2863,11 @@ What changed:
 - Version 0.1.20 → 0.1.21
 Next: ship v0.1.21 then 1.0.0 gate verification when RC program PASS.
 
+## 2026-08-03 — Dev Track 0.1.21 RELEASED (v0.1.21)
+
+Status: RELEASED
+Tag: `v0.1.21`
+Release: https://github.com/KJ-AIML/openmesh-agent-workbench/releases/tag/v0.1.21
+PR: https://github.com/KJ-AIML/openmesh-agent-workbench/pull/13
+Next: **1.0.0** gate verification package when RC holds at real team scale.
+
