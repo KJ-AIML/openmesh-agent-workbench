@@ -2630,3 +2630,31 @@ Tag: `v0.1.11`
 Release: https://github.com/KJ-AIML/openmesh-agent-workbench/releases/tag/v0.1.11
 Next recommended track: unlock **0.1.12 Always-Online Work Proxy Alpha** when authorized.
 
+## 2026-08-02 — Dev Track 0.1.12 UNLOCK (Always-Online Work Proxy Alpha)
+
+Status: PLAN_FROZEN — 0.1.12 UNLOCKED FOR IMPLEMENTATION
+Branch: feat/openmesh-0.1.12
+Objective: Always-online proxy scaffold with mandatory EvidenceFreshnessStatement; refuse stale Standard/Critical.
+What changed:
+- Human unlock authorized for 0.1.12.
+- Execution plan: `docs/development/openmesh-0.1.12-execution-plan.md`
+- Branch `feat/openmesh-0.1.12` created from `main` @ post-v0.1.11.
+- Heli task `0.1.12-always-online-proxy` created/claimed (write).
+- Unlock matrix: 0.1.8–0.1.11 RELEASED; **0.1.12 YES**.
+Next recommended track: implement online_proxy domain + CLI + tests through G.
+
+## 2026-08-02 — Dev Track 0.1.12 FEATURE COMPLETE (Checkpoints A–G)
+
+Status: FEATURE_COMPLETE_LOCAL
+Branch: feat/openmesh-0.1.12
+Objective: Always-Online Work Proxy Alpha — answers with mandatory freshness disclosure.
+What changed:
+- `openmesh_core::online_proxy` contract/storage/ask
+- CLI `online-proxy init|status|ask|show`
+- Tests: online_proxy_contract (4), online_proxy_workflow (2)
+- Version 0.1.11 → 0.1.12; CHANGELOG
+Commands run:
+- `cargo test --workspace` — exit 0 (macOS)
+- online_proxy contract + workflow green
+Next: push/PR/tag/release when authorized.
+

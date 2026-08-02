@@ -146,6 +146,9 @@
 // Dev Track 0.1.11 — Private Relay Alpha:
 // - `relay` — selective egress packages, approve gate, fs transport, audit
 //
+// Dev Track 0.1.12 — Always-Online Work Proxy Alpha:
+// - `online_proxy` — always-available answer scaffold with mandatory freshness
+//
 // Ledger APIs are core-only in this track. CLI, Tauri, and Desktop do not expose
 // WorkEvent ledger commands yet.
 
@@ -155,6 +158,7 @@ pub mod authority_gate;
 pub mod authority_policy;
 pub mod handoff;
 pub mod mesh;
+pub mod online_proxy;
 pub mod pending_proxy_question;
 pub mod relay;
 pub mod return_digest;
