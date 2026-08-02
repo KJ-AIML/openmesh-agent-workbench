@@ -376,3 +376,40 @@ export interface PilotPackView {
 export async function getPilotStatus(projectPath: string): Promise<PilotPackView> {
   return invoke<PilotPackView>("pilot_status", { projectPath });
 }
+
+
+export interface RcPackView {
+  protocolVersion: string;
+  workspaceId: string;
+  generatedAt: string;
+  rcReady: boolean;
+  p0FailCount: number;
+  p1FailCount: number;
+  openCount: number;
+  checks: Array<{
+    id: string;
+    title: string;
+    severity: string;
+    status: string;
+    evidence: string;
+    detail?: string;
+  }>;
+  regressionMatrix: Array<{
+    id: string;
+    area: string;
+    surface: string;
+    status: string;
+    evidence: string;
+  }>;
+  freezePolicy: {
+    featuresFrozen: boolean;
+    allowed: string[];
+    forbidden: string[];
+    summary: string;
+  };
+  limitations: string[];
+}
+
+export async function getRcStatus(projectPath: string): Promise<RcPackView> {
+  return invoke<RcPackView>("rc_status", { projectPath });
+}

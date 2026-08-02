@@ -2853,3 +2853,13 @@ Tag: `v0.1.20`
 Release: https://github.com/KJ-AIML/openmesh-agent-workbench/releases/tag/v0.1.20
 Next recommended track: **0.1.21 1.0 Release Candidate Program** (unlocked).
 
+## 2026-08-03 — Dev Track 0.1.21 FEATURE COMPLETE (1.0 RC Program)
+
+Status: FEATURE_COMPLETE_LOCAL
+Branch: feat/openmesh-0.1.21-rc-program
+Objective: RC checklist + regression matrix + freeze policy; no feature expansion.
+What changed:
+- openmesh_core::rc + CLI rc + Tauri rc_status + Continuity RC tab
+- Version 0.1.20 → 0.1.21
+Next: ship v0.1.21 then 1.0.0 gate verification when RC program PASS.
+

@@ -30,6 +30,7 @@ use openmesh_core::team_cloud::{
 use openmesh_core::connectors::{list_connectors, ConnectorDescriptor};
 use openmesh_core::org_graph::{build_org_graph, OrgGraph};
 use openmesh_core::pilot::{build_pilot_pack, PilotPack};
+use openmesh_core::rc::{build_rc_pack, RcPack};
 use openmesh_core::trust_admin::{
     list_audit_events as list_trust_audit_events, read_trust_policy, AdminAuditEvent,
     TeamTrustPolicy,
@@ -345,4 +346,10 @@ pub fn org_graph_show(project_path: String) -> Result<Option<OrgGraph>, String> 
 #[tauri::command]
 pub fn pilot_status(project_path: String) -> Result<PilotPack, String> {
     build_pilot_pack(&project_path).map_err(|e| e.to_string())
+}
+
+/// 1.0 RC Program (0.1.21) — evaluate RC readiness pack.
+#[tauri::command]
+pub fn rc_status(project_path: String) -> Result<RcPack, String> {
+    build_rc_pack(&project_path).map_err(|e| e.to_string())
 }

@@ -34,6 +34,7 @@ mod trust_admin;
 mod connector;
 mod org;
 mod pilot;
+mod rc;
 
 use clap::{Args, Parser, Subcommand};
 
@@ -105,6 +106,9 @@ pub enum Commands {
     /// Enterprise pilot readiness (0.1.20).
     #[command(subcommand)]
     Pilot(pilot::PilotCommand),
+    /// 1.0 RC program (0.1.21).
+    #[command(subcommand, name = "rc")]
+    Rc(rc::RcCommand),
 }
 
 #[derive(Subcommand, Debug)]
@@ -308,6 +312,7 @@ fn run() -> i32 {
         Commands::Connector(cmd) => connector::run_connector(cmd, &cwd),
         Commands::Org(cmd) => org::run_org(cmd, &cwd),
         Commands::Pilot(cmd) => pilot::run_pilot(cmd, &cwd),
+        Commands::Rc(cmd) => rc::run_rc(cmd, &cwd),
     }
 }
 

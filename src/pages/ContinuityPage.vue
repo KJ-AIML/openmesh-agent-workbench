@@ -15,6 +15,7 @@ import {
   Plug,
   Network,
   ClipboardCheck,
+  Flag,
 } from "lucide-vue-next";
 import { useStore } from "../lib/useStore";
 import {
@@ -31,6 +32,7 @@ import {
   type ConnectorDescriptorView,
   type OrgGraphView,
   type PilotPackView,
+  type RcPackView,
   getContinuityHubSummary,
   getPendingQuestions,
   getReturnDigest,
@@ -46,10 +48,11 @@ import {
   listConnectors,
   getOrgGraph,
   getPilotStatus,
+  getRcStatus,
   type MeshRemoteQueryAnswer,
 } from "../lib/continuityClient";
 
-type TabId = "pending" | "digest" | "mesh" | "relay" | "online-proxy" | "team" | "trust" | "connectors" | "org" | "pilot";
+type TabId = "pending" | "digest" | "mesh" | "relay" | "online-proxy" | "team" | "trust" | "connectors" | "org" | "pilot" | "rc";
 
 const { currentProject, currentProjectPath } = useStore();
 
@@ -78,6 +81,7 @@ const trustPolicy = ref<TeamTrustPolicyView | null>(null);
 const connectors = ref<ConnectorDescriptorView[]>([]);
 const orgGraph = ref<OrgGraphView | null>(null);
 const pilotPack = ref<PilotPackView | null>(null);
+const rcPack = ref<RcPackView | null>(null);
 
 const hasProject = computed(() => !!currentProjectPath.value);
 
@@ -90,6 +94,7 @@ const tabs: { id: TabId; label: string; icon: typeof Inbox }[] = [
   { id: "connectors", label: "Connectors", icon: Plug },
   { id: "org", label: "Org", icon: Network },
   { id: "pilot", label: "Pilot", icon: ClipboardCheck },
+  { id: "rc", label: "RC", icon: Flag },
   { id: "relay", label: "Relay", icon: Share2 },
   { id: "online-proxy", label: "Online Proxy", icon: Cloud },
 ];
@@ -146,6 +151,9 @@ async function loadTab() {
         break;
       case "pilot":
         pilotPack.value = await getPilotStatus(path);
+        break;
+      case "rc":
+        rcPack.value = await getRcStatus(path);
         break;
     }
     await loadSummary();
@@ -246,6 +254,7 @@ watch(currentProjectPath, () => {
   connectors.value = [];
   orgGraph.value = null;
   pilotPack.value = null;
+  rcPack.value = null;
   loadTab();
 });
 
@@ -697,6 +706,46 @@ onMounted(() => {
         </div>
       </div>
 
+
+
+      <!-- RC (0.1.21) -->
+      <div v-else-if="tab === 'rc'" class="space-y-4">
+        <div v-if="loading" class="text-[13px] text-muted flex items-center gap-2">
+          <Loader2 class="h-4 w-4 animate-spin" /> Loading…
+        </div>
+        <div v-else-if="!rcPack" class="workbench-card p-8 text-center text-[13px] text-muted">
+          Could not evaluate RC pack.
+        </div>
+        <template v-else>
+          <div class="workbench-card p-4 flex flex-wrap gap-2 text-[12px]">
+            <span class="chip">{{ rcPack.rcReady ? 'rc ready' : 'not rc ready' }}</span>
+            <span class="chip">p0 fail {{ rcPack.p0FailCount }}</span>
+            <span class="chip">p1 fail {{ rcPack.p1FailCount }}</span>
+          </div>
+          <div class="workbench-card p-4 space-y-2 text-[12px]">
+            <h4 class="font-semibold">Checks</h4>
+            <div v-for="c in rcPack.checks" :key="c.id" class="border-b pb-2" style="border-color: var(--border)">
+              <span class="chip mr-1">{{ c.severity }}</span>
+              <span class="chip mr-1">{{ c.status }}</span>
+              <span class="font-medium">{{ c.title }}</span>
+              <p class="text-muted">{{ c.evidence }}</p>
+            </div>
+          </div>
+          <div class="workbench-card p-4 space-y-2 text-[12px]">
+            <h4 class="font-semibold">Regression matrix</h4>
+            <div v-for="r in rcPack.regressionMatrix" :key="r.id">
+              <span class="chip mr-1">{{ r.status }}</span>
+              {{ r.area }} · {{ r.surface }}
+              <span class="text-muted"> — {{ r.evidence }}</span>
+            </div>
+          </div>
+          <div class="workbench-card p-4 text-[12px] space-y-1">
+            <h4 class="font-semibold">Freeze policy</h4>
+            <p>{{ rcPack.freezePolicy.summary }}</p>
+            <p class="text-muted">features_frozen={{ rcPack.freezePolicy.featuresFrozen }}</p>
+          </div>
+        </template>
+      </div>
 
       <!-- Pilot (0.1.20) -->
       <div v-else-if="tab === 'pilot'" class="space-y-4">
