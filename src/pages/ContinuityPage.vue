@@ -14,6 +14,7 @@ import {
   Shield,
   Plug,
   Network,
+  ClipboardCheck,
 } from "lucide-vue-next";
 import { useStore } from "../lib/useStore";
 import {
@@ -29,6 +30,7 @@ import {
   type TeamTrustPolicyView,
   type ConnectorDescriptorView,
   type OrgGraphView,
+  type PilotPackView,
   getContinuityHubSummary,
   getPendingQuestions,
   getReturnDigest,
@@ -43,10 +45,11 @@ import {
   getTeamTrustPolicy,
   listConnectors,
   getOrgGraph,
+  getPilotStatus,
   type MeshRemoteQueryAnswer,
 } from "../lib/continuityClient";
 
-type TabId = "pending" | "digest" | "mesh" | "relay" | "online-proxy" | "team" | "trust" | "connectors" | "org";
+type TabId = "pending" | "digest" | "mesh" | "relay" | "online-proxy" | "team" | "trust" | "connectors" | "org" | "pilot";
 
 const { currentProject, currentProjectPath } = useStore();
 
@@ -74,6 +77,7 @@ const teamWs = ref<TeamWorkspaceView | null>(null);
 const trustPolicy = ref<TeamTrustPolicyView | null>(null);
 const connectors = ref<ConnectorDescriptorView[]>([]);
 const orgGraph = ref<OrgGraphView | null>(null);
+const pilotPack = ref<PilotPackView | null>(null);
 
 const hasProject = computed(() => !!currentProjectPath.value);
 
@@ -85,6 +89,7 @@ const tabs: { id: TabId; label: string; icon: typeof Inbox }[] = [
   { id: "trust", label: "Trust", icon: Shield },
   { id: "connectors", label: "Connectors", icon: Plug },
   { id: "org", label: "Org", icon: Network },
+  { id: "pilot", label: "Pilot", icon: ClipboardCheck },
   { id: "relay", label: "Relay", icon: Share2 },
   { id: "online-proxy", label: "Online Proxy", icon: Cloud },
 ];
@@ -138,6 +143,9 @@ async function loadTab() {
         break;
       case "org":
         orgGraph.value = await getOrgGraph(path);
+        break;
+      case "pilot":
+        pilotPack.value = await getPilotStatus(path);
         break;
     }
     await loadSummary();
@@ -237,6 +245,7 @@ watch(currentProjectPath, () => {
   trustPolicy.value = null;
   connectors.value = [];
   orgGraph.value = null;
+  pilotPack.value = null;
   loadTab();
 });
 
@@ -686,6 +695,54 @@ onMounted(() => {
             <p v-if="c.externalRef" class="text-muted">ref={{ c.externalRef }}</p>
           </div>
         </div>
+      </div>
+
+
+      <!-- Pilot (0.1.20) -->
+      <div v-else-if="tab === 'pilot'" class="space-y-4">
+        <div v-if="loading" class="text-[13px] text-muted flex items-center gap-2">
+          <Loader2 class="h-4 w-4 animate-spin" /> Loading…
+        </div>
+        <div v-else-if="!pilotPack" class="workbench-card p-8 text-center text-[13px] text-muted">
+          Could not evaluate pilot pack.
+        </div>
+        <template v-else>
+          <div class="workbench-card p-4 flex flex-wrap gap-2 items-center text-[12px]">
+            <span class="chip" :class="pilotPack.pilotReady ? 'chip-info' : ''">
+              {{ pilotPack.pilotReady ? 'pilot ready' : 'not ready' }}
+            </span>
+            <span class="chip">pass {{ pilotPack.passCount }}</span>
+            <span class="chip">warn {{ pilotPack.warnCount }}</span>
+            <span class="chip">fail {{ pilotPack.failCount }}</span>
+          </div>
+          <div class="workbench-card p-4 space-y-2">
+            <h4 class="text-[12px] font-semibold">Checks</h4>
+            <div v-for="c in pilotPack.checks" :key="c.id" class="text-[12px] border-b pb-2" style="border-color: var(--border)">
+              <div class="flex gap-2 items-center">
+                <span class="chip">{{ c.status }}</span>
+                <span class="font-medium">{{ c.title }}</span>
+              </div>
+              <p class="text-muted mt-0.5">{{ c.evidence }}</p>
+              <p v-if="c.detail" class="text-muted opacity-80">{{ c.detail }}</p>
+            </div>
+          </div>
+          <div class="workbench-card p-4 space-y-2">
+            <h4 class="text-[12px] font-semibold">Threat notes</h4>
+            <div v-for="t in pilotPack.threatNotes" :key="t.id" class="text-[12px]">
+              <p class="font-medium">{{ t.title }}</p>
+              <p class="text-muted">{{ t.summary }}</p>
+              <p class="text-muted opacity-80">Residual: {{ t.residual }}</p>
+            </div>
+          </div>
+          <div class="workbench-card p-4 space-y-2">
+            <h4 class="text-[12px] font-semibold">Runbook</h4>
+            <div v-for="s in pilotPack.runbook" :key="s.id" class="text-[12px]">
+              <p class="font-medium">{{ s.title }}</p>
+              <p class="font-mono text-[11px] text-muted">{{ s.commandOrAction }}</p>
+              <p class="text-muted">{{ s.purpose }}</p>
+            </div>
+          </div>
+        </template>
       </div>
 
       <!-- Org graph (0.1.19) -->
