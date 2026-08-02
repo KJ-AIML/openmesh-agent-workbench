@@ -2828,3 +2828,11 @@ What changed:
 - Version 0.1.18 → 0.1.19
 Next: ship v0.1.19 then 0.1.20 Enterprise Pilot.
 
+## 2026-08-03 — Dev Track 0.1.19 RELEASED (v0.1.19)
+
+Status: RELEASED
+Tag: `v0.1.19`
+Release: https://github.com/KJ-AIML/openmesh-agent-workbench/releases/tag/v0.1.19
+PR: https://github.com/KJ-AIML/openmesh-agent-workbench/pull/11
+Next recommended track: **0.1.20 Enterprise Pilot Readiness** (unlocked).
+
