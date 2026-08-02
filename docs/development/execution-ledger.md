@@ -2584,3 +2584,26 @@ Known limitations:
 - Desktop mesh UI deferred.
 Next recommended track: unlock **0.1.11 Private Relay Alpha** when authorized.
 
+## 2026-08-02 — Dev Track 0.1.11 UNLOCK (Private Relay Alpha)
+
+Status: PLAN_FROZEN — 0.1.11 UNLOCKED FOR IMPLEMENTATION
+Branch: feat/openmesh-0.1.11
+Commit: pending (unlock + plan only)
+Objective: Authorize Private Relay Alpha after 0.1.10 PASS; freeze selective-sync / sensitivity / approval architecture before code.
+What changed:
+- Human unlock authorized for 0.1.11.
+- Execution plan: `docs/development/openmesh-0.1.11-execution-plan.md` (+ parent heli report copy).
+- Branch `feat/openmesh-0.1.11` created from `main` @ post-v0.1.10.
+- Heli task `0.1.11-private-relay` created/claimed (write).
+- Unlock matrix: 0.1.8–0.1.10 RELEASED; **0.1.11 YES**; 0.1.12+ locked.
+Tests added: None (unlock/planning only).
+Architecture decisions (locked):
+- Storage under `.openmesh/relay/{staging,approved,sent,received,audit}/` — not mesh namespaces.
+- Module seam `openmesh_core::relay`; consumes MeshEnvelope; secret never egresses.
+- Explicit `approve` before `send`; filesystem relay-root transport for alpha; optional loopback later.
+- CLI-first: `relay pack|show|approve|send|receive|audit`.
+- Desktop UI deferred; no always-online cloud proxy (0.1.12).
+Known limitations:
+- Implementation not started (Checkpoint A next).
+Next recommended track: **0.1.11 Checkpoint A — Relay package domain contract**.
+
