@@ -13,10 +13,12 @@
 mod catch_up;
 mod collect;
 mod context;
+mod digest;
 mod event;
 mod handoff;
 mod init;
 mod output;
+mod pending;
 mod profile;
 mod project;
 mod proxy;
@@ -67,6 +69,10 @@ pub enum Commands {
     /// Create, approve, show, or export local handoff notes (Dev Track 0.1.8).
     #[command(subcommand)]
     Handoff(handoff::HandoffCommand),
+    /// List unified pending questions that need a person (Dev Track 0.1.9).
+    Pending(pending::PendingArgs),
+    /// Build a return digest for an absence window (Dev Track 0.1.9).
+    Digest(digest::DigestArgs),
 }
 
 #[derive(Subcommand, Debug)]
@@ -260,6 +266,8 @@ fn run() -> i32 {
         Commands::Context(cmd) => context::run_context(cmd, &cwd),
         Commands::Proxy(cmd) => proxy::run_proxy(cmd, &cwd),
         Commands::Handoff(cmd) => handoff::run_handoff(cmd, &cwd),
+        Commands::Pending(args) => pending::run_pending(&args, &cwd),
+        Commands::Digest(args) => digest::run_digest(&args, &cwd),
     }
 }
 

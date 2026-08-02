@@ -5,6 +5,27 @@ All notable changes to OpenMesh are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.9] - 2026-08-02
+
+### Added
+
+- **Pending Questions projection**: unified “what needs me” view over proxy must-ask/deny records, continuity pending attention, and unresolved-question WorkSignals
+- **Return Digest**: on-demand absence-window digest combining needs-me items, Catch-up “what I missed” sections, and local handoff note refs
+- **CLI `pending`**: list open pending questions (JSON or human output)
+- **CLI `digest`**: build a return digest for a window (`--since`, default last 24h)
+
+### Security / Privacy
+
+- Projection-only: does not invent a new pending namespace; reads existing `.openmesh/proxy/pending/`, continuity projections, signal buckets, and `.openmesh/handoff/`
+- Still local-only (no mesh/sync); secret handling inherits prior fail-closed continuity rules
+
+### Technical Details
+
+- **Workspace**: `openmesh` (Tauri), `openmesh-core`, `openmesh-cli`
+- **Branch**: `feat/openmesh-0.1.9`
+- **Module**: `openmesh_core::return_digest` (contract + pending + digest)
+- **Compatibility**: additive on 0.1.8; Desktop UI for pending/digest deferred
+
 ## [0.1.8] - 2026-07-31
 
 ### Added
