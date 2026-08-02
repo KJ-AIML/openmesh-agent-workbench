@@ -2809,3 +2809,11 @@ What changed:
 - Version 0.1.17 → 0.1.18
 Next: ship v0.1.18 then 0.1.19 Organization Graph Preview.
 
+## 2026-08-03 — Dev Track 0.1.18 RELEASED (v0.1.18)
+
+Status: RELEASED
+Tag: `v0.1.18`
+Release: https://github.com/KJ-AIML/openmesh-agent-workbench/releases/tag/v0.1.18
+PR: https://github.com/KJ-AIML/openmesh-agent-workbench/pull/10
+Next recommended track: **0.1.19 Organization Graph Preview** (unlocked).
+
