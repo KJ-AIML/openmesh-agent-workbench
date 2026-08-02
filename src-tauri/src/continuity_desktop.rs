@@ -28,6 +28,7 @@ use openmesh_core::team_cloud::{
     build_sync_scaffold, read_team_cloud, TeamCloudConfig, TeamCloudSyncPlan,
 };
 use openmesh_core::connectors::{list_connectors, ConnectorDescriptor};
+use openmesh_core::org_graph::{build_org_graph, OrgGraph};
 use openmesh_core::trust_admin::{
     list_audit_events as list_trust_audit_events, read_trust_policy, AdminAuditEvent,
     TeamTrustPolicy,
@@ -329,3 +330,12 @@ pub fn connector_list(project_path: String) -> Result<Vec<ConnectorDescriptor>, 
     list_connectors(&project_path).map_err(|e| e.to_string())
 }
 
+/// Organization Graph Preview (0.1.19) — None when team not initialized.
+#[tauri::command]
+pub fn org_graph_show(project_path: String) -> Result<Option<OrgGraph>, String> {
+    match build_org_graph(&project_path) {
+        Ok(g) => Ok(Some(g)),
+        Err(openmesh_core::org_graph::OrgGraphError::TeamRequired) => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
+}

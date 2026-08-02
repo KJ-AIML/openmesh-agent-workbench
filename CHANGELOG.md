@@ -5,7 +5,33 @@ All notable changes to OpenMesh are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.19] - 2026-08-03
+
+### Added
+
+- **Organization Graph Preview**: evidence-backed org projection (team / members / peers / connectors)
+- **CLI** `org graph show`
+- **Core** `openmesh_core::org_graph` (contract + `build_org_graph`)
+- **Desktop** Continuity → Org tab + Tauri `org_graph_show`
+
+### Changed (Desktop UX)
+
+- **Sidebar IA**: Work · Team/Mesh · Agents · System (collapsed by default)
+- **Agent Sessions**: remove permanent Mock badge; empty state with Scan CTA; disk sessions first
+- **Continuity**: Team, Trust, Connectors, Org tabs for 0.1.15–0.1.19 surfaces
+
+### Security / Privacy
+
+- Org graph asserts nothing without local team/connector evidence
+- Evidence strings are source paths/ids only (no secret content)
+
+### Technical Details
+
+- Tests: org_graph_contract (3), org_graph_workflow (3)
+- npm typecheck green
+
 ## [0.1.18] - 2026-08-03
+
 
 ### Added
 

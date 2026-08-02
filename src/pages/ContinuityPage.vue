@@ -11,6 +11,9 @@ import {
   AlertCircle,
   CheckCircle2,
   ShieldAlert,
+  Shield,
+  Plug,
+  Network,
 } from "lucide-vue-next";
 import { useStore } from "../lib/useStore";
 import {
@@ -22,6 +25,10 @@ import {
   type RelayAuditEvent,
   type OnlineProxyConfig,
   type OnlineProxyAnswer,
+  type TeamWorkspaceView,
+  type TeamTrustPolicyView,
+  type ConnectorDescriptorView,
+  type OrgGraphView,
   getContinuityHubSummary,
   getPendingQuestions,
   getReturnDigest,
@@ -32,10 +39,14 @@ import {
   getOnlineProxyStatus,
   initOnlineProxy,
   askOnlineProxy,
+  getTeamWorkspace,
+  getTeamTrustPolicy,
+  listConnectors,
+  getOrgGraph,
   type MeshRemoteQueryAnswer,
 } from "../lib/continuityClient";
 
-type TabId = "pending" | "digest" | "mesh" | "relay" | "online-proxy";
+type TabId = "pending" | "digest" | "mesh" | "relay" | "online-proxy" | "team" | "trust" | "connectors" | "org";
 
 const { currentProject, currentProjectPath } = useStore();
 
@@ -59,6 +70,10 @@ const meshQuestion = ref("");
 const meshTier = ref("low-impact");
 const meshAnswer = ref<MeshRemoteQueryAnswer | null>(null);
 const acting = ref(false);
+const teamWs = ref<TeamWorkspaceView | null>(null);
+const trustPolicy = ref<TeamTrustPolicyView | null>(null);
+const connectors = ref<ConnectorDescriptorView[]>([]);
+const orgGraph = ref<OrgGraphView | null>(null);
 
 const hasProject = computed(() => !!currentProjectPath.value);
 
@@ -66,6 +81,10 @@ const tabs: { id: TabId; label: string; icon: typeof Inbox }[] = [
   { id: "pending", label: "Pending", icon: Inbox },
   { id: "digest", label: "Digest", icon: Clock },
   { id: "mesh", label: "Mesh", icon: Users },
+  { id: "team", label: "Team", icon: Users },
+  { id: "trust", label: "Trust", icon: Shield },
+  { id: "connectors", label: "Connectors", icon: Plug },
+  { id: "org", label: "Org", icon: Network },
   { id: "relay", label: "Relay", icon: Share2 },
   { id: "online-proxy", label: "Online Proxy", icon: Cloud },
 ];
@@ -107,6 +126,18 @@ async function loadTab() {
         break;
       case "online-proxy":
         onlineConfig.value = await getOnlineProxyStatus(path);
+        break;
+      case "team":
+        teamWs.value = await getTeamWorkspace(path);
+        break;
+      case "trust":
+        trustPolicy.value = await getTeamTrustPolicy(path);
+        break;
+      case "connectors":
+        connectors.value = await listConnectors(path);
+        break;
+      case "org":
+        orgGraph.value = await getOrgGraph(path);
         break;
     }
     await loadSummary();
@@ -202,6 +233,10 @@ watch(currentProjectPath, () => {
   audit.value = [];
   onlineConfig.value = null;
   lastAnswer.value = null;
+  teamWs.value = null;
+  trustPolicy.value = null;
+  connectors.value = [];
+  orgGraph.value = null;
   loadTab();
 });
 
@@ -216,8 +251,7 @@ onMounted(() => {
       <div>
         <h1 class="text-title">Continuity</h1>
         <p class="text-body text-muted mt-1">
-          Pending questions, return digest, mesh, relay, and always-online proxy
-          — Desktop surfaces for 0.1.9–0.1.12.
+          Mesh, team, trust, connectors, and org graph — desktop surfaces for continuity through 0.1.19.
         </p>
       </div>
       <button
@@ -591,6 +625,105 @@ onMounted(() => {
           </template>
         </div>
       </div>
+
+      <!-- Team (0.1.15) -->
+      <div v-else-if="tab === 'team'" class="space-y-4">
+        <div v-if="loading" class="text-[13px] text-muted flex items-center gap-2">
+          <Loader2 class="h-4 w-4 animate-spin" /> Loading…
+        </div>
+        <div v-else-if="!teamWs" class="workbench-card p-8 text-center space-y-2">
+          <p class="text-[14px] font-semibold">No team workspace</p>
+          <p class="text-[12px] text-muted">Run <code class="text-[11px]">team init</code> in the CLI for this project.</p>
+        </div>
+        <div v-else class="workbench-card p-5 space-y-3">
+          <h3 class="text-[14px] font-semibold">{{ teamWs.displayName }}</h3>
+          <p class="text-[12px] text-muted">team_id={{ teamWs.teamId }} · members={{ teamWs.members?.length ?? 0 }}</p>
+          <ul class="space-y-1.5 text-[12px]">
+            <li v-for="m in teamWs.members" :key="m.memberId" class="flex gap-2">
+              <span class="font-medium">{{ m.label }}</span>
+              <span class="text-muted">{{ m.role }}</span>
+              <span v-if="m.meshPeerId" class="text-muted">peer={{ m.meshPeerId }}</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Trust (0.1.17) -->
+      <div v-else-if="tab === 'trust'" class="space-y-4">
+        <div v-if="loading" class="text-[13px] text-muted flex items-center gap-2">
+          <Loader2 class="h-4 w-4 animate-spin" /> Loading…
+        </div>
+        <div v-else-if="!trustPolicy" class="workbench-card p-8 text-center space-y-2">
+          <p class="text-[14px] font-semibold">No trust policy</p>
+          <p class="text-[12px] text-muted">Run <code class="text-[11px]">trust-admin init</code> after team init.</p>
+        </div>
+        <div v-else class="workbench-card p-5 space-y-2 text-[12px]">
+          <p><span class="text-muted">remote query</span> · {{ trustPolicy.remoteQueryEnabled ? 'enabled' : 'disabled' }}</p>
+          <p><span class="text-muted">allowlist mode</span> · {{ trustPolicy.queryAllowlistMode }}</p>
+          <p><span class="text-muted">allowlist size</span> · {{ trustPolicy.queryAllowlist?.length ?? 0 }}</p>
+          <p><span class="text-muted">secrets fail-closed</span> · {{ trustPolicy.secretTopicsFailClosed }}</p>
+          <p><span class="text-muted">secret export</span> · {{ trustPolicy.allowSecretExport }}</p>
+          <p><span class="text-muted">selective sync</span> · {{ trustPolicy.syncRequireSelective }}</p>
+        </div>
+      </div>
+
+      <!-- Connectors (0.1.18) -->
+      <div v-else-if="tab === 'connectors'" class="space-y-4">
+        <div v-if="loading" class="text-[13px] text-muted flex items-center gap-2">
+          <Loader2 class="h-4 w-4 animate-spin" /> Loading…
+        </div>
+        <div v-else-if="!connectors.length" class="workbench-card p-8 text-center space-y-2">
+          <p class="text-[14px] font-semibold">No connectors registered</p>
+          <p class="text-[12px] text-muted">Run <code class="text-[11px]">connector register --id gh-lab --kind github-stub</code>.</p>
+        </div>
+        <div v-else class="space-y-2">
+          <div v-for="c in connectors" :key="c.connectorId" class="workbench-card-compact p-4 text-[12px]">
+            <div class="flex items-center justify-between">
+              <span class="font-semibold">{{ c.displayName }}</span>
+              <span class="chip">{{ c.kind }}</span>
+            </div>
+            <p class="text-muted mt-1">{{ c.connectorId }} · {{ c.enabled ? 'enabled' : 'disabled' }} · {{ c.role }}</p>
+            <p v-if="c.externalRef" class="text-muted">ref={{ c.externalRef }}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Org graph (0.1.19) -->
+      <div v-else-if="tab === 'org'" class="space-y-4">
+        <div v-if="loading" class="text-[13px] text-muted flex items-center gap-2">
+          <Loader2 class="h-4 w-4 animate-spin" /> Loading…
+        </div>
+        <div v-else-if="!orgGraph" class="workbench-card p-8 text-center space-y-2">
+          <p class="text-[14px] font-semibold">No org graph yet</p>
+          <p class="text-[12px] text-muted">Initialize a team workspace, then refresh. Graph is evidence-backed only.</p>
+        </div>
+        <div v-else class="space-y-4">
+          <div class="workbench-card p-4 text-[12px]">
+            <p class="font-semibold">team {{ orgGraph.teamId }}</p>
+            <p class="text-muted">generated {{ orgGraph.generatedAt }} · nodes {{ orgGraph.nodes?.length ?? 0 }} · edges {{ orgGraph.edges?.length ?? 0 }}</p>
+          </div>
+          <div class="workbench-card p-4">
+            <h4 class="text-[12px] font-semibold mb-2">Nodes</h4>
+            <ul class="space-y-1 text-[12px]">
+              <li v-for="n in orgGraph.nodes" :key="n.id">
+                <span class="chip mr-1">{{ n.kind }}</span>
+                <span class="font-medium">{{ n.label }}</span>
+                <span class="text-muted"> · {{ n.evidence }}</span>
+              </li>
+            </ul>
+          </div>
+          <div class="workbench-card p-4">
+            <h4 class="text-[12px] font-semibold mb-2">Edges</h4>
+            <ul class="space-y-1 text-[12px] text-muted">
+              <li v-for="(e, i) in orgGraph.edges" :key="i">
+                {{ e.from }} —{{ e.kind }}→ {{ e.to }}
+                <span class="opacity-70">({{ e.evidence }})</span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
     </template>
   </div>
 </template>

@@ -1498,6 +1498,7 @@ pub fn run() {
             continuity_desktop::team_trust_audit_list,
             // Connector Layer (0.1.18)
             continuity_desktop::connector_list,
+            continuity_desktop::org_graph_show,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
