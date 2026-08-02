@@ -134,6 +134,9 @@
 // Dev Track 0.1.10 Checkpoint B — local peer registry:
 // - `mesh::peers` — `.openmesh/mesh/peers/` add/list/read
 //
+// Dev Track 0.1.10 Checkpoint C — export builder:
+// - `mesh::export` — build envelope from continuity + write `mesh/outbox/`
+//
 // Ledger APIs are core-only in this track. CLI, Tauri, and Desktop do not expose
 // WorkEvent ledger commands yet.
 

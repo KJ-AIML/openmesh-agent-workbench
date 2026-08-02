@@ -2519,3 +2519,19 @@ Commands run:
 - `cargo test -p openmesh-core --test mesh_peers -p openmesh-cli --test mesh_peer_workflow` — exit 0, 10 passed
 Next recommended track: **0.1.10 Checkpoint C — export builder**.
 
+## 2026-08-02 — Dev Track 0.1.10 Checkpoint C (GREEN)
+
+Status: CHECKPOINT_C_GREEN
+Branch: feat/openmesh-0.1.10
+Commit: pending
+Objective: Build mesh envelopes from continuity (+ handoff ids) and write `.openmesh/mesh/outbox/`.
+What changed:
+- `mesh/export.rs` — build_mesh_export_envelope, export_mesh_envelope_to_outbox, outbox paths.
+- CLI `mesh export --peer …` with window/sensitivity/handoffs options.
+- Tests: mesh_export (2), mesh_export_workflow (2).
+Commands run:
+- `cargo test -p openmesh-core --test mesh_export -p openmesh-cli --test mesh_export_workflow` — exit 0, **4 passed**
+Exact results:
+- Export materializes MeshEnvelope under outbox; duplicate envelope id conflicts; empty content gets limitation.
+Next recommended track: **0.1.10 Checkpoint D — import + inbox**.
+
