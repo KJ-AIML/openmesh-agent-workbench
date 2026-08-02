@@ -13,6 +13,7 @@ import AgentSessionsPage from "./pages/AgentSessionsPage.vue";
 import DevConnectorPage from "./pages/DevConnectorPage.vue";
 import NotesPage from "./pages/NotesPage.vue";
 import ContextPage from "./pages/ContextPage.vue";
+import ContinuityPage from "./pages/ContinuityPage.vue";
 
 const router = createRouter({
 	history: createWebHistory(),
@@ -41,6 +42,11 @@ const router = createRouter({
 			path: "/context",
 			name: "context",
 			component: ContextPage,
+		},
+		{
+			path: "/continuity",
+			name: "continuity",
+			component: ContinuityPage,
 		},
 		{
 			path: "/notes",

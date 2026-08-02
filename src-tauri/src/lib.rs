@@ -1,3 +1,5 @@
+mod continuity_desktop;
+
 use openmesh_core::context_service;
 use openmesh_core::storage;
 use openmesh_core::storage::*;
@@ -1467,6 +1469,16 @@ pub fn run() {
             context_inspect,
             context_health,
             context_refresh,
+            // Desktop Continuity Surfaces (0.1.13)
+            continuity_desktop::continuity_pending,
+            continuity_desktop::continuity_digest,
+            continuity_desktop::continuity_hub_summary,
+            continuity_desktop::mesh_list_peers,
+            continuity_desktop::mesh_list_envelopes,
+            continuity_desktop::relay_list_audit,
+            continuity_desktop::online_proxy_status,
+            continuity_desktop::online_proxy_init,
+            continuity_desktop::online_proxy_ask,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
