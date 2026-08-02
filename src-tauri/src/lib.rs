@@ -1496,6 +1496,8 @@ pub fn run() {
             // Trust Admin Beta (0.1.17)
             continuity_desktop::team_trust_policy_status,
             continuity_desktop::team_trust_audit_list,
+            // Connector Layer (0.1.18)
+            continuity_desktop::connector_list,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
