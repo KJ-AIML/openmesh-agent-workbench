@@ -1,5 +1,5 @@
 // ============================================================================
-// Mesh commands — Dev Track 0.1.10 Checkpoints B–C (peers + export)
+// Mesh commands — Dev Track 0.1.10 Checkpoints B–D (peers + export + import)
 // ============================================================================
 
 use chrono::{Duration, Utc};
@@ -7,15 +7,16 @@ use clap::{Args, Subcommand, ValueEnum};
 use openmesh_core::continuity::load_continuity_input_snapshot;
 use openmesh_core::domain::CatchUpWindow;
 use openmesh_core::mesh::{
-    add_peer, export_mesh_envelope_to_outbox, list_peers, peer_id_from_label, read_peer,
-    to_peer_from_registry, BuildMeshExportRequest, MeshExportError, MeshPeerError, MeshPeerRecord,
-    MeshPeerRef, MeshSensitivityMax, MESH_PEER_RECORD_PROTOCOL_VERSION,
+    add_peer, export_mesh_envelope_to_outbox, import_mesh_envelope_from_file, list_peers,
+    peer_id_from_label, read_peer, to_peer_from_registry, BuildMeshExportRequest, ImportMeshOptions,
+    MeshExportError, MeshImportError, MeshPeerError, MeshPeerRecord, MeshPeerRef,
+    MeshSensitivityMax, MESH_PEER_RECORD_PROTOCOL_VERSION,
 };
 use openmesh_core::profile::{profile_exists, read_work_proxy_profile};
 use openmesh_core::storage::read_project;
 use openmesh_core::storage::Project;
 use serde_json::json;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::output;
 use crate::project::resolve_project;
@@ -28,6 +29,8 @@ pub enum MeshCommand {
     Peer(MeshPeerCommand),
     /// Export a local mesh envelope to outbox (Checkpoint C).
     Export(MeshExportArgs),
+    /// Import a mesh envelope file into local inbox (Checkpoint D).
+    Import(MeshImportArgs),
 }
 
 #[derive(Subcommand, Debug)]
@@ -144,6 +147,27 @@ pub struct MeshExportArgs {
     pub json: bool,
 }
 
+#[derive(Args, Debug, Clone)]
+pub struct MeshImportArgs {
+    /// Path to a MeshEnvelope JSON file (typically another project's outbox).
+    #[arg(long)]
+    pub file: PathBuf,
+
+    /// Auto-register from_peer into the local peer registry if missing.
+    #[arg(long = "register-peer")]
+    pub register_peer: bool,
+
+    /// Allow import when from workspace matches this project (default: refuse).
+    #[arg(long = "allow-self")]
+    pub allow_self: bool,
+
+    #[arg(long)]
+    pub project: Option<String>,
+
+    #[arg(long)]
+    pub json: bool,
+}
+
 pub fn run_mesh(command: MeshCommand, cwd: &Path) -> i32 {
     match command {
         MeshCommand::Peer(peer) => match peer {
@@ -152,6 +176,7 @@ pub fn run_mesh(command: MeshCommand, cwd: &Path) -> i32 {
             MeshPeerCommand::Show(args) => run_peer_show(&args, cwd),
         },
         MeshCommand::Export(args) => run_export(&args, cwd),
+        MeshCommand::Import(args) => run_import(&args, cwd),
     }
 }
 
@@ -422,6 +447,41 @@ fn print_mesh_peer_error(err: &MeshPeerError, json_mode: bool) -> i32 {
     code
 }
 
+fn run_import(args: &MeshImportArgs, cwd: &Path) -> i32 {
+    let resolved = match resolve_project(args.project.as_deref(), cwd) {
+        Ok(r) => r,
+        Err(err) => return output::print_project_resolution_error(&err.describe(), args.json),
+    };
+    let project_path = resolved.path.to_string_lossy().to_string();
+    let file = if args.file.is_absolute() {
+        args.file.clone()
+    } else {
+        cwd.join(&args.file)
+    };
+    let options = ImportMeshOptions {
+        register_from_peer: args.register_peer,
+        allow_self_workspace: args.allow_self,
+    };
+    match import_mesh_envelope_from_file(&project_path, &file, &options) {
+        Ok(envelope) => {
+            if args.json {
+                println!("{}", serde_json::to_value(&envelope).unwrap_or(json!({})));
+            } else {
+                println!("status=ok");
+                println!("envelope_id={}", envelope.envelope_id);
+                println!(
+                    "path=.openmesh/mesh/inbox/{}.json",
+                    envelope.envelope_id
+                );
+                println!("from={}", envelope.from_peer.label);
+                println!("evidence_items={}", envelope.evidence_items.len());
+            }
+            0
+        }
+        Err(err) => print_import_error(&err, args.json),
+    }
+}
+
 fn print_export_error(err: &MeshExportError, json_mode: bool) -> i32 {
     let (code, category) = match err {
         MeshExportError::ProjectNotInitialized => (1, "project"),
@@ -431,6 +491,31 @@ fn print_export_error(err: &MeshExportError, json_mode: bool) -> i32 {
         MeshExportError::Peer(p) => return print_mesh_peer_error(p, json_mode),
         MeshExportError::Continuity(_) | MeshExportError::Handoff(_) => (4, "read-failed"),
         MeshExportError::WriteFailed | MeshExportError::AtomicReplaceFailed => (4, "io"),
+    };
+    let message = err.to_string();
+    if json_mode {
+        println!(
+            "{}",
+            json!({"status":"error","category":category,"message":message})
+        );
+    } else {
+        eprintln!("ERROR {category}: {message}");
+    }
+    code
+}
+
+fn print_import_error(err: &MeshImportError, json_mode: bool) -> i32 {
+    let (code, category) = match err {
+        MeshImportError::ProjectNotInitialized => (1, "project"),
+        MeshImportError::FileNotFound => (3, "not-found"),
+        MeshImportError::AlreadyExists(_) => (3, "conflict"),
+        MeshImportError::SelfWorkspaceImport
+        | MeshImportError::Validation(_)
+        | MeshImportError::MalformedJson => (3, "validation"),
+        MeshImportError::Peer(p) => return print_mesh_peer_error(p, json_mode),
+        MeshImportError::ReadFailed
+        | MeshImportError::WriteFailed
+        | MeshImportError::AtomicReplaceFailed => (4, "io"),
     };
     let message = err.to_string();
     if json_mode {

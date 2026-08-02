@@ -3,10 +3,12 @@
 //! Checkpoint A: domain contract + pure validators (no I/O).
 //! Checkpoint B: local peer registry under `.openmesh/mesh/peers/`.
 //! Checkpoint C: export builder + outbox write.
-//! Later: import, list/show envelopes.
+//! Checkpoint D: import into inbox.
+//! Later: list/show peer evidence read model.
 
 pub mod contract;
 pub mod export;
+pub mod import;
 pub mod peers;
 
 pub use contract::{
@@ -19,6 +21,11 @@ pub use export::{
     build_mesh_export_envelope, export_mesh_envelope_to_outbox, outbox_dir, outbox_envelope_path,
     read_outbox_envelope, to_peer_from_registry, write_outbox_envelope, BuildMeshExportRequest,
     MeshExportError,
+};
+pub use import::{
+    import_mesh_envelope, import_mesh_envelope_from_file, inbox_dir, inbox_envelope_path,
+    list_inbox_envelope_ids, load_envelope_from_file, read_inbox_envelope, write_inbox_envelope,
+    ImportMeshOptions, MeshImportError,
 };
 pub use peers::{
     add_peer, list_peer_ids, list_peers, peer_id_from_label, peer_path, peers_dir, read_peer,

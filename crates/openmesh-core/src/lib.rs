@@ -137,6 +137,9 @@
 // Dev Track 0.1.10 Checkpoint C — export builder:
 // - `mesh::export` — build envelope from continuity + write `mesh/outbox/`
 //
+// Dev Track 0.1.10 Checkpoint D — import:
+// - `mesh::import` — validate + store under `mesh/inbox/`
+//
 // Ledger APIs are core-only in this track. CLI, Tauri, and Desktop do not expose
 // WorkEvent ledger commands yet.
 

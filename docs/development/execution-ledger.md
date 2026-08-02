@@ -2535,3 +2535,17 @@ Exact results:
 - Export materializes MeshEnvelope under outbox; duplicate envelope id conflicts; empty content gets limitation.
 Next recommended track: **0.1.10 Checkpoint D — import + inbox**.
 
+## 2026-08-02 — Dev Track 0.1.10 Checkpoint D (GREEN)
+
+Status: CHECKPOINT_D_GREEN
+Branch: feat/openmesh-0.1.10
+Commit: pending
+Objective: Import MeshEnvelope files into `.openmesh/mesh/inbox/` with fail-closed validation.
+What changed:
+- `mesh/import.rs` — load/validate/import, self-workspace refusal, optional peer auto-register.
+- CLI `mesh import --file … [--register-peer] [--allow-self]`.
+- Tests: mesh_import (4), mesh_import_workflow (2) including two-project E2E export→import.
+Commands run:
+- `cargo test -p openmesh-core --test mesh_import -p openmesh-cli --test mesh_import_workflow` — exit 0, **6 passed**
+Next recommended track: **0.1.10 Checkpoint E — peer evidence read model (list/show)**.
+
