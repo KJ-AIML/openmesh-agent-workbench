@@ -5,6 +5,31 @@ All notable changes to OpenMesh are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.12] - 2026-08-02
+
+### Added
+
+- **Always-Online Work Proxy Alpha**: scaffold for always-available proxy answers with mandatory evidence-freshness disclosure
+- **EvidenceFreshnessStatement** on every online-proxy answer (tier, sufficiency, confidence, oldest age, stale warnings)
+- **CLI** `online-proxy init|status|ask|show`
+- **Modes**: `LocalScaffold` and `CloudScaffold` (alpha scaffold only; not multi-tenant SaaS)
+- Optional use of **relay-received** packages as remote evidence when building answers
+- Storage under `.openmesh/online-proxy/`
+
+### Security / Privacy
+
+- **Never silently stale**: every answer carries an explicit freshness statement
+- **Critical / Standard** tiers refuse to answer when freshness is insufficient
+- LowImpact may answer with stale warnings recorded
+- Builds on local continuity + optional relay-received evidence only
+
+### Technical Details
+
+- Module: `openmesh_core::online_proxy` (contract, storage, ask)
+- Storage: `.openmesh/online-proxy/{config,answers}/`
+- Builds on 0.1.9 continuity, 0.1.10 mesh, 0.1.11 relay
+- Desktop UI deferred; no multi-region cloud deploy
+
 ## [0.1.11] - 2026-08-02
 
 ### Added

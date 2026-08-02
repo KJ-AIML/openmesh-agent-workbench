@@ -18,6 +18,7 @@ mod event;
 mod handoff;
 mod init;
 mod mesh;
+mod online_proxy;
 mod output;
 mod pending;
 mod profile;
@@ -81,6 +82,9 @@ pub enum Commands {
     /// Private relay selective egress (Dev Track 0.1.11).
     #[command(subcommand)]
     Relay(relay::RelayCommand),
+    /// Always-online Work Proxy alpha (Dev Track 0.1.12).
+    #[command(subcommand, name = "online-proxy")]
+    OnlineProxy(online_proxy::OnlineProxyCommand),
 }
 
 #[derive(Subcommand, Debug)]
@@ -278,6 +282,7 @@ fn run() -> i32 {
         Commands::Digest(args) => digest::run_digest(&args, &cwd),
         Commands::Mesh(cmd) => mesh::run_mesh(cmd, &cwd),
         Commands::Relay(cmd) => relay::run_relay(cmd, &cwd),
+        Commands::OnlineProxy(cmd) => online_proxy::run_online_proxy(cmd, &cwd),
     }
 }
 
