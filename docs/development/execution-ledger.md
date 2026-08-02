@@ -2566,3 +2566,21 @@ Known limitations:
 - Desktop UI deferred; no network mesh; Windows installers separate.
 Next recommended track: human review → tag/release 0.1.10; then 0.1.11 unlock when authorized.
 
+## 2026-08-02 — Dev Track 0.1.10 RELEASED (v0.1.10)
+
+Status: RELEASED
+Branch: main @ `3c36311` (merge PR #2)
+Tag: `v0.1.10`
+Release: https://github.com/KJ-AIML/openmesh-agent-workbench/releases/tag/v0.1.10
+Objective: Publish Two-Person Mesh local prototype with macOS CLI artifact.
+What changed:
+- Merged PR #2; annotated tag v0.1.10; GitHub release with macOS aarch64 CLI + checksums.
+Commands run:
+- `cargo test --workspace` — exit 0 (pre-merge)
+- `cargo build --release -p openmesh-cli` — exit 0; openmesh-cli 0.1.10
+- `gh release create v0.1.10` with openmesh-cli-0.1.10-macos-aarch64
+Known limitations:
+- No Windows installer assets in this release set.
+- Desktop mesh UI deferred.
+Next recommended track: unlock **0.1.11 Private Relay Alpha** when authorized.
+
