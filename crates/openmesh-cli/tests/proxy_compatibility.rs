@@ -49,9 +49,15 @@ fn workspace_root() -> PathBuf {
 
 /// Cross-platform SHA-256 (Windows: PowerShell; macOS/Linux: shasum/sha256sum).
 fn sha256_bytes(bytes: &[u8]) -> String {
+    // Unique temp path: parallel cargo tests share a process id and can collide
+    // if only nanos are used — that produced flaky identical digests across files.
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+    let n = COUNTER.fetch_add(1, Ordering::SeqCst);
     let tmp = std::env::temp_dir().join(format!(
-        "openmesh-sha256-{}-{}.bin",
+        "openmesh-sha256-{}-{}-{}.bin",
         std::process::id(),
+        n,
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|duration| duration.as_nanos())

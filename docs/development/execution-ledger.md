@@ -2607,3 +2607,19 @@ Known limitations:
 - Implementation not started (Checkpoint A next).
 Next recommended track: **0.1.11 Checkpoint A — Relay package domain contract**.
 
+## 2026-08-02 — Dev Track 0.1.11 FEATURE COMPLETE (Checkpoints A–G)
+
+Status: FEATURE_COMPLETE_LOCAL
+Branch: feat/openmesh-0.1.11
+Commit: pending
+Objective: Private Relay Alpha — selective approved egress via filesystem relay root.
+What changed:
+- `openmesh_core::relay` contract/package/approve/audit/transport
+- CLI `relay pack|show|approve|send|receive|audit`
+- Tests: relay_contract (5), relay_e2e_workflow (2)
+- Version 0.1.10 → 0.1.11; CHANGELOG
+Commands run:
+- `cargo test --workspace` — exit 0 (macOS)
+- relay contract + e2e green
+Next: push/PR/tag/release when authorized.
+

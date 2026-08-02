@@ -25,6 +25,7 @@ mod project;
 mod proxy;
 mod proxy_runtime_factory;
 mod proxy_verify;
+mod relay;
 mod signal;
 mod state;
 
@@ -77,6 +78,9 @@ pub enum Commands {
     /// Local two-person mesh (Dev Track 0.1.10) — peer registry first.
     #[command(subcommand)]
     Mesh(mesh::MeshCommand),
+    /// Private relay selective egress (Dev Track 0.1.11).
+    #[command(subcommand)]
+    Relay(relay::RelayCommand),
 }
 
 #[derive(Subcommand, Debug)]
@@ -273,6 +277,7 @@ fn run() -> i32 {
         Commands::Pending(args) => pending::run_pending(&args, &cwd),
         Commands::Digest(args) => digest::run_digest(&args, &cwd),
         Commands::Mesh(cmd) => mesh::run_mesh(cmd, &cwd),
+        Commands::Relay(cmd) => relay::run_relay(cmd, &cwd),
     }
 }
 

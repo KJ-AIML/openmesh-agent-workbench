@@ -143,6 +143,9 @@
 // Dev Track 0.1.10 Checkpoint E — read model:
 // - `mesh::view` — list/show attributed envelope summaries
 //
+// Dev Track 0.1.11 — Private Relay Alpha:
+// - `relay` — selective egress packages, approve gate, fs transport, audit
+//
 // Ledger APIs are core-only in this track. CLI, Tauri, and Desktop do not expose
 // WorkEvent ledger commands yet.
 
@@ -153,6 +156,7 @@ pub mod authority_policy;
 pub mod handoff;
 pub mod mesh;
 pub mod pending_proxy_question;
+pub mod relay;
 pub mod return_digest;
 
 pub mod context;
