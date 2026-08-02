@@ -162,6 +162,7 @@ pub mod online_proxy;
 pub mod pending_proxy_question;
 pub mod relay;
 pub mod return_digest;
+pub mod team;
 
 pub mod context;
 pub mod context_pack;

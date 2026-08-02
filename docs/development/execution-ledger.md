@@ -2721,3 +2721,27 @@ Tag: `v0.1.14`
 Release: https://github.com/KJ-AIML/openmesh-agent-workbench/releases/tag/v0.1.14
 PR: https://github.com/KJ-AIML/openmesh-agent-workbench/pull/6
 Next: Team Workspace Foundation (0.1.15) or Desktop polish / human GUI QA.
+
+## 2026-08-02 — UNLOCK ALL remaining tracks (0.1.15 → 1.0.0)
+
+Status: PLAN_FROZEN — FULL ROADMAP UNLOCKED
+Authorization: human command "Unlock all"
+Unlock matrix: see `docs/development/unlock-matrix-all.md`
+Tracks UNLOCKED: 0.1.15 Team Workspace, 0.1.16 Team Cloud, 0.1.17 Trust/Admin, 0.1.18 Connectors, 0.1.19 Org Graph, 0.1.20 Enterprise Pilot, 0.1.21 RC Program, 1.0.0 Platform
+Ship rule: sequential RELEASE preferred; later tracks planned now, implement after prior PASS.
+Heli tasks: created under `.heli-harness/tasks/` for each track.
+Next: implement **0.1.15** immediately.
+
+## 2026-08-02 — Dev Track 0.1.15 FEATURE COMPLETE (Team Workspace Foundation)
+
+Status: FEATURE_COMPLETE_LOCAL
+Branch: feat/openmesh-unlock-all-and-0.1.15
+Objective: Team workspace identity + multi-member registry + team query via mesh peer link.
+What changed:
+- `openmesh_core::team` contract/storage
+- CLI `team init|show|member|query`
+- Tauri team_workspace_status / team_list_members
+- Tests team_workspace_contract + team_workspace_workflow
+- Version 0.1.14 → 0.1.15; CHANGELOG; unlock-matrix-all.md
+Next: ship v0.1.15 then continue 0.1.16+ as unlocked.
+

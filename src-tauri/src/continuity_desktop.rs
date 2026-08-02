@@ -23,6 +23,7 @@ use openmesh_core::online_proxy::{
 use openmesh_core::profile::read_work_proxy_profile;
 use openmesh_core::relay::audit::list_audit_events;
 use openmesh_core::relay::RelayAuditEvent;
+use openmesh_core::team::{list_team_members, read_team_workspace, TeamMember, TeamWorkspace};
 use openmesh_core::return_digest::{
     build_pending_questions_view, build_return_digest, PendingQuestionsView, ReturnDigest,
 };
@@ -239,6 +240,21 @@ pub struct ContinuityHubSummary {
     pub envelope_count: usize,
     pub audit_event_count: usize,
     pub online_proxy_initialized: bool,
+}
+
+/// Team workspace show (0.1.15) — None when not initialized.
+#[tauri::command]
+pub fn team_workspace_status(project_path: String) -> Result<Option<TeamWorkspace>, String> {
+    match read_team_workspace(&project_path) {
+        Ok(ws) => Ok(Some(ws)),
+        Err(openmesh_core::team::TeamStorageError::Missing) => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+#[tauri::command]
+pub fn team_list_members(project_path: String) -> Result<Vec<TeamMember>, String> {
+    list_team_members(&project_path).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

@@ -1480,6 +1480,9 @@ pub fn run() {
             continuity_desktop::online_proxy_status,
             continuity_desktop::online_proxy_init,
             continuity_desktop::online_proxy_ask,
+            // Team Workspace Foundation (0.1.15)
+            continuity_desktop::team_workspace_status,
+            continuity_desktop::team_list_members,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
