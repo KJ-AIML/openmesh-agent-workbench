@@ -2623,3 +2623,10 @@ Commands run:
 - relay contract + e2e green
 Next: push/PR/tag/release when authorized.
 
+## 2026-08-02 — Dev Track 0.1.11 RELEASED (v0.1.11)
+
+Status: RELEASED
+Tag: `v0.1.11`
+Release: https://github.com/KJ-AIML/openmesh-agent-workbench/releases/tag/v0.1.11
+Next recommended track: unlock **0.1.12 Always-Online Work Proxy Alpha** when authorized.
+
