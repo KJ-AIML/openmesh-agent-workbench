@@ -2465,3 +2465,31 @@ Known limitations:
 - No Desktop UI for pending/digest.
 Next recommended track: unlock **0.1.10 Two-Person Mesh — Local Prototype** when authorized.
 
+## 2026-08-02 — Dev Track 0.1.10 UNLOCK (Two-Person Mesh — Local Prototype)
+
+Status: PLAN_FROZEN — 0.1.10 UNLOCKED FOR IMPLEMENTATION
+Branch: feat/openmesh-0.1.10
+Commit: pending (unlock + plan only)
+Objective: Authorize Two-Person Mesh local prototype after 0.1.9 PASS; freeze CLI-first file-envelope architecture before code.
+What changed:
+- Human unlock authorized for 0.1.10.
+- Execution plan: parent workspace `.heli-harness/state/reports/openmesh-0.1.10-execution-plan.md`.
+- Branch `feat/openmesh-0.1.10` created from `main` @ post-v0.1.9.
+- Heli task `0.1.10-two-person-mesh` created/claimed (write).
+- Unlock matrix: 0.1.8/0.1.9 RELEASED; **0.1.10 YES**; 0.1.11+ locked.
+Tests added: None (unlock/planning only).
+Commands run:
+- `git checkout -b feat/openmesh-0.1.10` from main
+Exact results:
+- Mission: two local Work Proxies reference each other's evidence via controlled file envelopes.
+- Non-goals: no cloud, no network sync, no Desktop UI required, no authority invention.
+Architecture decisions (locked):
+- Storage under `.openmesh/mesh/{outbox,inbox,peers}/` only — do not overload signals/proxy/handoff pending namespaces.
+- Module seam `openmesh_core::mesh`; CLI `mesh peer|export|import|list|show`.
+- File envelope exchange only; imported evidence is foreign + attributed; read-only by default.
+- E2E two-project export→import required for PASS.
+Known limitations:
+- Implementation not started (Checkpoint A next).
+- Windows installers for 0.1.10 deferred until release track.
+Next recommended track: **0.1.10 Checkpoint A — Mesh envelope domain contract**.
+
