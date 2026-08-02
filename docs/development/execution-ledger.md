@@ -2507,3 +2507,15 @@ Commands run:
 Exact results: pure contract only; no I/O/CLI/peers yet.
 Next recommended track: **0.1.10 Checkpoint B — peer registry**.
 
+## 2026-08-02 — Dev Track 0.1.10 Checkpoint B (GREEN)
+
+Status: CHECKPOINT_B_GREEN
+Branch: feat/openmesh-0.1.10
+Commit: 2a92a33
+Objective: Local mesh peer registry under `.openmesh/mesh/peers/` with CLI add/list/show.
+What changed:
+- `mesh/peers.rs` + CLI `mesh peer add|list|show`; tests mesh_peers (6) + mesh_peer_workflow (4).
+Commands run:
+- `cargo test -p openmesh-core --test mesh_peers -p openmesh-cli --test mesh_peer_workflow` — exit 0, 10 passed
+Next recommended track: **0.1.10 Checkpoint C — export builder**.
+
