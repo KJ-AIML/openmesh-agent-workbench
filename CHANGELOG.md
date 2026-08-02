@@ -5,6 +5,28 @@ All notable changes to OpenMesh are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.15] - 2026-08-02
+
+### Added
+
+- **Team Workspace Foundation**: local team identity + multi-member registry
+- **CLI** `team init|show|member add|list|remove|query`
+- **Core** `openmesh_core::team` (contract + storage under `.openmesh/team/`)
+- **Desktop IPC** `team_workspace_status`, `team_list_members`
+- Member roles: owner / member / observer; optional mesh peer link
+- `team query` delegates to read-only mesh peer query for linked members
+
+### Security / Privacy
+
+- Local registry only (not multi-tenant cloud admin)
+- Team query remains read-only via mesh query path
+- Cannot remove last owner
+
+### Technical Details
+
+- Unlock matrix: all remaining tracks through 1.0.0 authorized (see `unlock-matrix-all.md`)
+- Tests: team_workspace_contract, team_workspace_workflow
+
 ## [0.1.14] - 2026-08-02
 
 ### Added

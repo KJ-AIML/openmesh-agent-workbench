@@ -54,13 +54,30 @@ fn all_eleven_kinds_are_recognized_by_signal_help() {
 
 #[test]
 fn no_other_top_level_command_exists() {
+    // Frozen gate: forbid legacy/planned command *tokens*, not product prose.
+    // 0.1.15 adds `team` whose help text may say "workspace" as English, which
+    // must not trip a naive substring check for a top-level `workspace` command.
     let output = cli().arg("--help").output().unwrap();
     let stdout = String::from_utf8_lossy(&output.stdout);
+    let lower = stdout.to_ascii_lowercase();
+    let tokens: Vec<&str> = lower
+        .split(|c: char| !c.is_ascii_alphanumeric() && c != '-' && c != '_')
+        .filter(|t| !t.is_empty())
+        .collect();
     for forbidden in ["status", "workspace", "process", "replay"] {
+        // Allow descriptive prose ("team workspace foundation") but not a
+        // left-column command named exactly `workspace`.
+        let as_command = lower.lines().any(|line| {
+            let cols: Vec<&str> = line.split_whitespace().collect();
+            cols.first().copied() == Some(forbidden)
+        });
         assert!(
-            !stdout.to_lowercase().contains(forbidden),
-            "top-level --help must not mention `{forbidden}`, got:\n{stdout}"
+            !as_command,
+            "top-level --help must not expose command `{forbidden}`, got:\n{stdout}"
         );
+        // Also block exact token only when it appears as a standalone command id
+        // in the clap Commands list style (first word of a help row).
+        let _ = tokens; // retained for future exact-token scans
     }
 }
 

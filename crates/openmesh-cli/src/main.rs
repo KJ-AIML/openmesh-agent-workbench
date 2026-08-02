@@ -29,6 +29,7 @@ mod proxy_verify;
 mod relay;
 mod signal;
 mod state;
+mod team;
 
 use clap::{Args, Parser, Subcommand};
 
@@ -85,6 +86,9 @@ pub enum Commands {
     /// Always-online Work Proxy alpha (Dev Track 0.1.12).
     #[command(subcommand, name = "online-proxy")]
     OnlineProxy(online_proxy::OnlineProxyCommand),
+    /// Team workspace foundation (Dev Track 0.1.15).
+    #[command(subcommand)]
+    Team(team::TeamCommand),
 }
 
 #[derive(Subcommand, Debug)]
@@ -283,6 +287,7 @@ fn run() -> i32 {
         Commands::Mesh(cmd) => mesh::run_mesh(cmd, &cwd),
         Commands::Relay(cmd) => relay::run_relay(cmd, &cwd),
         Commands::OnlineProxy(cmd) => online_proxy::run_online_proxy(cmd, &cwd),
+        Commands::Team(cmd) => team::run_team(cmd, &cwd),
     }
 }
 
