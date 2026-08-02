@@ -15,7 +15,7 @@ Package versions continue from shipped history (0.1.13 Desktop, 0.1.14 Ter×Yo).
 | 0.1.14 | Two-Person Mesh Beta (Ter × Yo) | Spec 0.1.13 | **RELEASED** |
 | **0.1.15** | **Team Workspace Foundation** | Spec 0.1.14 | **RELEASED** |
 | **0.1.16** | **Team Cloud Beta** | Spec 0.1.15 | **RELEASED** |
-| **0.1.17** | **Trust, Privacy & Admin Beta** | Spec 0.1.16 | **FEATURE_COMPLETE (shipping)** |
+| **0.1.17** | **Trust, Privacy & Admin Beta** | Spec 0.1.16 | **RELEASED** |
 | **0.1.18** | **Connector Layer** | Spec 0.1.17 | **UNLOCKED** |
 | **0.1.19** | **Organization Graph Preview** | Spec 0.1.18 | **UNLOCKED** |
 | **0.1.20** | **Enterprise Pilot Readiness** | Spec 0.1.19 | **UNLOCKED** |

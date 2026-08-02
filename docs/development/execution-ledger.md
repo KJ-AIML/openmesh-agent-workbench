@@ -2789,3 +2789,11 @@ What changed:
 - Version 0.1.16 → 0.1.17; CHANGELOG
 Next: ship v0.1.17 then 0.1.18 Connector Layer.
 
+## 2026-08-03 — Dev Track 0.1.17 RELEASED (v0.1.17)
+
+Status: RELEASED
+Tag: `v0.1.17`
+Release: https://github.com/KJ-AIML/openmesh-agent-workbench/releases/tag/v0.1.17
+PR: https://github.com/KJ-AIML/openmesh-agent-workbench/pull/9
+Next recommended track: **0.1.18 Connector Layer** (unlocked).
+
