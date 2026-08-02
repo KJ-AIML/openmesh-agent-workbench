@@ -2846,3 +2846,10 @@ What changed:
 - Version 0.1.19 → 0.1.20
 Next: ship v0.1.20 then 0.1.21 RC Program.
 
+## 2026-08-03 — Dev Track 0.1.20 RELEASED (v0.1.20)
+
+Status: RELEASED
+Tag: `v0.1.20`
+Release: https://github.com/KJ-AIML/openmesh-agent-workbench/releases/tag/v0.1.20
+Next recommended track: **0.1.21 1.0 Release Candidate Program** (unlocked).
+

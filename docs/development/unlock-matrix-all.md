@@ -18,7 +18,7 @@ Package versions continue from shipped history (0.1.13 Desktop, 0.1.14 Ter×Yo).
 | **0.1.17** | **Trust, Privacy & Admin Beta** | Spec 0.1.16 | **RELEASED** |
 | **0.1.18** | **Connector Layer** | Spec 0.1.17 | **RELEASED** |
 | **0.1.19** | **Organization Graph Preview** | Spec 0.1.18 | **RELEASED** |
-| **0.1.20** | **Enterprise Pilot Readiness** | Spec 0.1.19 | **FEATURE_COMPLETE (shipping)** |
+| **0.1.20** | **Enterprise Pilot Readiness** | Spec 0.1.19 | **RELEASED** |
 | **0.1.21** | **1.0 Release Candidate Program** | Spec 0.1.20 | **UNLOCKED** |
 | **1.0.0** | **Real-Team Coordination Platform** | Spec 1.0.0 | **UNLOCKED (gate only; ship when RC program PASS)** |
 
