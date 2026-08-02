@@ -36,12 +36,25 @@ const {
   projectDocs,
   getRecentItemsForProject,
   addRecentItem,
+  createSprint,
 } = useStore();
 
 const recentItems = computed(() => getRecentItemsForProject(8));
 const topTasks = computed(() =>
   projectTasks.value.filter((t) => t.status !== "completed").slice(0, 4),
 );
+const startingHomeSprint = ref(false);
+
+async function handleQuickStartSprint() {
+  if (!currentProject.value || startingHomeSprint.value) return;
+  startingHomeSprint.value = true;
+  try {
+    await createSprint(`Sprint — ${currentProject.value.name}`);
+    router.push("/sprint");
+  } finally {
+    startingHomeSprint.value = false;
+  }
+}
 const topSessions = computed(() => projectSessions.value.slice(0, 4));
 
 const gitStatus = ref<GitStatus | null>(null);
@@ -495,20 +508,25 @@ async function launchAgent(tool: string) {
                 <ListTodo class="h-4 w-4 text-muted" />
               </div>
               <p class="text-[12px] font-medium" style="color: var(--foreground)">No sprint configured</p>
+              <p class="text-[11px] text-muted">Empty board — no mock tasks.</p>
               <button
-                @click="router.push('/sprint')"
+                type="button"
                 class="action-pill mx-auto"
+                :disabled="startingHomeSprint"
+                @click="handleQuickStartSprint"
               >
                 <Plus class="h-3 w-3" />
-                Set up sprint
+                {{ startingHomeSprint ? "Starting…" : "Start empty sprint" }}
               </button>
             </div>
             <div v-else class="space-y-1.5">
+              <p class="text-[11px] text-muted px-0.5 mb-1 truncate">{{ projectSprint.name }}</p>
               <div
                 v-for="task in topTasks"
                 :key="task.id"
-                class="flex items-center justify-between rounded-lg px-2.5 py-2 text-[12px]"
+                class="flex items-center justify-between rounded-lg px-2.5 py-2 text-[12px] cursor-pointer"
                 style="color: var(--foreground)"
+                @click="router.push('/sprint')"
               >
                 <span class="truncate flex-1">{{ task.title }}</span>
                 <span
@@ -522,7 +540,17 @@ async function launchAgent(tool: string) {
                 >
               </div>
               <div
-                v-if="topTasks.length === 0"
+                v-if="projectTasks.length === 0"
+                class="text-center py-3 space-y-2"
+              >
+                <p class="text-[11px] text-muted">Board is empty — add your first task.</p>
+                <button type="button" class="action-pill mx-auto" @click="router.push('/sprint')">
+                  <Plus class="h-3 w-3" />
+                  Open board
+                </button>
+              </div>
+              <div
+                v-else-if="topTasks.length === 0"
                 class="text-center py-3"
               >
                 <p class="text-[11px] text-muted">All tasks completed!</p>

@@ -159,6 +159,7 @@ pub mod authority_policy;
 pub mod handoff;
 pub mod mesh;
 pub mod online_proxy;
+pub mod team_cloud;
 pub mod pending_proxy_question;
 pub mod relay;
 pub mod return_digest;

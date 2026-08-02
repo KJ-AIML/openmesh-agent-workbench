@@ -16,6 +16,7 @@ import {
   generateSnapshotFilename,
   type SnapshotContext,
 } from "./lib/snapshot";
+import { isMacOS, resolveIsMacOS } from "./lib/adapters/environment";
 
 const route = useRoute();
 const router = useRouter();
@@ -36,13 +37,20 @@ const {
 
 const splashMinimumElapsed = ref(false);
 const showSplash = computed(() => isLoading.value || !splashMinimumElapsed.value);
+// Prefer value set in main.ts before mount (authoritative Rust OS).
+const macOS = ref(
+  (window as unknown as { __OPENMESH_IS_MACOS__?: boolean }).__OPENMESH_IS_MACOS__ ??
+    isMacOS(),
+);
 
-onMounted(() => {
+onMounted(async () => {
+  macOS.value = await resolveIsMacOS();
+  document.documentElement.dataset.platform = macOS.value ? "macos" : "other";
+  document.documentElement.classList.toggle("is-macos", macOS.value);
   window.setTimeout(() => {
     splashMinimumElapsed.value = true;
   }, 700);
 });
-
 // ─── Cached Git Status ───────────────────────────────────────────────
 const cachedGitStatus = ref<GitStatus | null>(null);
 
@@ -331,13 +339,15 @@ defineExpose({ openPalette });
 </script>
 
 <template>
+  <!--
+    macOS: full-height sidebar under traffic lights (one left layer).
+    Titlebar only on the main column — no floating strip over the rail.
+  -->
   <div
-    class="flex flex-col h-screen w-full overflow-hidden"
-    style="background: var(--background); color: var(--foreground)"
+    class="shell"
+    :class="{ 'shell--mac': macOS }"
+    style="color: var(--foreground)"
   >
-    <!-- Custom Titlebar -->
-    <Titlebar />
-
     <Transition name="startup-splash">
       <div v-if="showSplash" class="startup-splash">
         <div class="startup-splash-mark">
@@ -346,17 +356,16 @@ defineExpose({ openPalette });
       </div>
     </Transition>
 
-    <div class="flex flex-1 min-h-0">
-      <!-- Sidebar -->
+    <!-- Windows: titlebar still full-width on top -->
+    <Titlebar v-if="!macOS" />
+
+    <div class="shell__body">
       <Sidebar @open-palette="openPalette" />
 
-      <!-- Main Content -->
-      <div class="flex flex-1 flex-col min-w-0">
-        <!-- Breadcrumb header -->
-        <header
-          class="flex h-11 items-center px-5"
-          style="border-bottom: 1px solid var(--border)"
-        >
+      <div class="shell__main">
+        <Titlebar v-if="macOS" />
+
+        <header class="shell__crumb">
           <nav class="flex items-center gap-1.5 text-[12px]">
             <template v-for="(crumb, idx) in breadcrumb" :key="idx">
               <span
@@ -379,14 +388,12 @@ defineExpose({ openPalette });
           </nav>
         </header>
 
-        <!-- Main content area -->
-        <main class="flex-1 overflow-y-auto p-5 animate-fade-in">
+        <main class="shell__content animate-fade-in">
           <router-view />
         </main>
       </div>
     </div>
 
-    <!-- Command Palette -->
     <CommandPalette
       :key="paletteKey"
       :commands="commands"
@@ -398,6 +405,60 @@ defineExpose({ openPalette });
 </template>
 
 <style scoped>
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100%;
+  overflow: hidden;
+  background: var(--sidebar);
+}
+
+.shell__body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  background: var(--sidebar);
+}
+
+.shell__main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  background: var(--background);
+  /* Full-height seam only — top row is continuous with sidebar rail color via Titlebar */
+  border-left: 1px solid var(--border);
+}
+
+.shell--mac .shell__main {
+  /* titlebar paints --sidebar so top strip matches left rail */
+}
+
+.shell__crumb {
+  display: flex;
+  align-items: center;
+  height: 44px;
+  padding: 0 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--background);
+  flex-shrink: 0;
+}
+
+.shell__content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1.25rem;
+  background: var(--background);
+}
+
+/* macOS: sidebar is full window height; lights sit in its top-left */
+.shell--mac .shell__body {
+  /* body is the full remaining height; sidebar fills it */
+}
+
 .startup-splash {
   position: fixed;
   inset: 0;

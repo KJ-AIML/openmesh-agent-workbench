@@ -23,6 +23,8 @@ import {
 } from "lucide-vue-next";
 import { useRoute, useRouter } from "vue-router";
 import { useStore } from "../lib/useStore";
+import { isMacOS, resolveIsMacOS } from "../lib/adapters/environment";
+import { startWindowDrag } from "../lib/adapters/windowAdapter";
 
 const route = useRoute();
 const router = useRouter();
@@ -43,6 +45,18 @@ const emit = defineEmits<{
 
 const projectsExpanded = ref(true);
 const projectNames = ref<Record<string, string>>({});
+const macOS = ref(
+  (window as unknown as { __OPENMESH_IS_MACOS__?: boolean }).__OPENMESH_IS_MACOS__ ??
+    isMacOS(),
+);
+
+async function onMacTopDrag(e: MouseEvent) {
+  if (!macOS.value || e.button !== 0) return;
+  const t = e.target as HTMLElement | null;
+  if (t?.closest("a,button,input,textarea,select,[data-no-drag]")) return;
+  e.preventDefault();
+  await startWindowDrag();
+}
 
 async function loadProjectNames() {
   const names: Record<string, string> = {};
@@ -61,7 +75,10 @@ async function loadProjectNames() {
   projectNames.value = names;
 }
 
-onMounted(() => {
+onMounted(async () => {
+  macOS.value = await resolveIsMacOS();
+  document.documentElement.dataset.platform = macOS.value ? "macos" : "other";
+  document.documentElement.classList.toggle("is-macos", macOS.value);
   loadProjectNames();
 });
 
@@ -130,18 +147,31 @@ async function handleDeleteProject(projectPath: string) {
 
 <template>
   <aside
-    class="hidden md:flex flex-col h-full"
+    class="app-sidebar hidden md:flex flex-col h-full"
+    :class="{ 'app-sidebar--mac': macOS }"
     style="
       width: 260px;
       background: var(--sidebar);
       border-right: 1px solid var(--border);
     "
   >
-    <!-- Current Project Context -->
+    <!--
+      macOS: empty lights clearance only — project name lives in the main nav bar.
+    -->
     <div
-      v-if="currentProject"
-      class="px-3 py-2.5"
+      v-if="macOS"
+      class="sidebar-mac-top"
+      data-tauri-drag-region
+      @mousedown="onMacTopDrag"
+      aria-hidden="true"
+    />
+
+    <!-- Windows: project block under caption bar -->
+    <div
+      v-if="!macOS && currentProject"
+      class="px-3 py-2.5 sidebar-project"
       style="border-bottom: 1px solid var(--border)"
+      data-no-drag
     >
       <div class="flex items-center gap-2 mb-1.5">
         <div class="h-1.5 w-1.5 rounded-full" style="background: var(--accent-green)"></div>
@@ -316,6 +346,7 @@ async function handleDeleteProject(projectPath: string) {
     <div
       class="px-2 py-2"
       style="border-top: 1px solid var(--border)"
+      data-no-drag
     >
       <router-link
         to="/settings"
@@ -328,3 +359,24 @@ async function handleDeleteProject(projectPath: string) {
     </div>
   </aside>
 </template>
+
+<style scoped>
+/*
+  Same height as main titlebar (--chrome-top).
+  Content starts after traffic-light cluster — fills the dead gap.
+*/
+/* Match main titlebar height; empty under lights (project is in nav bar). */
+.sidebar-mac-top {
+  height: var(--chrome-top, 44px);
+  min-height: var(--chrome-top, 44px);
+  flex-shrink: 0;
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--sidebar);
+  border-bottom: 1px solid var(--border);
+}
+
+.app-sidebar--mac {
+  background: var(--sidebar);
+}
+</style>

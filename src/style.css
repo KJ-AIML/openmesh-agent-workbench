@@ -54,6 +54,15 @@
   --accent-red: #ef4444;
   --accent-purple: #a855f7;
   --accent-yellow: #eab308;
+
+  /* Shared chrome height: sidebar top row + main titlebar (must match) */
+  --chrome-top: 44px;
+}
+
+/* Force continuous left rail under traffic lights */
+html.is-macos,
+html[data-platform="macos"] {
+  --chrome-top: 44px;
 }
 
 @layer base {

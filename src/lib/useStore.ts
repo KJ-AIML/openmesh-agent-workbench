@@ -272,20 +272,31 @@ async function saveSettings(updates: Partial<Settings>) {
 }
 
 // --- Sprint actions ---
-async function createMockSprint(name: string) {
+/** Create a real empty sprint (no seeded/mock tasks). User adds their own. */
+async function createSprint(name?: string) {
 	if (!currentProject.value || !currentProjectPath.value) return;
+	const now = new Date().toISOString();
 	const sprint: Sprint = {
 		id: crypto.randomUUID(),
 		projectId: currentProject.value.id,
-		name,
+		name: name?.trim() || "Sprint 1",
 		status: "active",
-		source: "mock",
-		createdAt: new Date().toISOString(),
-		updatedAt: new Date().toISOString(),
+		// Local OpenMesh-owned board (not a third-party connector)
+		source: "local",
+		createdAt: now,
+		updatedAt: now,
 	};
 	await store.saveSprint(currentProjectPath.value, sprint);
+	// New sprint starts with an empty board — clear prior board tasks.
+	tasks.value = [];
+	await store.saveTasks(currentProjectPath.value, tasks.value);
 	sprints.value = [sprint];
 	return sprint;
+}
+
+/** @deprecated use createSprint — no longer seeds fake cards */
+async function createMockSprint(name?: string) {
+	return createSprint(name);
 }
 
 // --- Task actions ---
@@ -296,6 +307,49 @@ async function updateTask(id: string, updates: Partial<Task>) {
 		tasks.value[idx] = { ...tasks.value[idx], ...updates, updatedAt: new Date().toISOString() };
 		await store.saveTasks(currentProjectPath.value, tasks.value);
 	}
+}
+
+async function createTask(
+	input: Pick<Task, "title"> & Partial<Omit<Task, "id" | "createdAt" | "updatedAt" | "projectId" | "sprintId">>,
+) {
+	if (!currentProject.value || !currentProjectPath.value || !projectSprint.value) return null;
+	const now = new Date().toISOString();
+	const task: Task = {
+		id: crypto.randomUUID(),
+		sprintId: projectSprint.value.id,
+		projectId: currentProject.value.id,
+		title: input.title.trim(),
+		description: input.description,
+		status: input.status ?? "pending",
+		priority: input.priority ?? "P2",
+		owner: input.owner,
+		nextAction: input.nextAction,
+		notes: input.notes,
+		linkedDocIds: input.linkedDocIds ?? [],
+		linkedSessionIds: input.linkedSessionIds ?? [],
+		createdAt: now,
+		updatedAt: now,
+	};
+	tasks.value = [task, ...tasks.value];
+	await store.saveTasks(currentProjectPath.value, tasks.value);
+	return task;
+}
+
+async function deleteTask(id: string) {
+	if (!currentProjectPath.value) return;
+	tasks.value = tasks.value.filter((t) => t.id !== id);
+	await store.saveTasks(currentProjectPath.value, tasks.value);
+}
+
+async function updateSprint(updates: Partial<Sprint>) {
+	if (!currentProjectPath.value || !projectSprint.value) return;
+	const next = {
+		...projectSprint.value,
+		...updates,
+		updatedAt: new Date().toISOString(),
+	};
+	await store.saveSprint(currentProjectPath.value, next);
+	sprints.value = [next];
 }
 
 // --- Recent items ---
@@ -506,8 +560,12 @@ export function useStore() {
 		updateProject,
 		deleteProject,
 		saveSettings,
+		createSprint,
 		createMockSprint,
 		updateTask,
+		createTask,
+		deleteTask,
+		updateSprint,
 		addRecentItem,
 		deleteAgentSession,
 		updateAgentSession,

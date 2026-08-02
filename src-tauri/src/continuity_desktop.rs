@@ -24,6 +24,9 @@ use openmesh_core::profile::read_work_proxy_profile;
 use openmesh_core::relay::audit::list_audit_events;
 use openmesh_core::relay::RelayAuditEvent;
 use openmesh_core::team::{list_team_members, read_team_workspace, TeamMember, TeamWorkspace};
+use openmesh_core::team_cloud::{
+    build_sync_scaffold, read_team_cloud, TeamCloudConfig, TeamCloudSyncPlan,
+};
 use openmesh_core::return_digest::{
     build_pending_questions_view, build_return_digest, PendingQuestionsView, ReturnDigest,
 };
@@ -255,6 +258,22 @@ pub fn team_workspace_status(project_path: String) -> Result<Option<TeamWorkspac
 #[tauri::command]
 pub fn team_list_members(project_path: String) -> Result<Vec<TeamMember>, String> {
     list_team_members(&project_path).map_err(|e| e.to_string())
+}
+
+/// Team Cloud Beta (0.1.16) — None when not initialized.
+#[tauri::command]
+pub fn team_cloud_status(project_path: String) -> Result<Option<TeamCloudConfig>, String> {
+    match read_team_cloud(&project_path) {
+        Ok(cfg) => Ok(Some(cfg)),
+        Err(openmesh_core::team_cloud::TeamCloudStorageError::Missing) => Ok(None),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// Dry-run selective sync scaffold (no network upload).
+#[tauri::command]
+pub fn team_cloud_sync_scaffold(project_path: String) -> Result<TeamCloudSyncPlan, String> {
+    build_sync_scaffold(&project_path).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
