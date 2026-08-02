@@ -1,6 +1,6 @@
 # OpenMesh 0.1.13 — Desktop Continuity Surfaces
 
-**Status:** FEATURE_COMPLETE_LOCAL  
+**Status:** RELEASED  
 **Depends on:** 0.1.12 RELEASED  
 **Branch:** `feat/openmesh-0.1.13-desktop-continuity`  
 **Gate:** Desktop (Tauri) surfaces 0.1.9–0.1.12 CLI continuity capabilities as **read-first** peers over `openmesh-core` (not a CLI subprocess).
@@ -32,4 +32,4 @@
 - [x] Tauri commands + UI
 - [x] Tests green
 - [x] Version 0.1.13 + CHANGELOG + ledger
-- [ ] PR merge + tag `v0.1.13` + release assets
+- [x] PR merge + tag `v0.1.13` + release assets

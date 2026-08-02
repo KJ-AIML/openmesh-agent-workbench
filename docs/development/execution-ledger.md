@@ -2692,3 +2692,11 @@ Commands run:
 - `cargo test --workspace` — exit 0 (macOS; DEVELOPER_DIR=CommandLineTools)
 Next: push/PR/tag/release when authorized.
 
+## 2026-08-02 — Dev Track 0.1.13 RELEASED (v0.1.13)
+
+Status: RELEASED
+Tag: `v0.1.13`
+Release: https://github.com/KJ-AIML/openmesh-agent-workbench/releases/tag/v0.1.13
+PR: https://github.com/KJ-AIML/openmesh-agent-workbench/pull/5
+Next recommended track: Dev Spec domain **Two-Person Mesh Beta (Ter × Yo)** or further Desktop UX polish as authorized.
+
