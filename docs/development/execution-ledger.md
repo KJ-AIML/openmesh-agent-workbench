@@ -2441,3 +2441,27 @@ Known limitations:
 - Full `cargo test --workspace` not required for local feature-complete claim if scoped tests green; broader gate recommended before release.
 Next recommended track: human review → full workspace test → local tag/release 0.1.9; then 0.1.10 unlock when authorized.
 
+## 2026-08-02 — Dev Track 0.1.9 RELEASED (v0.1.9)
+
+Status: RELEASED
+Branch: main @ `81a3f14` (merge PR #1)
+Tag: `v0.1.9`
+Release: https://github.com/KJ-AIML/openmesh-agent-workbench/releases/tag/v0.1.9
+Objective: Publish Pending Questions & Return Digest as OpenMesh 0.1.9 with macOS CLI artifact.
+What changed:
+- Merged PR #1 (feat/openmesh-0.1.9) into main.
+- Annotated tag v0.1.9; GitHub release with macOS aarch64 CLI + checksums.
+- CLI dogfood: pending open_count=2; digest protocol 1.0 with needsMe=2.
+Commands run:
+- `cargo test --workspace` — exit 0 (macOS)
+- `cargo build --release -p openmesh-cli` — exit 0
+- `git push origin feat/openmesh-0.1.9`; PR #1 merge; `git push origin v0.1.9`; `gh release create v0.1.9`
+Exact results:
+- openmesh-cli 0.1.9; asset openmesh-cli-0.1.9-macos-aarch64
+Manual QA actually performed: CLI dogfood on temp project (pending + digest).
+Architecture decisions: multi-platform test gate; Desktop UI still deferred; Windows installers deferred to Windows rebuild host.
+Known limitations:
+- No Windows NSIS/MSI in this release asset set (macOS CLI only).
+- No Desktop UI for pending/digest.
+Next recommended track: unlock **0.1.10 Two-Person Mesh — Local Prototype** when authorized.
+
