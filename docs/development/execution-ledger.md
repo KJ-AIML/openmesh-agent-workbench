@@ -2700,3 +2700,17 @@ Release: https://github.com/KJ-AIML/openmesh-agent-workbench/releases/tag/v0.1.1
 PR: https://github.com/KJ-AIML/openmesh-agent-workbench/pull/5
 Next recommended track: Dev Spec domain **Two-Person Mesh Beta (Ter × Yo)** or further Desktop UX polish as authorized.
 
+## 2026-08-02 — Dev Track 0.1.14 FEATURE + RELEASE path (Ter × Yo Mesh Beta)
+
+Status: FEATURE_COMPLETE_LOCAL
+Branch: feat/openmesh-0.1.14-ter-yo-mesh-beta
+Objective: Canonical "ask teammate Work Proxy while offline" with read-only remote query + freshness.
+What changed:
+- `mesh::query` + CLI `mesh query` + Desktop mesh_query_peer
+- Tests: mesh_query_ter_yo (3)
+- Full dogfood: mesh/relay/online-proxy green with profiles; mesh query proves Ter×Yo
+Commands run:
+- cargo test mesh_query_ter_yo — 3 passed
+- cargo test --workspace + npm verify (pre-ship)
+Next: tag v0.1.14 when authorized.
+

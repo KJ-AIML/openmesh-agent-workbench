@@ -5,6 +5,29 @@ All notable changes to OpenMesh are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.14] - 2026-08-02
+
+### Added
+
+- **Two-Person Mesh Beta (Ter × Yo Proof)**: ask a teammate's offline Work Proxy from imported mesh evidence
+- **CLI** `mesh query --peer <id|label> --question "..."` (read-only by default)
+- **Core** `openmesh_core::mesh::query` with mandatory freshness + attribution
+- **Desktop** Continuity → Mesh tab: Query peer (Tauri `mesh_query_peer`)
+- Storage: `.openmesh/mesh/queries/`
+
+### Security / Privacy
+
+- Remote peer query is **always read-only** (`readOnly: true`)
+- Foreign evidence is **not** auto-merged into the local WorkEvent ledger
+- Freshness refusal for Standard/Critical when peer envelopes are stale or missing
+- Answers attribute evidence to the peer label
+
+### Technical Details
+
+- Module: `crates/openmesh-core/src/mesh/query.rs`
+- E2E: `crates/openmesh-cli/tests/mesh_query_ter_yo.rs`
+- Builds on 0.1.10 mesh, 0.1.11 relay, 0.1.12 online-proxy, 0.1.13 Desktop Continuity
+
 ## [0.1.13] - 2026-08-02
 
 ### Added

@@ -1475,6 +1475,7 @@ pub fn run() {
             continuity_desktop::continuity_hub_summary,
             continuity_desktop::mesh_list_peers,
             continuity_desktop::mesh_list_envelopes,
+            continuity_desktop::mesh_query_peer,
             continuity_desktop::relay_list_audit,
             continuity_desktop::online_proxy_status,
             continuity_desktop::online_proxy_init,

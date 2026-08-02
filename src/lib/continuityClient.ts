@@ -172,6 +172,49 @@ export async function listMeshEnvelopes(
   });
 }
 
+export interface MeshRemoteQueryAnswer {
+  protocolVersion: string;
+  queryId: string;
+  peerId: string;
+  peerLabel: string;
+  question: string;
+  answerText: string;
+  generatedAt: string;
+  readOnly: boolean;
+  freshness: {
+    statement: string;
+    evaluatedAt: string;
+    tier: string;
+    isSufficient: boolean;
+    confidenceLabel: string;
+    oldestEvidenceAgeSeconds: number;
+    staleWarnings: string[];
+    evidenceSourceIds: string[];
+  };
+  refused: boolean;
+  envelopeIds: string[];
+  evidenceSummaries: string[];
+  limitations: string[];
+}
+
+export async function queryMeshPeer(
+  projectPath: string,
+  peer: string,
+  question: string,
+  opts?: { tier?: string; queryId?: string; includeRelayReceived?: boolean },
+): Promise<MeshRemoteQueryAnswer> {
+  return invoke<MeshRemoteQueryAnswer>("mesh_query_peer", {
+    projectPath,
+    request: {
+      peer,
+      question,
+      tier: opts?.tier,
+      queryId: opts?.queryId,
+      includeRelayReceived: opts?.includeRelayReceived,
+    },
+  });
+}
+
 export async function listRelayAudit(
   projectPath: string,
 ): Promise<RelayAuditEvent[]> {

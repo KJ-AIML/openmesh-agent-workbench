@@ -12,6 +12,9 @@ use openmesh_core::continuity::{
 };
 use openmesh_core::domain::{CatchUpWindow, CurrentStateProjection};
 use openmesh_core::mesh::peers::{list_peers, MeshPeerRecord};
+use openmesh_core::mesh::query::{
+    query_remote_peer_proxy, MeshRemoteQueryAnswer, MeshRemoteQueryRequest,
+};
 use openmesh_core::mesh::view::{list_envelope_summaries, MeshEnvelopeSummary, MeshMailbox};
 use openmesh_core::online_proxy::{
     ask_online_proxy, read_config, write_config, OnlineProxyAnswer, OnlineProxyAskRequest,
@@ -187,6 +190,44 @@ pub fn online_proxy_ask(
         freshness_tier: Some(tier),
     };
     ask_online_proxy(&project_path, &cfg, &pack, &req, true).map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MeshQueryUiRequest {
+    pub peer: String,
+    pub question: String,
+    pub tier: Option<String>,
+    pub query_id: Option<String>,
+    pub include_relay_received: Option<bool>,
+}
+
+/// Ask a teammate's offline Work Proxy (read-only; 0.1.14 Ter×Yo).
+#[tauri::command]
+pub fn mesh_query_peer(
+    project_path: String,
+    request: MeshQueryUiRequest,
+) -> Result<MeshRemoteQueryAnswer, String> {
+    let now = Utc::now();
+    let tier = match request.tier.as_deref() {
+        None | Some("standard") | Some("Standard") => FreshnessTier::Standard,
+        Some("low-impact") | Some("LowImpact") => FreshnessTier::LowImpact,
+        Some("critical") | Some("Critical") => FreshnessTier::Critical,
+        Some(other) => return Err(format!("unknown tier: {other}")),
+    };
+    let query_id = request
+        .query_id
+        .clone()
+        .unwrap_or_else(|| format!("mq-{}", now.format("%Y%m%dT%H%M%SZ")));
+    let req = MeshRemoteQueryRequest {
+        peer: request.peer,
+        question: request.question,
+        query_id,
+        now,
+        freshness_tier: tier,
+        include_relay_received: request.include_relay_received.unwrap_or(true),
+    };
+    query_remote_peer_proxy(&project_path, &req, true).map_err(|e| e.to_string())
 }
 
 /// Lightweight hub summary for the Continuity page header.

@@ -4,14 +4,16 @@
 
 use chrono::{Duration, Utc};
 use clap::{Args, Subcommand, ValueEnum};
+use openmesh_core::authority_policy::FreshnessTier;
 use openmesh_core::continuity::load_continuity_input_snapshot;
 use openmesh_core::domain::CatchUpWindow;
 use openmesh_core::mesh::{
     add_peer, export_mesh_envelope_to_outbox, import_mesh_envelope_from_file,
-    list_envelope_summaries, list_peers, peer_id_from_label, read_peer, show_envelope,
-    to_peer_from_registry, BuildMeshExportRequest, ImportMeshOptions, MeshExportError,
-    MeshImportError, MeshMailbox, MeshPeerError, MeshPeerRecord, MeshPeerRef, MeshSensitivityMax,
-    MeshViewError, MESH_PEER_RECORD_PROTOCOL_VERSION,
+    list_envelope_summaries, list_peers, peer_id_from_label, query_remote_peer_proxy, read_peer,
+    show_envelope, to_peer_from_registry, BuildMeshExportRequest, ImportMeshOptions,
+    MeshExportError, MeshImportError, MeshMailbox, MeshPeerError, MeshPeerRecord, MeshPeerRef,
+    MeshQueryError, MeshRemoteQueryRequest, MeshSensitivityMax, MeshViewError,
+    MESH_PEER_RECORD_PROTOCOL_VERSION,
 };
 use openmesh_core::profile::{profile_exists, read_work_proxy_profile};
 use openmesh_core::storage::read_project;
@@ -36,6 +38,8 @@ pub enum MeshCommand {
     List(MeshListArgs),
     /// Show one mesh envelope with attributed evidence (Checkpoint E).
     Show(MeshShowArgs),
+    /// Ask a teammate's offline Work Proxy (read-only; Dev Track 0.1.14 Ter×Yo).
+    Query(MeshQueryArgs),
 }
 
 #[derive(Subcommand, Debug)]
@@ -217,6 +221,51 @@ pub struct MeshShowArgs {
     pub json: bool,
 }
 
+#[derive(Clone, Copy, Debug, Default, ValueEnum)]
+pub enum MeshQueryTierArg {
+    LowImpact,
+    #[default]
+    Standard,
+    Critical,
+}
+
+impl From<MeshQueryTierArg> for FreshnessTier {
+    fn from(v: MeshQueryTierArg) -> Self {
+        match v {
+            MeshQueryTierArg::LowImpact => FreshnessTier::LowImpact,
+            MeshQueryTierArg::Standard => FreshnessTier::Standard,
+            MeshQueryTierArg::Critical => FreshnessTier::Critical,
+        }
+    }
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct MeshQueryArgs {
+    /// Peer id or label (registered locally).
+    #[arg(long)]
+    pub peer: String,
+
+    /// Question for the offline peer Work Proxy.
+    #[arg(long)]
+    pub question: String,
+
+    #[arg(long, value_enum, default_value_t = MeshQueryTierArg::Standard)]
+    pub tier: MeshQueryTierArg,
+
+    #[arg(long = "query-id")]
+    pub query_id: Option<String>,
+
+    /// Skip scanning relay-received packages (inbox only).
+    #[arg(long = "no-relay")]
+    pub no_relay: bool,
+
+    #[arg(long)]
+    pub project: Option<String>,
+
+    #[arg(long)]
+    pub json: bool,
+}
+
 pub fn run_mesh(command: MeshCommand, cwd: &Path) -> i32 {
     match command {
         MeshCommand::Peer(peer) => match peer {
@@ -228,7 +277,67 @@ pub fn run_mesh(command: MeshCommand, cwd: &Path) -> i32 {
         MeshCommand::Import(args) => run_import(&args, cwd),
         MeshCommand::List(args) => run_list(&args, cwd),
         MeshCommand::Show(args) => run_show(&args, cwd),
+        MeshCommand::Query(args) => run_query(&args, cwd),
     }
+}
+
+fn run_query(args: &MeshQueryArgs, cwd: &Path) -> i32 {
+    let resolved = match resolve_project(args.project.as_deref(), cwd) {
+        Ok(r) => r,
+        Err(err) => return output::print_project_resolution_error(&err.describe(), args.json),
+    };
+    let project_path = resolved.path.to_string_lossy().to_string();
+    let now = Utc::now();
+    let query_id = args
+        .query_id
+        .clone()
+        .unwrap_or_else(|| format!("mq-{}", now.format("%Y%m%dT%H%M%SZ")));
+    let req = MeshRemoteQueryRequest {
+        peer: args.peer.clone(),
+        question: args.question.clone(),
+        query_id,
+        now,
+        freshness_tier: args.tier.into(),
+        include_relay_received: !args.no_relay,
+    };
+    match query_remote_peer_proxy(&project_path, &req, true) {
+        Ok(ans) => {
+            if args.json {
+                println!("{}", serde_json::to_value(&ans).unwrap_or(json!({})));
+            } else {
+                println!("query_id={}", ans.query_id);
+                println!("peer={} ({})", ans.peer_label, ans.peer_id);
+                println!("read_only={}", ans.read_only);
+                println!("refused={}", ans.refused);
+                println!("freshness={}", ans.freshness.statement);
+                println!("envelopes={}", ans.envelope_ids.join(","));
+                println!("---");
+                println!("{}", ans.answer_text);
+            }
+            0
+        }
+        Err(err) => print_mesh_query_error(&err, args.json),
+    }
+}
+
+fn print_mesh_query_error(err: &MeshQueryError, json_mode: bool) -> i32 {
+    let (category, message) = match err {
+        MeshQueryError::ProjectNotInitialized => ("project", err.to_string()),
+        MeshQueryError::PeerNotFound(_) => ("peer", err.to_string()),
+        MeshQueryError::EmptyQuestion => ("validation", err.to_string()),
+        MeshQueryError::Validation(_) => ("validation", err.to_string()),
+        MeshQueryError::Io => ("io", err.to_string()),
+        MeshQueryError::Peer(_) => ("peer", err.to_string()),
+    };
+    if json_mode {
+        println!(
+            "{}",
+            json!({"status":"error","category":category,"message":message})
+        );
+    } else {
+        eprintln!("ERROR {category}: {message}");
+    }
+    3
 }
 
 fn run_peer_add(args: &MeshPeerAddArgs, cwd: &Path) -> i32 {
