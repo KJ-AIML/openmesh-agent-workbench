@@ -5,6 +5,7 @@ import * as terminalAdapter from "../lib/adapters/terminalAdapter";
 import * as gitAdapter from "../lib/adapters/gitAdapter";
 import { RefreshCw, Terminal, Play, Copy, Trash2, Plus, GitBranch, FolderOpen } from "lucide-vue-next";
 import type { GitStatus } from "../lib/adapters/types";
+import AgentToolIcon from "../components/AgentToolIcon.vue";
 
 const {
   currentProject,
@@ -326,7 +327,8 @@ function copyCommand(cmd: string) {
           >
         </div>
         <div class="text-[13px] space-y-2 mb-5 text-muted">
-          <p>
+          <p class="flex items-center gap-1.5">
+            <AgentToolIcon tool="codex" :size="14" />
             Codex:
             <span
               :style="{
@@ -337,7 +339,8 @@ function copyCommand(cmd: string) {
               >{{ settings.agentClis?.codexPath || "Not configured" }}</span
             >
           </p>
-          <p>
+          <p class="flex items-center gap-1.5">
+            <AgentToolIcon tool="claude" :size="14" />
             Claude Code:
             <span
               :style="{
@@ -348,7 +351,8 @@ function copyCommand(cmd: string) {
               >{{ settings.agentClis?.claudeCodePath || "Not configured" }}</span
             >
           </p>
-          <p>
+          <p class="flex items-center gap-1.5">
+            <AgentToolIcon tool="opencode" :size="14" />
             OpenCode:
             <span
               :style="{
@@ -364,22 +368,25 @@ function copyCommand(cmd: string) {
           <button
             @click="handleLaunchAgent('codex')"
             :disabled="!settings.agentClis?.codexPath"
-            class="btn-secondary disabled:opacity-30"
+            class="btn-secondary inline-flex items-center gap-1.5 disabled:opacity-30"
           >
+            <AgentToolIcon tool="codex" :size="14" />
             Open Codex
           </button>
           <button
             @click="handleLaunchAgent('claude')"
             :disabled="!settings.agentClis?.claudeCodePath"
-            class="btn-secondary disabled:opacity-30"
+            class="btn-secondary inline-flex items-center gap-1.5 disabled:opacity-30"
           >
+            <AgentToolIcon tool="claude" :size="14" />
             Open Claude Code
           </button>
           <button
             @click="handleLaunchAgent('opencode')"
             :disabled="!settings.agentClis?.opencodePath"
-            class="btn-secondary disabled:opacity-30"
+            class="btn-secondary inline-flex items-center gap-1.5 disabled:opacity-30"
           >
+            <AgentToolIcon tool="opencode" :size="14" />
             Open OpenCode
           </button>
         </div>

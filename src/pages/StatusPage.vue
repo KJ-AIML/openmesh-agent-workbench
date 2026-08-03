@@ -43,12 +43,18 @@ const checks = computed(() => [
         settings.value.sessionDirs?.codexDir,
         settings.value.sessionDirs?.claudeCodeDir,
         settings.value.sessionDirs?.opencodeDir,
+        settings.value.sessionDirs?.cursorDir,
+        settings.value.sessionDirs?.geminiDir,
+        settings.value.sessionDirs?.grokDir,
       ]
         .filter(Boolean).length + " configured",
     ok: !!(
       settings.value.sessionDirs?.codexDir ||
       settings.value.sessionDirs?.claudeCodeDir ||
-      settings.value.sessionDirs?.opencodeDir
+      settings.value.sessionDirs?.opencodeDir ||
+      settings.value.sessionDirs?.cursorDir ||
+      settings.value.sessionDirs?.geminiDir ||
+      settings.value.sessionDirs?.grokDir
     ),
   },
   {

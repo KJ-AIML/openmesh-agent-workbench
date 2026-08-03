@@ -146,6 +146,44 @@ pub fn read_received_package(
     Ok(pkg)
 }
 
+/// Quarantine an already-decoded package into `relay/received/` (LAN / alternate transports).
+pub fn receive_package_payload(
+    project_path: &str,
+    pkg: &RelayPackage,
+    received_at: &str,
+    actor_label: Option<&str>,
+    source_detail: &str,
+) -> Result<RelayPackage, RelayTransportError> {
+    let _ = load_project(project_path)?;
+    validate_relay_package(pkg).map_err(|e| RelayTransportError::Validation(e.to_string()))?;
+    validate_package_id_for_storage(&pkg.package_id)
+        .map_err(|e| RelayTransportError::Validation(e.to_string()))?;
+
+    fs::create_dir_all(received_dir(project_path)).map_err(|_| RelayTransportError::Io)?;
+    let dest = received_dir(project_path).join(format!("{}.json", pkg.package_id));
+    if dest.exists() {
+        return Err(RelayTransportError::AlreadyExists);
+    }
+    write_json_atomic(&dest, pkg)?;
+
+    let detail = if source_detail.len() > 480 {
+        format!("{}…", &source_detail[..480])
+    } else {
+        source_detail.to_string()
+    };
+    let audit = make_audit_event(
+        format!("audit-received-{}", pkg.package_id),
+        &pkg.package_id,
+        RelayAuditKind::Received,
+        received_at,
+        detail,
+        actor_label.map(str::to_string),
+        Some(pkg.sensitivity_max),
+    );
+    append_audit_event(project_path, &audit)?;
+    Ok(pkg.clone())
+}
+
 fn load_project(project_path: &str) -> Result<Project, RelayTransportError> {
     read_project::<Project>(project_path, "project.json")
         .ok_or(RelayTransportError::ProjectNotInitialized)

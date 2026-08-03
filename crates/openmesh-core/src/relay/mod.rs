@@ -24,6 +24,6 @@ pub use package::{
     write_staging_package, BuildRelayPackRequest, RelayPackageError,
 };
 pub use transport::{
-    read_received_package, receive_package_from_relay_root, relay_root_drop_dir, received_dir,
-    send_package_to_relay_root, sent_dir, RelayTransportError,
+    read_received_package, receive_package_from_relay_root, receive_package_payload,
+    relay_root_drop_dir, received_dir, send_package_to_relay_root, sent_dir, RelayTransportError,
 };

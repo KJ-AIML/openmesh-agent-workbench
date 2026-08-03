@@ -1,9 +1,14 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
 import { useStore } from "../lib/useStore";
-import * as agentSessionAdapter from "../lib/adapters/agentSessionAdapter";
 import type { ScannedSession } from "../lib/adapters/types";
+import { scanConfiguredSessions } from "../lib/scanConfiguredSessions";
 import { Bot, Scan, Star, Trash2, FolderOpen } from "lucide-vue-next";
+import AgentToolIcon from "../components/AgentToolIcon.vue";
+import {
+  AGENT_TOOL_FILTERS,
+  agentToolLabel,
+} from "../lib/agentToolIcons";
 
 const {
   currentProject,
@@ -21,19 +26,27 @@ const scannedSessions = ref<ScannedSession[]>([]);
 const isScanning = ref(false);
 const lastScanTime = ref<string | null>(null);
 const starredScanIds = ref<Set<string>>(new Set());
+const scanError = ref<string | null>(null);
 
 /** Saved project sessions. Prefer scanned disk sessions in the list order. */
+function toolMatches(filter: string, tool: string): boolean {
+  if (filter === "all") return true;
+  if (filter === "claude") return tool === "claude" || tool === "claude-code";
+  if (filter === "gemini") return tool === "gemini" || tool === "gemini-cli";
+  return tool === filter;
+}
+
 const filteredSessions = computed(() => {
   let sessions = projectSessions.value;
   if (toolFilter.value !== "all")
-    sessions = sessions.filter((s) => s.tool === toolFilter.value);
+    sessions = sessions.filter((s) => toolMatches(toolFilter.value, s.tool));
   return sessions;
 });
 
 const filteredScannedSessions = computed(() => {
   let sessions = scannedSessions.value;
   if (toolFilter.value !== "all")
-    sessions = sessions.filter((s) => s.toolName === toolFilter.value);
+    sessions = sessions.filter((s) => toolMatches(toolFilter.value, s.toolName));
   return sessions;
 });
 
@@ -52,18 +65,6 @@ const selectedScannedSession = computed(() =>
 const availableTasks = computed(() =>
   projectTasks.value.filter((t) => t.status !== "completed"),
 );
-
-function toolIcon(tool: string): string {
-  const map: Record<string, string> = {
-    codex: "⚡",
-    claude: "",
-    "claude-code": "",
-    opencode: "🔵",
-    cursor: "🖱️",
-    "gemini-cli": "💎",
-  };
-  return map[tool] ?? "";
-}
 
 function selectSession(id: string) {
   selectedSessionId.value = selectedSessionId.value === id ? null : id;
@@ -91,53 +92,21 @@ function selectScannedSession(id: string) {
 }
 
 async function handleScanSessions() {
-  if (!settings.value.sessionDirs) return;
+  const workspaceCwd = currentProject.value?.folderPath;
+  if (!workspaceCwd) {
+    scanError.value = "Open a project first — sessions are scoped to that folder.";
+    return;
+  }
 
   isScanning.value = true;
-  const allScanned: ScannedSession[] = [];
+  scanError.value = null;
 
   try {
-    if (
-      settings.value.sessionDirs.codexEnabled &&
-      settings.value.sessionDirs.codexDir
-    ) {
-      const result = await agentSessionAdapter.scanAgentSessionDirectory(
-        "codex",
-        settings.value.sessionDirs.codexDir,
-        100,
-      );
-      if (result.success && result.data) {
-        allScanned.push(...result.data);
-      }
-    }
-
-    if (
-      settings.value.sessionDirs.claudeCodeEnabled &&
-      settings.value.sessionDirs.claudeCodeDir
-    ) {
-      const result = await agentSessionAdapter.scanAgentSessionDirectory(
-        "claude-code",
-        settings.value.sessionDirs.claudeCodeDir,
-        100,
-      );
-      if (result.success && result.data) {
-        allScanned.push(...result.data);
-      }
-    }
-
-    if (
-      settings.value.sessionDirs.opencodeEnabled &&
-      settings.value.sessionDirs.opencodeDir
-    ) {
-      const result = await agentSessionAdapter.scanAgentSessionDirectory(
-        "opencode",
-        settings.value.sessionDirs.opencodeDir,
-        100,
-      );
-      if (result.success && result.data) {
-        allScanned.push(...result.data);
-      }
-    }
+    const allScanned = await scanConfiguredSessions(
+      settings.value.sessionDirs,
+      100,
+      workspaceCwd,
+    );
 
     scannedSessions.value = allScanned;
     lastScanTime.value = new Date().toISOString();
@@ -145,16 +114,32 @@ async function handleScanSessions() {
     if (allScanned.length > 0) {
       addRecentItem({
         type: "agent_session",
-        title: `Scanned ${allScanned.length} sessions`,
-        sourcePath: "scan",
+        title: `Scanned ${allScanned.length} sessions for ${currentProject.value?.name || "project"}`,
+        sourcePath: workspaceCwd,
+        projectId: currentProject.value?.id,
       });
     }
   } catch (error) {
     console.error("Scan failed:", error);
+    scanError.value = error instanceof Error ? error.message : "Scan failed";
   } finally {
     isScanning.value = false;
   }
 }
+
+// Auto-scan when the open project changes — show that workspace's agent sessions.
+watch(
+  () => currentProject.value?.folderPath,
+  (folderPath) => {
+    if (folderPath) {
+      void handleScanSessions();
+    } else {
+      scannedSessions.value = [];
+      lastScanTime.value = null;
+    }
+  },
+  { immediate: true },
+);
 
 function handleDelete(id: string) {
   if (
@@ -214,37 +199,44 @@ function formatBytes(bytes: number): string {
       <div>
         <h1 class="text-title">Agent Sessions</h1>
         <p class="text-body text-muted mt-1">
-          AI tool session index.
+          {{
+            currentProject
+              ? `Sessions from Codex, Claude, Cursor, OpenCode, Gemini, and Grok under ${currentProject.folderPath}`
+              : "Open a project to see agent sessions for that workspace."
+          }}
         </p>
       </div>
       <button
         @click="handleScanSessions"
-        :disabled="isScanning"
+        :disabled="isScanning || !currentProject"
         class="btn-primary flex items-center gap-2 disabled:opacity-50"
       >
         <Scan class="h-4 w-4" />
-        {{ isScanning ? "Scanning..." : "Scan Sessions" }}
+        {{ isScanning ? "Scanning..." : "Refresh" }}
       </button>
     </div>
 
     <div v-if="lastScanTime" class="text-[12px] text-muted">
       Last scan: {{ timeAgo(lastScanTime) }}
+      <span v-if="currentProject"> · scoped to this project</span>
     </div>
+    <p v-if="scanError" class="text-[12px]" style="color: #ef4444">{{ scanError }}</p>
 
     <!-- Filters -->
-    <div class="flex gap-1.5">
+    <div class="flex gap-1.5 flex-wrap">
       <button
-        v-for="f in ['all', 'codex', 'claude-code', 'opencode']"
+        v-for="f in AGENT_TOOL_FILTERS"
         :key="f"
         @click="toolFilter = f"
-        class="btn-ghost"
+        class="btn-ghost inline-flex items-center gap-1.5"
         :class="
           toolFilter === f
             ? '!bg-[var(--surface-2)] !text-[var(--foreground)]'
             : ''
         "
       >
-        {{ f === "all" ? "All" : f }}
+        <AgentToolIcon v-if="f !== 'all'" :tool="f" :size="14" />
+        {{ f === "all" ? "All" : agentToolLabel(f) }}
       </button>
     </div>
 
@@ -259,22 +251,19 @@ function formatBytes(bytes: number): string {
       <p class="text-sm text-muted max-w-md mx-auto">
         {{
           currentProject
-            ? "Scan local tool session directories, or launch an agent from Home / Dev Connector."
-            : "Select a project, then scan session directories."
+            ? "No foreign agent sessions found for this project folder yet. Run Codex/Claude/Cursor/Grok here, then refresh."
+            : "Select a project — OpenMesh lists agent sessions for that workspace path by default."
         }}
       </p>
       <button
         type="button"
         class="btn-primary inline-flex items-center gap-2 mx-auto mt-2"
-        :disabled="isScanning || !settings.sessionDirs"
+        :disabled="isScanning || !currentProject"
         @click="handleScanSessions"
       >
         <Scan class="h-4 w-4" />
-        {{ isScanning ? "Scanning…" : "Scan sessions" }}
+        {{ isScanning ? "Scanning…" : "Refresh sessions" }}
       </button>
-      <p class="text-[11px] text-subtle">
-        Configure directories in Settings → Session dirs.
-      </p>
     </div>
 
     <div v-else class="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -293,7 +282,7 @@ function formatBytes(bytes: number): string {
         >
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2.5">
-              <span class="text-[16px]">{{ toolIcon(session.toolName) }}</span>
+              <AgentToolIcon :tool="session.toolName" :size="16" />
               <span class="text-[13px] font-medium">{{ session.title }}</span>
             </div>
             <span class="text-[12px] text-muted">{{
@@ -302,7 +291,7 @@ function formatBytes(bytes: number): string {
           </div>
           <div class="flex items-center gap-2 mt-2">
             <span class="text-[11px] text-muted">{{
-              session.toolName
+              agentToolLabel(session.toolName)
             }}</span>
             <span class="text-[11px] text-muted">{{
               formatBytes(session.fileSizeBytes)
@@ -325,7 +314,7 @@ function formatBytes(bytes: number): string {
         >
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-2.5">
-              <span class="text-[16px]">{{ toolIcon(session.tool) }}</span>
+              <AgentToolIcon :tool="session.tool" :size="16" />
               <span class="text-[13px] font-medium">{{ session.title }}</span>
             </div>
             <span class="text-[12px] text-muted">{{
@@ -333,6 +322,9 @@ function formatBytes(bytes: number): string {
             }}</span>
           </div>
           <div class="flex items-center gap-2 mt-2">
+            <span class="text-[11px] text-muted">{{
+              agentToolLabel(session.tool)
+            }}</span>
             <span
               class="badge"
               :style="{
@@ -360,7 +352,11 @@ function formatBytes(bytes: number): string {
           <span class="badge chip-muted">Saved</span>
         </div>
         <div class="text-[12px] space-y-1.5 text-muted">
-          <p>Tool: {{ selectedSession.tool }}</p>
+          <p class="flex items-center gap-1.5">
+            Tool:
+            <AgentToolIcon :tool="selectedSession.tool" :size="13" />
+            {{ agentToolLabel(selectedSession.tool) }}
+          </p>
           <p>Status: {{ selectedSession.status }}</p>
           <p>Last active: {{ timeAgo(selectedSession.lastActiveAt) }}</p>
           <p v-if="selectedSession.linkedTaskId">
@@ -436,7 +432,11 @@ function formatBytes(bytes: number): string {
           >
         </div>
         <div class="text-[12px] space-y-1.5 text-muted">
-          <p>Tool: {{ selectedScannedSession.toolName }}</p>
+          <p class="flex items-center gap-1.5">
+            Tool:
+            <AgentToolIcon :tool="selectedScannedSession.toolName" :size="13" />
+            {{ agentToolLabel(selectedScannedSession.toolName) }}
+          </p>
           <p>File: {{ selectedScannedSession.fileName }}</p>
           <p>Size: {{ formatBytes(selectedScannedSession.fileSizeBytes) }}</p>
           <p>Last active: {{ timeAgo(selectedScannedSession.lastActiveAt) }}</p>

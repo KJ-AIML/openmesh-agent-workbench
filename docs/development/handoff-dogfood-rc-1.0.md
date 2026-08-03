@@ -17,7 +17,11 @@ npm run typecheck
 ## B. CLI readiness path
 
 ```bash
-export PROJ="$PWD"   # or another OpenMesh project root
+# Fresh lab root (or an existing OpenMesh project):
+export PROJ="$(mktemp -d /tmp/openmesh-rc-dogfood-XXXXXX)"   # or "$PWD"
+
+# Required first — profile/team need an initialized marker:
+cargo run -p openmesh-cli -- init --project "$PROJ"
 
 cargo run -p openmesh-cli -- profile init --owner-label You --role-label Owner --project "$PROJ"
 cargo run -p openmesh-cli -- team init --name "RC Lab" --owner-label You --project "$PROJ"
@@ -76,3 +80,17 @@ Check Continuity tabs: **Team · Trust · Connectors · Org · Pilot · RC**.
 
 **Allowed:** bugfix P0/P1, docs, tests, re-evaluate packs  
 **Forbidden:** new domain features, scope creep, breaking protocols without migration  
+
+## G. Session evidence (2026-08-03)
+
+| Gate | Result | Notes |
+|------|--------|-------|
+| `git describe` | `v0.1.21` | `main` @ handoff commit era |
+| `cargo test --workspace` | **PASS** | 1895 passed, 0 failed, 1 ignored (after flake fix) |
+| `npm run typecheck` | **PASS** | exit 0 |
+| CLI min path (`init`→profile→team→trust→pilot→rc) | **PASS** | `pilot_ready=true` exit 0; `rc_ready=true` p0=0 p1=0 exit 0 |
+| CLI optional depth (cloud+connector+org+matrix+freeze) | **PASS** | pilot pass=6; rc still ready; matrix warn only on optional online-proxy |
+| GUI `npm run tauri:dev` | **not performed** | still required before claiming Desktop RC smoke |
+| Real multi-person team project | **not performed** | temp lab only (`/tmp/openmesh-rc-dogfood-*`); 1.0.0 still needs real-team evidence |
+
+Flake fixed (tests, RC-allowed): `context_pack_and_continuity_views_coexist_without_semantic_coupling` compared full JSON including wall-clock `generatedAt` (1s race). Asserts now ignore `generatedAt`.

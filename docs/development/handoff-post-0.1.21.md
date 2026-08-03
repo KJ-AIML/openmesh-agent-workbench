@@ -4,7 +4,8 @@
 **Repo:** `openmesh-agent-workbench` (`main`)  
 **Latest release:** [v0.1.21](https://github.com/KJ-AIML/openmesh-agent-workbench/releases/tag/v0.1.21)  
 **Audience:** Next human or agent session continuing OpenMesh shipping / dogfood / 1.0.0  
-**Status:** Sequential matrix **0.1.15 → 0.1.21 RELEASED**. Open PRs: **none**. Next track: **1.0.0 gate only**.
+**Status:** Sequential matrix **0.1.15 → 0.1.21 RELEASED**. Open PRs: **none**. Next track: **1.0.0 gate only**.  
+**Dogfood (2026-08-03):** CLI pilot+rc **PASS** on temp lab; `cargo test --workspace` **PASS** (1895/0/1); GUI + real-team dogfood **not performed**.
 
 ---
 
@@ -93,8 +94,8 @@ PROJ="/path/to/your/project"   # must be an OpenMesh-initialized project root
 ### Minimum path to `rc_ready`
 
 ```bash
-# If not already an OpenMesh project:
-# openmesh-cli init --project "$PROJ"   # or create via Desktop
+# Required first on a fresh directory (profile/team fail without marker):
+openmesh-cli init --project "$PROJ"          # or create via Desktop
 
 openmesh-cli profile init --owner-label You --role-label Owner --project "$PROJ"
 openmesh-cli team init --name "Lab Team" --owner-label You --project "$PROJ"
@@ -108,6 +109,8 @@ openmesh-cli rc check --project "$PROJ"      # exit 0 rc_ready, 2 not ready
 openmesh-cli rc matrix --project "$PROJ"
 openmesh-cli org graph show --project "$PROJ"
 ```
+
+**Measured (2026-08-03 temp lab):** after min path → `pilot_ready=true` (pass=4), `rc_ready=true` (p0_fail=0 p1_fail=0). After optional cloud+connector → pilot pass=6; rc still ready; `rc matrix` warns only on optional online-proxy.
 
 ### GUI smoke
 
@@ -156,11 +159,13 @@ Do **not** treat 1.0.0 as another feature dump — it is a **gate**.
 | Risk | Mitigation |
 |------|------------|
 | Xcode license / `cc` exit 69 on macOS | `DEVELOPER_DIR` + `SDKROOT` → CommandLineTools |
-| Tauri `#[tauri::command]` count hard-coded to 53 in many tests | Update all if adding lib.rs-level commands |
+| Tauri `#[tauri::command]` count hard-coded to 53 in many tests | Count is **lib.rs only** (still 53); `continuity_desktop` adds 20 → `generate_handler` total **73**. Update all 53-asserts if adding lib.rs-level commands |
 | Continuity has many tabs | Prefer IA cleanup later; don’t expand without need |
 | Agent sessions “Mock” history | UI cleaned; old stored sessions may still exist as “Saved” |
 | `team query` without allowlist | With trust-admin `allowlist-only`, link peers + allowlist first |
 | Claiming multi-region / SLA | Explicit non-goal in pilot/rc limitations |
+| Context-pack continuity flake (`generatedAt` 1s race) | **Fixed 2026-08-03** — compare JSON without `generatedAt` |
+| Temp-lab RC ≠ real-team RC | 1.0.0 still needs dogfood on a real multi-person project + GUI smoke |
 
 ---
 
@@ -202,7 +207,7 @@ Ship wave after **Unlock all** (0.1.15–1.0.0 authorized):
 - Domain: team → cloud → trust → connectors → org → pilot → rc  
 - All cut as tags `v0.1.15` … `v0.1.21` with PRs #7–#13  
 
-**Open work intentionally left:** real-project RC dogfood evidence; **1.0.0** gate package.
+**Open work intentionally left:** GUI smoke; **real multi-person** RC dogfood; **1.0.0** gate package.
 
 ---
 
@@ -210,10 +215,12 @@ Ship wave after **Unlock all** (0.1.15–1.0.0 authorized):
 
 Mark complete when:
 
-- [ ] Read this doc + unlock matrix + latest ledger entry  
-- [ ] `main` at / past `v0.1.21`; `git status` clean or understood  
-- [ ] Ran or explicitly skipped dogfood with reason  
-- [ ] Either fixed P0/P1 from dogfood **or** started 1.0.0 gate work **or** closed session with status  
+- [x] Read this doc + unlock matrix + latest ledger entry *(2026-08-03 dogfood session)*  
+- [x] `main` at / past `v0.1.21`; `git status` clean or understood  
+- [x] Ran or explicitly skipped dogfood with reason *(CLI+tests ran; GUI skipped)*  
+- [x] Either fixed P0/P1 from dogfood **or** started 1.0.0 gate work **or** closed session with status *(flake test fix + docs/ledger update; 1.0.0 not started)*  
+
+**Still open for 1.0.0 readiness:** GUI Continuity smoke (`npm run tauri:dev`); RC PASS evidence on a **real team** project (not only `/tmp` lab).
 
 **Recommended first command after pull:**
 

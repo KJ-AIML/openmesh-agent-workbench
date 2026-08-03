@@ -166,6 +166,8 @@ pub mod org_graph;
 pub mod pilot;
 pub mod rc;
 pub mod pending_proxy_question;
+pub mod lan;
+pub mod agent_engine;
 pub mod relay;
 pub mod return_digest;
 pub mod team;
@@ -197,6 +199,7 @@ pub mod proxy_prompt_context;
 pub mod proxy_question;
 pub mod proxy_runtime;
 pub mod proxy_runtime_axga;
+pub mod session_readers;
 pub mod signals;
 pub mod storage;
 

@@ -353,3 +353,120 @@ pub fn pilot_status(project_path: String) -> Result<PilotPack, String> {
 pub fn rc_status(project_path: String) -> Result<RcPack, String> {
     build_rc_pack(&project_path).map_err(|e| e.to_string())
 }
+
+// ── LAN Relay + Live Ask (0.1.22) ────────────────────────────────────
+
+use openmesh_core::lan::{
+    ask_peer, lan_serve_status_for_project, listen_beacons, parse_host_port, send_package_to_peer,
+    start_lan_serve, stop_lan_serve, LanPeerInfo, LanServeStatus, PeerTable, DEFAULT_HTTP_PORT,
+    DEFAULT_UDP_PORT,
+};
+use openmesh_core::relay::{is_package_approved, read_approved_package};
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LanServeStartRequest {
+    pub host: Option<String>,
+    pub http_port: Option<u16>,
+    pub udp_port: Option<u16>,
+    pub owner_label: Option<String>,
+}
+
+#[tauri::command]
+pub fn lan_serve_start(
+    project_path: String,
+    request: Option<LanServeStartRequest>,
+) -> Result<LanServeStatus, String> {
+    let req = request.unwrap_or(LanServeStartRequest {
+        host: None,
+        http_port: None,
+        udp_port: None,
+        owner_label: None,
+    });
+    let host = req.host.unwrap_or_else(|| "0.0.0.0".into());
+    let http_port = req.http_port.unwrap_or(DEFAULT_HTTP_PORT);
+    let udp_port = req.udp_port.unwrap_or(DEFAULT_UDP_PORT);
+    start_lan_serve(
+        &project_path,
+        &host,
+        http_port,
+        udp_port,
+        req.owner_label.as_deref(),
+    )
+    .map(|h| h.status)
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn lan_serve_stop() -> Result<LanServeStatus, String> {
+    stop_lan_serve().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn lan_serve_status(project_path: String) -> Result<LanServeStatus, String> {
+    Ok(lan_serve_status_for_project(&project_path))
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LanDiscoverRequest {
+    pub seconds: Option<u64>,
+    pub udp_port: Option<u16>,
+}
+
+#[tauri::command]
+pub fn lan_discover(
+    project_path: String,
+    request: Option<LanDiscoverRequest>,
+) -> Result<Vec<LanPeerInfo>, String> {
+    let req = request.unwrap_or(LanDiscoverRequest {
+        seconds: None,
+        udp_port: None,
+    });
+    let seconds = req.seconds.unwrap_or(3);
+    let udp_port = req.udp_port.unwrap_or(DEFAULT_UDP_PORT);
+    let ignore = read_project::<Project>(&project_path, "project.json")
+        .map(|p| format!("lan-{}", p.id));
+    let table = PeerTable::new();
+    listen_beacons(
+        &table,
+        udp_port,
+        seconds,
+        ignore.as_deref(),
+    )
+    .map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LanSendRequest {
+    pub package_id: String,
+    pub to: String,
+}
+
+#[tauri::command]
+pub fn lan_send_package(
+    project_path: String,
+    request: LanSendRequest,
+) -> Result<serde_json::Value, String> {
+    let (host, port) = parse_host_port(&request.to).map_err(|e| e.to_string())?;
+    let pkg = read_approved_package(&project_path, &request.package_id).map_err(|e| e.to_string())?;
+    if !is_package_approved(&pkg) {
+        return Err("package not approved for egress".into());
+    }
+    send_package_to_peer(&host, port, &pkg).map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LanAskUiRequest {
+    pub to: String,
+    pub question: String,
+    pub tier: Option<String>,
+}
+
+#[tauri::command]
+pub fn lan_ask_peer(request: LanAskUiRequest) -> Result<MeshRemoteQueryAnswer, String> {
+    let (host, port) = parse_host_port(&request.to).map_err(|e| e.to_string())?;
+    ask_peer(&host, port, &request.question, request.tier.as_deref()).map_err(|e| e.to_string())
+}

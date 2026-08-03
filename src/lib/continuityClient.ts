@@ -413,3 +413,99 @@ export interface RcPackView {
 export async function getRcStatus(projectPath: string): Promise<RcPackView> {
   return invoke<RcPackView>("rc_status", { projectPath });
 }
+
+// ── LAN Relay + Live Ask (0.1.22) ────────────────────────────────────
+
+export interface LanServeStatus {
+  running: boolean;
+  protocol: string;
+  projectPath?: string;
+  peerId?: string;
+  ownerLabel?: string;
+  projectId?: string;
+  httpHost?: string;
+  httpPort?: number;
+  udpPort?: number;
+  startedAt?: string;
+  note?: string;
+}
+
+export interface LanPeerInfo {
+  protocol: string;
+  projectId: string;
+  ownerLabel: string;
+  peerId: string;
+  host: string;
+  httpPort: number;
+  startedAt: string;
+  lastSeenAt: string;
+  address: string;
+}
+
+export async function lanServeStart(
+  projectPath: string,
+  opts?: {
+    host?: string;
+    httpPort?: number;
+    udpPort?: number;
+    ownerLabel?: string;
+  },
+): Promise<LanServeStatus> {
+  return invoke<LanServeStatus>("lan_serve_start", {
+    projectPath,
+    request: {
+      host: opts?.host,
+      httpPort: opts?.httpPort,
+      udpPort: opts?.udpPort,
+      ownerLabel: opts?.ownerLabel,
+    },
+  });
+}
+
+export async function lanServeStop(): Promise<LanServeStatus> {
+  return invoke<LanServeStatus>("lan_serve_stop");
+}
+
+export async function lanServeStatus(
+  projectPath: string,
+): Promise<LanServeStatus> {
+  return invoke<LanServeStatus>("lan_serve_status", { projectPath });
+}
+
+export async function lanDiscover(
+  projectPath: string,
+  opts?: { seconds?: number; udpPort?: number },
+): Promise<LanPeerInfo[]> {
+  return invoke<LanPeerInfo[]>("lan_discover", {
+    projectPath,
+    request: {
+      seconds: opts?.seconds,
+      udpPort: opts?.udpPort,
+    },
+  });
+}
+
+export async function lanSendPackage(
+  projectPath: string,
+  packageId: string,
+  to: string,
+): Promise<unknown> {
+  return invoke("lan_send_package", {
+    projectPath,
+    request: { packageId, to },
+  });
+}
+
+export async function lanAskPeer(
+  to: string,
+  question: string,
+  opts?: { tier?: string },
+): Promise<MeshRemoteQueryAnswer> {
+  return invoke<MeshRemoteQueryAnswer>("lan_ask_peer", {
+    request: {
+      to,
+      question,
+      tier: opts?.tier,
+    },
+  });
+}

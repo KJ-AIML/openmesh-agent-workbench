@@ -5,21 +5,16 @@ import {
   FileText,
   FileEdit,
   ListTodo,
-  Terminal,
   Bot,
   Folder,
-  Circle,
-  BarChart3,
-  Globe,
   Settings,
   ChevronRight,
   ChevronDown,
   Plus,
   Trash2,
   Search,
-  GitBranch,
-  Zap,
   Network,
+  MessageSquare,
 } from "lucide-vue-next";
 import { useRoute, useRouter } from "vue-router";
 import { useStore } from "../lib/useStore";
@@ -36,7 +31,6 @@ const {
   addRecentItem,
   currentProject,
   store,
-  settings,
 } = useStore();
 
 const emit = defineEmits<{
@@ -44,7 +38,6 @@ const emit = defineEmits<{
 }>();
 
 const projectsExpanded = ref(true);
-const systemExpanded = ref(false);
 const projectNames = ref<Record<string, string>>({});
 const macOS = ref(
   (window as unknown as { __OPENMESH_IS_MACOS__?: boolean }).__OPENMESH_IS_MACOS__ ??
@@ -87,7 +80,7 @@ watch(projectPaths, () => {
   loadProjectNames();
 });
 
-// Information architecture: Work → Team/Mesh → Agents → System (collapsed)
+// Chat is the primary surface (not a buried Agents nav item).
 const workNav = [
   { label: "Home", icon: Home, route: "/" },
   { label: "Sprint", icon: ListTodo, route: "/sprint" },
@@ -101,15 +94,7 @@ const teamMeshNav = [
 ];
 
 const agentsNav = [
-  { label: "Agent Sessions", icon: Bot, route: "/agent-sessions" },
-  { label: "Models", icon: Circle, route: "/models" },
-  { label: "Dev Connector", icon: Terminal, route: "/dev-connector" },
-];
-
-const systemNav = [
-  { label: "Status", icon: Circle, route: "/status" },
-  { label: "Usage", icon: BarChart3, route: "/usage" },
-  { label: "Server", icon: Globe, route: "/server" },
+  { label: "Sessions", icon: Bot, route: "/agent-sessions" },
 ];
 
 function isActive(path: string) {
@@ -126,7 +111,7 @@ async function handleProjectClick(projectPath: string) {
       sourceId: currentProject.value.id,
     });
   }
-  router.push("/");
+  router.push("/agent-chat");
 }
 
 function goToAddProject() {
@@ -282,6 +267,19 @@ async function handleDeleteProject(projectPath: string) {
         </template>
       </div>
 
+      <!-- Primary: Chat (workspace agent) -->
+      <div class="px-1 mb-1">
+        <router-link
+          to="/agent-chat"
+          class="chat-primary no-underline"
+          :class="{ 'is-active': isActive('/agent-chat') }"
+        >
+          <MessageSquare class="h-4 w-4 flex-shrink-0" />
+          <span class="chat-primary__label">Chat</span>
+          <span class="chat-primary__hint">workspace</span>
+        </router-link>
+      </div>
+
       <!-- WORK -->
       <div>
         <div class="sidebar-section-label">Work</div>
@@ -327,38 +325,6 @@ async function handleDeleteProject(projectPath: string) {
         </router-link>
       </div>
 
-      <!-- SYSTEM (collapsed by default) -->
-      <div>
-        <button
-          type="button"
-          class="flex w-full items-center justify-between px-2 py-1"
-          @click="systemExpanded = !systemExpanded"
-        >
-          <span class="sidebar-section-label !mb-0">System</span>
-          <ChevronDown
-            v-if="systemExpanded"
-            class="h-3 w-3"
-            style="color: var(--muted-foreground); opacity: 0.6"
-          />
-          <ChevronRight
-            v-else
-            class="h-3 w-3"
-            style="color: var(--muted-foreground); opacity: 0.6"
-          />
-        </button>
-        <template v-if="systemExpanded">
-          <router-link
-            v-for="item in systemNav"
-            :key="item.label"
-            :to="item.route"
-            class="nav-item no-underline"
-            :class="{ active: isActive(item.route) }"
-          >
-            <component :is="item.icon" class="h-3.5 w-3.5 flex-shrink-0" />
-            <span class="truncate text-[12px]">{{ item.label }}</span>
-          </router-link>
-        </template>
-      </div>
     </nav>
 
     <!-- Bottom: Settings -->
@@ -397,5 +363,51 @@ async function handleDeleteProject(projectPath: string) {
 
 .app-sidebar--mac {
   background: var(--sidebar);
+}
+
+/* Match .nav-item language; slightly taller as the primary entry */
+.chat-primary {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  width: 100%;
+  height: 44px;
+  padding: 0 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  transition: all 0.15s ease;
+}
+
+.chat-primary:hover {
+  background: var(--surface-highlight);
+  color: var(--foreground);
+  border-color: var(--border-strong);
+}
+
+.chat-primary.is-active {
+  background: var(--surface-3);
+  color: var(--foreground);
+  font-weight: 600;
+  border-color: var(--border-strong);
+}
+
+.chat-primary__label {
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.chat-primary__hint {
+  margin-left: auto;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  opacity: 0.7;
 }
 </style>

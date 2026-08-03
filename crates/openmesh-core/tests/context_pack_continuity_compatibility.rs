@@ -417,6 +417,15 @@ fn context_build_does_not_modify_continuity_files_via_core_api() {
     assert!(!promotion_decisions_dir(&project_path).exists());
 }
 
+fn json_without_generated_at<T: serde::Serialize>(value: &T) -> Value {
+    let mut v = serde_json::to_value(value).expect("serialize");
+    if let Some(obj) = v.as_object_mut() {
+        // Projections stamp wall-clock generatedAt; semantic coupling ignores that field.
+        obj.remove("generatedAt");
+    }
+    v
+}
+
 #[test]
 fn context_pack_and_continuity_views_coexist_without_semantic_coupling() {
     let (_dir, workspace_id) = temp_project("coexist");
@@ -433,12 +442,12 @@ fn context_pack_and_continuity_views_coexist_without_semantic_coupling() {
     let catch_up_after = build_catch_up_view(&snapshot_after, &state_after, &fixed_window())
         .expect("catch-up after");
     assert_eq!(
-        serde_json::to_value(&state_before).unwrap(),
-        serde_json::to_value(&state_after).unwrap()
+        json_without_generated_at(&state_before),
+        json_without_generated_at(&state_after)
     );
     assert_eq!(
-        serde_json::to_value(&catch_up_before).unwrap(),
-        serde_json::to_value(&catch_up_after).unwrap()
+        json_without_generated_at(&catch_up_before),
+        json_without_generated_at(&catch_up_after)
     );
     validate_proxy_context_pack(&pack).expect("pack valid");
 }

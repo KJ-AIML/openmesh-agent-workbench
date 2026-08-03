@@ -26,6 +26,8 @@ mod project;
 mod proxy;
 mod proxy_runtime_factory;
 mod proxy_verify;
+mod lan;
+mod agent;
 mod relay;
 mod signal;
 mod state;
@@ -88,6 +90,12 @@ pub enum Commands {
     /// Private relay selective egress (Dev Track 0.1.11).
     #[command(subcommand)]
     Relay(relay::RelayCommand),
+    /// LAN discovery + relay transfer + live ask (Dev Track 0.1.22).
+    #[command(subcommand)]
+    Lan(lan::LanCommand),
+    /// OpenMesh Agent Engine (Dev Track 0.1.23) — live LLM + tools.
+    #[command(subcommand)]
+    Agent(agent::AgentCommand),
     /// Always-online Work Proxy alpha (Dev Track 0.1.12).
     #[command(subcommand, name = "online-proxy")]
     OnlineProxy(online_proxy::OnlineProxyCommand),
@@ -306,6 +314,8 @@ fn run() -> i32 {
         Commands::Digest(args) => digest::run_digest(&args, &cwd),
         Commands::Mesh(cmd) => mesh::run_mesh(cmd, &cwd),
         Commands::Relay(cmd) => relay::run_relay(cmd, &cwd),
+        Commands::Lan(cmd) => lan::run_lan(cmd, &cwd),
+        Commands::Agent(cmd) => agent::run_agent(cmd, &cwd),
         Commands::OnlineProxy(cmd) => online_proxy::run_online_proxy(cmd, &cwd),
         Commands::Team(cmd) => team::run_team(cmd, &cwd),
         Commands::TrustAdmin(cmd) => trust_admin::run_trust_admin(cmd, &cwd),

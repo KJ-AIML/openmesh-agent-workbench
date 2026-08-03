@@ -4,6 +4,8 @@
 **Version:** 0.3.0  
 **Last Updated:** 2026-01-15
 
+> **Current RC / 1.0 path:** use [`docs/development/handoff-dogfood-rc-1.0.md`](development/handoff-dogfood-rc-1.0.md) (post v0.1.21). This v0.3 checklist remains historical for early storage QA.
+
 ---
 
 ## Pre-Flight Checks

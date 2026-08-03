@@ -163,6 +163,8 @@ export type Settings = {
 		defaultModel?: string;
 		fallbackModel?: string;
 		usageTrackingEnabled: boolean;
+		/** OpenAI-compatible base URL (e.g. https://api.x.ai/v1). Key is never stored here. */
+		apiBaseUrl?: string;
 	};
 	models: {
 		codingModel?: string;
@@ -189,6 +191,12 @@ export type Settings = {
 		claudeCodeEnabled: boolean;
 		opencodeDir?: string;
 		opencodeEnabled: boolean;
+		cursorDir?: string;
+		cursorEnabled: boolean;
+		geminiDir?: string;
+		geminiEnabled: boolean;
+		grokDir?: string;
+		grokEnabled: boolean;
 	};
 	localPaths: {
 		defaultProjectsDir?: string;

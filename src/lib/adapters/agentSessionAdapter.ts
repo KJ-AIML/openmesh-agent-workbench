@@ -12,13 +12,14 @@ interface ScanAgentSessionsResult {
 }
 
 /**
- * Scan agent session directory for real sessions
- * Reads session files from the specified directory
+ * Scan agent session directory for real sessions.
+ * When workspaceCwd is set, only sessions for that project path are returned.
  */
 export async function scanAgentSessionDirectory(
 	tool: string,
 	directoryPath: string,
 	limit?: number,
+	workspaceCwd?: string,
 ): Promise<AdapterResult<ScannedSession[]>> {
 	try {
 		const result = await invoke<ScanAgentSessionsResult>(
@@ -27,6 +28,7 @@ export async function scanAgentSessionDirectory(
 				tool,
 				directoryPath,
 				limit: limit || 100,
+				workspaceCwd: workspaceCwd || null,
 			},
 		);
 

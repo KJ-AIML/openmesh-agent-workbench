@@ -5,6 +5,76 @@ All notable changes to OpenMesh are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.1.24] - 2026-08-03
+
+### Added
+
+- **Provider Test Connection**: Settings → Provider & Models "Test connection" button runs a minimal, tool-free chat/completions probe against the configured OpenAI-compatible endpoint before it's relied on for Chat
+- **Coding Plan guard**: Agent Engine provider client detects DashScope Coding Plan endpoints (`coding-intl.dashscope.aliyuncs.com`) and fails fast with an actionable error — Coding Plan keys only work with Coding Agents, not OpenMesh Agent Engine chat/tools; guidance points to openai / deepseek / xai or DashScope compatible-mode instead
+- **Chat session management**: `/agent-chat` gains New chat, session switching, rename, and delete, with sessions persisted per-project in `localStorage` (`src/lib/agentChat/chatSessions.ts`) — no new Rust backend command
+- **Chat rendering**: Markdown responses render through a sanitized pipeline (`marked` + `dompurify`), Mermaid diagrams render live via `MermaidDiagram.vue`, and an `ArtifactPanel.vue` side canvas displays code/diagram artifacts pulled out of chat responses
+- Subtle chat UI animations (message fade-in / slide-up) for a less jarring streaming experience
+- Tests: `tests/agentChatSessions.test.ts`, `tests/agentChatMarkdown.test.ts`, `tests/agentChatTools.test.ts`, `tests/agentChatReady.test.ts`
+
+### Known Issues
+
+- `tests/pages/ContinuityPage.test.ts` has 2 stale assertions against pre-reorg tab copy (nested Mesh/Relay/LAN tab groups changed how labels render on first paint); tracked for a follow-up test update, not a functional regression
+
+## [0.1.23] - 2026-08-03
+
+### Added
+
+- **OpenMesh Agent Engine + Tool Loop**: live OpenAI-compatible LLM chat with native tool calling over OpenMesh workspace tools (parallel to Work Proxy draft, which stays tool-free)
+- **Core** `openmesh_core::agent_engine` — AgentDefinition, tool registry, provider client, `run_agent_turn` loop (max 8 iterations)
+- **Secrets**: user-level API key store (`~/.config/openmesh/agent-api-key`) + env fallback; never written to project `.openmesh/` JSON
+- **Desktop IPC** `agent_secret_set|clear|status`, `agent_engine_turn`; Settings Save Key; Agent Chat freeform uses engine
+- **CLI** `agent ask|secret-status`
+- Docs: `docs/development/openmesh-0.1.23-execution-plan.md`; unlock matrix Scope B
+
+### Changed
+
+- Agent Chat freeform no longer depends on Online Proxy LocalScaffold for answers (slash tools unchanged)
+
+
+### Added
+
+- **Agent Chat** (human-unlocked workspace shell): `/agent-chat` page with slash/keyword tools bound to the active project path (docs, notes, sprint, continuity, team, trust, connectors, org, pilot, RC, mesh, online-proxy ask). Frontend-only over existing Tauri IPC — no new Rust commands.
+- Chat requires provider name + API key mark + default/coding model before activation.
+- Chat is a primary surface (sidebar + titlebar), not buried under Agents.
+
+### Changed
+
+- **Settings hub IA**: Models / Status / Server / Dev Connector / Usage merge into Settings sections (`?section=`). Legacy routes redirect. Sidebar System group removed; Agents keeps Sessions only.
+- Settings: sticky section nav, Overview checklist, Provider & Models combined save, Project Tools panel (terminal + presets).
+
+## [0.1.22] - 2026-08-03
+
+### Added
+
+- **LAN Relay + Live Ask** (trusted-LAN alpha): discover peers on the same network, send approved relay packages over HTTP, live-ask a peer’s local Work Proxy while online
+- **Core** `openmesh_core::lan` — UDP beacon (`41777`, protocol `openmesh-lan/0.1`), HTTP server (`POST /v1/relay/package`, `POST /v1/mesh/ask`, `GET /v1/health`), reqwest client
+- **CLI** `lan serve|discover|send|ask|status` (`serve --seconds` for scripts; Enter to stop interactively)
+- **Desktop** Continuity → Mesh → **LAN** tab (start/stop listener, discover, send package, ask peer)
+- Relay receive helper `receive_package_payload` for alternate transports (quarantine unchanged)
+- Docs: `docs/development/openmesh-0.1.22-execution-plan.md`; unlock matrix amendment (RC freeze waived for this track only)
+
+### Security / Privacy
+
+- Trusted-LAN alpha only — no WAN/NAT traversal; no e2e encryption beyond local network trust (documented)
+- Remote answers remain read-only drafts; received packages quarantine under `relay/received/`
+- Filesystem `relay send --relay-root` unchanged
+
+### Fixed
+
+- LAN serve-status no longer sticks `running` after crash/process death: status read / start reconciles disk against a short TCP probe on the recorded host:port (clears when dead; keeps `running` when another live serve answers)
+
+### Technical Details
+
+- Tests: core `lan` unit/loopback + stale-status clear; CLI `lan_workflow`
+- Dogfood (loopback two temp projects): serve → send → receive quarantine → ask read-only; UDP discover may be empty on loopback/VPN
+
 ## [0.1.21] - 2026-08-03
 
 ### Added

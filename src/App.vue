@@ -7,7 +7,7 @@ import CommandPalette from "./components/CommandPalette.vue";
 import { useStore } from "./lib/useStore";
 import { getCommands, type Command } from "./lib/commands";
 import * as gitAdapter from "./lib/adapters/gitAdapter";
-import * as agentSessionAdapter from "./lib/adapters/agentSessionAdapter";
+import { scanConfiguredSessions } from "./lib/scanConfiguredSessions";
 import * as terminalAdapter from "./lib/adapters/terminalAdapter";
 import type { GitStatus } from "./lib/adapters/types";
 import {
@@ -120,41 +120,9 @@ const commands = computed(() =>
       await fetchGitStatus();
     },
     async scanSessions() {
-      if (!settings.value.sessionDirs) return;
-      const allScanned: any[] = [];
-      if (
-        settings.value.sessionDirs.codexEnabled &&
-        settings.value.sessionDirs.codexDir
-      ) {
-        const result = await agentSessionAdapter.scanAgentSessionDirectory(
-          "codex",
-          settings.value.sessionDirs.codexDir,
-          100,
-        );
-        if (result.success && result.data) allScanned.push(...result.data);
-      }
-      if (
-        settings.value.sessionDirs.claudeCodeEnabled &&
-        settings.value.sessionDirs.claudeCodeDir
-      ) {
-        const result = await agentSessionAdapter.scanAgentSessionDirectory(
-          "claude-code",
-          settings.value.sessionDirs.claudeCodeDir,
-          100,
-        );
-        if (result.success && result.data) allScanned.push(...result.data);
-      }
-      if (
-        settings.value.sessionDirs.opencodeEnabled &&
-        settings.value.sessionDirs.opencodeDir
-      ) {
-        const result = await agentSessionAdapter.scanAgentSessionDirectory(
-          "opencode",
-          settings.value.sessionDirs.opencodeDir,
-          100,
-        );
-        if (result.success && result.data) allScanned.push(...result.data);
-      }
+      const workspaceCwd = currentProject.value?.folderPath;
+      if (!workspaceCwd) return;
+      await scanConfiguredSessions(settings.value.sessionDirs, 100, workspaceCwd);
     },
     async createNote() {
       // Navigate to notes page — actual note creation handled there
@@ -311,15 +279,13 @@ async function handleCommandExecuted(cmd: Command) {
 // ─── Breadcrumb ───────────────────────────────────────────────────────
 const pageLabels: Record<string, string> = {
   "/": "Home",
-  "/status": "Status",
-  "/usage": "Usage",
   "/docs": "Docs",
   "/notes": "Notes",
   "/sprint": "Sprint",
-  "/models": "Models",
-  "/server": "Server",
-  "/dev-connector": "Dev Connector",
+  "/agent-chat": "Chat",
   "/agent-sessions": "Agent Sessions",
+  "/continuity": "Continuity",
+  "/context": "Context",
   "/settings": "Settings",
   "/projects/new": "Add Project",
 };

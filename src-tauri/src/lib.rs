@@ -1,18 +1,23 @@
 mod continuity_desktop;
+mod agent_engine_desktop;
 
 use openmesh_core::context_service;
+use openmesh_core::session_readers;
 use openmesh_core::storage;
 use openmesh_core::storage::*;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::process::Command;
 
-/// Normalize an agent tool identifier.
+/// Normalize a launchable agent CLI identifier.
 ///
 /// The app's data model (Vue types, stored sessions, project defaults) uses
 /// `"claude-code"` while earlier backend code used the bare `"claude"`. Both
 /// forms appear in real callers, so we accept either and canonicalize to the
 /// short form used for binary lookup. This avoids any data migration.
+///
+/// Session *scanning* supports a wider set (cursor/gemini/grok) via
+/// `session_readers::normalize_tool` — those are not launched from PATH here.
 fn normalize_tool(tool: &str) -> Option<&'static str> {
     match tool {
         "codex" => Some("codex"),
@@ -600,25 +605,12 @@ fn open_agent_cli(tool: String, cwd: String, cli_path: Option<String>) -> AgentC
     }
 }
 
-// Phase 6: Agent Session Scanner
-#[derive(Serialize, Clone)]
-struct ScannedSession {
-    id: String,
-    tool_name: String,
-    title: String,
-    session_path: String,
-    file_name: String,
-    created_at: String,
-    last_active_at: String,
-    file_size_bytes: u64,
-    summary_preview: Option<String>,
-    project_hint: Option<String>,
-}
-
+// Phase 6: Agent Session Scanner (format-aware via openmesh-core::session_readers)
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct ScanAgentSessionsResult {
     success: bool,
-    sessions: Vec<ScannedSession>,
+    sessions: Vec<session_readers::ScannedForeignSession>,
     error: Option<String>,
 }
 
@@ -627,298 +619,57 @@ fn scan_agent_sessions(
     tool: String,
     directory_path: String,
     limit: Option<u32>,
+    workspace_cwd: Option<String>,
 ) -> ScanAgentSessionsResult {
-    let dir_path = PathBuf::from(&directory_path);
-
-    // Validate directory exists
-    match std::fs::metadata(&dir_path) {
-        Ok(metadata) => {
-            if !metadata.is_dir() {
-                return ScanAgentSessionsResult {
-                    success: false,
-                    sessions: vec![],
-                    error: Some("Path is not a directory".to_string()),
-                };
-            }
-        }
-        Err(e) => {
-            return ScanAgentSessionsResult {
-                success: false,
-                sessions: vec![],
-                error: Some(format!("Directory does not exist: {}", e)),
-            };
-        }
-    }
-
-    // Validate tool is in allowlist (accepts both "claude" and "claude-code")
-    let canonical_tool = match normalize_tool(&tool) {
-        Some(t) => t,
-        None => {
-            return ScanAgentSessionsResult {
-                success: false,
-                sessions: vec![],
-                error: Some(format!(
-                    "Tool '{}' is not in the allowlist. Allowed: codex, claude, opencode",
-                    tool
-                )),
-            };
-        }
-    };
-
-    let max_limit = limit.unwrap_or(100) as usize;
-    let allowed_extensions = ["json", "jsonl", "md", "txt", "log"];
-    let mut sessions = Vec::new();
-
-    // Read directory (non-recursive, top-level only)
-    if let Ok(entries) = std::fs::read_dir(&dir_path) {
-        for entry in entries.flatten() {
-            if sessions.len() >= max_limit {
-                break;
-            }
-
-            let path = entry.path();
-
-            // Use symlink_metadata so symlinks are detected instead of followed.
-            // std::fs::metadata follows symlinks, which would make is_symlink()
-            // return false and defeat the protection. Directories are skipped too.
-            let metadata = match std::fs::symlink_metadata(&path) {
-                Ok(m) => m,
-                Err(_) => continue,
-            };
-            if metadata.is_dir() || metadata.file_type().is_symlink() {
-                continue;
-            }
-
-            // Check file extension
-            let ext = match path.extension().and_then(|e| e.to_str()) {
-                Some(e) if allowed_extensions.contains(&e) => e,
-                _ => continue,
-            };
-            let _ = ext; // extension used only for filtering
-
-            // Extract file info. Follow the (now-confirmed-regular) file path for
-            // size/timestamps via metadata() so symlink targets are not measured.
-            let file_name = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("unknown")
-                .to_string();
-
-            let file_size = metadata.len();
-            let modified = metadata
-                .modified()
-                .ok()
-                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|d| d.as_secs())
-                .unwrap_or(0);
-
-            let created = metadata
-                .created()
-                .ok()
-                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                .map(|d| d.as_secs())
-                .unwrap_or(modified);
-
-            // Read first 500 bytes for preview, then redact common secret patterns
-            // so tokens are not surfaced in the UI. This is best-effort, not a
-            // security boundary; the files are local and user-owned.
-            let preview = std::fs::read_to_string(&path).ok().map(|content| {
-                redact_secrets(content.chars().take(500).collect::<String>().as_str())
-            });
-
-            // Generate title from filename
-            let title = path
-                .file_stem()
-                .and_then(|s| s.to_str())
-                .unwrap_or(&file_name)
-                .replace(['_', '-'], " ");
-
-            sessions.push(ScannedSession {
-                id: format!("{}_{}", canonical_tool, file_name),
-                tool_name: canonical_tool.to_string(),
-                title: title.chars().take(100).collect(),
-                session_path: path.to_string_lossy().to_string(),
-                file_name,
-                created_at: chrono::DateTime::<chrono::Utc>::from_timestamp(created as i64, 0)
-                    .map(|dt| dt.to_rfc3339())
-                    .unwrap_or_else(|| "unknown".to_string()),
-                last_active_at: chrono::DateTime::<chrono::Utc>::from_timestamp(modified as i64, 0)
-                    .map(|dt| dt.to_rfc3339())
-                    .unwrap_or_else(|| "unknown".to_string()),
-                file_size_bytes: file_size,
-                summary_preview: preview,
-                project_hint: None,
-            });
-        }
-    }
-
-    ScanAgentSessionsResult {
-        success: true,
-        sessions,
-        error: None,
+    match session_readers::scan_agent_sessions(
+        &tool,
+        &directory_path,
+        limit,
+        workspace_cwd.as_deref(),
+    ) {
+        Ok(sessions) => ScanAgentSessionsResult {
+            success: true,
+            sessions,
+            error: None,
+        },
+        Err(error) => ScanAgentSessionsResult {
+            success: false,
+            sessions: vec![],
+            error: Some(error),
+        },
     }
 }
 
-/// Best-effort redaction of common secret patterns from a session preview.
-///
-/// Replaces the secret value with `[REDACTED]` for a small set of common
-/// token shapes. This is NOT a security boundary — the underlying files are
-/// local and user-owned — but it prevents accidental exposure of credentials
-/// in the UI's preview pane. Implemented without the regex crate to avoid
-/// adding a dependency.
-fn redact_secrets(input: &str) -> String {
-    let chars: Vec<char> = input.chars().collect();
-    let n = chars.len();
-    let mut out: Vec<char> = Vec::with_capacity(n);
-    let mut i = 0;
-
-    while i < n {
-        // Try to match a secret pattern starting at i. Each arm returns the
-        // number of input chars consumed; if none match we copy one char.
-        let consumed = try_redact_at(&chars, i, &mut out);
-        if consumed == 0 {
-            out.push(chars[i]);
-            i += 1;
-        } else {
-            i += consumed;
-        }
+/// Auto-detect provider roots on this OS/device and scan sessions for the open project.
+#[tauri::command]
+fn scan_workspace_agent_sessions(
+    workspace_cwd: String,
+    limit: Option<u32>,
+    overrides: Option<session_readers::SessionScanOverrides>,
+) -> ScanAgentSessionsResult {
+    match session_readers::scan_workspace_sessions(
+        &workspace_cwd,
+        limit,
+        overrides.as_ref(),
+    ) {
+        Ok(sessions) => ScanAgentSessionsResult {
+            success: true,
+            sessions,
+            error: None,
+        },
+        Err(error) => ScanAgentSessionsResult {
+            success: false,
+            sessions: vec![],
+            error: Some(error),
+        },
     }
-
-    out.into_iter().collect()
 }
 
-/// Attempt to redact a secret beginning at `start`. Returns chars consumed.
-/// On success pushes "[REDACTED]" to `out`; on no-match returns 0 and pushes nothing.
-fn try_redact_at(chars: &[char], start: usize, out: &mut Vec<char>) -> usize {
-    // Helper: does chars[pos..] start with `needle` (ASCII, case-insensitive)?
-    let starts = |pos: usize, needle: &[u8]| -> bool {
-        let lower = |c: char| c.to_ascii_lowercase() as u8;
-        if pos + needle.len() > chars.len() {
-            return false;
-        }
-        needle
-            .iter()
-            .enumerate()
-            .all(|(k, &b)| lower(chars[pos + k]) == b)
-    };
-
-    // Assignable token prefixes (sk-, ghp_, gho_, ghu_, ghs_, gpat_, github_pat_,
-    // AKIA..., AIza...). Redact the token run that follows.
-    let value_prefixes: &[&[u8]] = &[b"sk-", b"ghp_", b"gho_", b"ghu_", b"ghs_", b"ghr_", b"aiza"];
-    for &prefix in value_prefixes {
-        if starts(start, prefix) {
-            // Consume the prefix plus a run of token chars.
-            let mut j = start + prefix.len();
-            while j < chars.len() && is_token_char(chars[j]) {
-                j += 1;
-            }
-            // Only treat as a secret if at least a few chars followed the prefix,
-            // to avoid false positives on stray "sk-" in prose.
-            if j - (start + prefix.len()) >= 6 {
-                out.extend("[REDACTED]".chars());
-                return j - start;
-            }
-        }
-    }
-
-    // AWS access key id: AKIA followed by 12+ uppercase alphanumerics.
-    if starts(start, b"akia") {
-        let mut j = start + 4;
-        while j < chars.len() && (chars[j].is_ascii_alphanumeric() && chars[j].is_ascii_uppercase())
-        {
-            j += 1;
-        }
-        if j - (start + 4) >= 12 {
-            out.extend("[REDACTED]".chars());
-            return j - start;
-        }
-    }
-
-    // "Bearer <token>" — redact the token run after the keyword.
-    if starts(start, b"bearer") && (start + 6 >= chars.len() || is_space_or_sep(chars[start + 6])) {
-        let mut j = start + 6;
-        // Skip whitespace/separators
-        while j < chars.len() && is_space_or_sep(chars[j]) {
-            j += 1;
-        }
-        let token_start = j;
-        while j < chars.len() && is_token_char(chars[j]) {
-            j += 1;
-        }
-        if j > token_start {
-            out.extend("bearer ".chars());
-            out.extend("[REDACTED]".chars());
-            return j - start;
-        }
-    }
-
-    // "key=value" assignments for common secret key names.
-    // Matches: token=, api_key=, apikey=, secret=, password=, passwd=, access_key=, accesskey=
-    let key_assignments: &[&[u8]] = &[
-        b"token",
-        b"api_key",
-        b"apikey",
-        b"secret",
-        b"password",
-        b"passwd",
-        b"access_key",
-        b"accesskey",
-    ];
-    for &key in key_assignments {
-        if starts(start, key) {
-            let after_key = start + key.len();
-            // Optional surrounding whitespace, then '=' or ':'
-            let mut j = after_key;
-            while j < chars.len() && chars[j].is_whitespace() {
-                j += 1;
-            }
-            if j < chars.len() && (chars[j] == '=' || chars[j] == ':') {
-                j += 1;
-                while j < chars.len() && chars[j].is_whitespace() {
-                    j += 1;
-                }
-                let val_start = j;
-                // Redact the quoted or bare value.
-                if j < chars.len() && (chars[j] == '"' || chars[j] == '\'') {
-                    let quote = chars[j];
-                    j += 1;
-                    let inner_start = j;
-                    while j < chars.len() && chars[j] != quote && chars[j] != '\n' {
-                        j += 1;
-                    }
-                    if j > inner_start {
-                        out.extend_from_slice(&chars[start..val_start]);
-                        out.push(chars[val_start]); // the quote
-                        out.extend("[REDACTED]".chars());
-                        if j < chars.len() {
-                            out.push(chars[j]); // closing quote
-                            j += 1;
-                        }
-                        return j - start;
-                    }
-                } else {
-                    while j < chars.len() && !chars[j].is_whitespace() && chars[j] != '\n' {
-                        j += 1;
-                    }
-                    if j > val_start {
-                        out.extend_from_slice(&chars[start..val_start]);
-                        out.extend("[REDACTED]".chars());
-                        return j - start;
-                    }
-                }
-            }
-        }
-    }
-
-    0
-}
-
-fn is_token_char(c: char) -> bool {
-    c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.'
-}
-
-fn is_space_or_sep(c: char) -> bool {
-    c.is_whitespace() || c == ':'
+#[tauri::command]
+fn detect_agent_session_roots(
+    overrides: Option<session_readers::SessionScanOverrides>,
+) -> Vec<session_readers::DetectedProviderRoot> {
+    session_readers::detect_provider_roots(overrides.as_ref())
 }
 
 // Phase 6: Command Preset Runner
@@ -1429,6 +1180,8 @@ pub fn run() {
             open_terminal,
             open_agent_cli,
             scan_agent_sessions,
+            scan_workspace_agent_sessions,
+            detect_agent_session_roots,
             run_command_preset,
             // File-based storage commands
             get_settings,
@@ -1501,6 +1254,19 @@ pub fn run() {
             continuity_desktop::org_graph_show,
             continuity_desktop::pilot_status,
             continuity_desktop::rc_status,
+            // LAN Relay + Live Ask (0.1.22)
+            continuity_desktop::lan_serve_start,
+            continuity_desktop::lan_serve_stop,
+            continuity_desktop::lan_serve_status,
+            continuity_desktop::lan_discover,
+            continuity_desktop::lan_send_package,
+            continuity_desktop::lan_ask_peer,
+            // Agent Engine + Tool Loop (0.1.23)
+            agent_engine_desktop::agent_secret_status,
+            agent_engine_desktop::agent_secret_set,
+            agent_engine_desktop::agent_secret_clear,
+            agent_engine_desktop::agent_provider_test,
+            agent_engine_desktop::agent_engine_turn,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -35,6 +35,7 @@ export interface CommandContext {
     type: "project" | "folder" | "doc" | "task" | "session" | "note" | "artifact" | "terminal" | "agent_session" | "command_preset";
     title: string;
     projectId?: string;
+    sourceId?: string;
     sourcePath?: string;
   }) => Promise<void>;
   openFolder: (path: string) => void;
@@ -199,32 +200,26 @@ export function getCommands(ctx: CommandContext): Command[] {
     });
   }
 
-  // Scan sessions
-  const hasSessionDir = !!(
-    (ctx.settings.sessionDirs?.codexEnabled &&
-      ctx.settings.sessionDirs?.codexDir) ||
-    (ctx.settings.sessionDirs?.claudeCodeEnabled &&
-      ctx.settings.sessionDirs?.claudeCodeDir) ||
-    (ctx.settings.sessionDirs?.opencodeEnabled &&
-      ctx.settings.sessionDirs?.opencodeDir)
-  );
+  // Scan sessions — defaults ON, scoped to the open project folder
+  const hasProject = !!ctx.currentProject?.folderPath;
 
   commands.push({
     id: "agent-scan-sessions",
     group: "Agents",
     title: "Scan Agent Sessions",
-    description: hasSessionDir
-      ? "Scan configured session directories"
-      : "No session directory configured",
+    description: hasProject
+      ? `Sessions for ${ctx.currentProject?.folderPath}`
+      : "Open a project to scan workspace sessions",
     icon: "scan",
-    available: hasSessionDir,
-    disabledReason: hasSessionDir ? undefined : "No session directory configured",
+    available: hasProject,
+    disabledReason: hasProject ? undefined : "No project open",
     async run() {
       await ctx.scanSessions();
       await ctx.addRecentItem({
         type: "agent_session",
         title: "Scanned agent sessions",
-        sourcePath: "scan",
+        sourcePath: ctx.currentProject?.folderPath || "scan",
+        projectId: ctx.currentProject?.id,
       });
     },
   });
@@ -326,15 +321,15 @@ export function getCommands(ctx: CommandContext): Command[] {
   commands.push({
     id: "dev-connector",
     group: "Dev",
-    title: "Open Dev Connector",
-    description: "Terminal launcher and command presets",
+    title: "Open Project Tools",
+    description: "Terminal and command presets in Settings",
     icon: "terminal",
     available: true,
     async run() {
-      ctx.openFolder("/dev-connector");
+      ctx.openFolder("/settings?section=tools");
       await ctx.addRecentItem({
         type: "command_preset",
-        title: "Opened Dev Connector",
+        title: "Opened Project Tools",
         projectId: project?.id,
       });
     },

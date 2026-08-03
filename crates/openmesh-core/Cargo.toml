@@ -1,6 +1,6 @@
 [package]
 name = "openmesh-core"
-version = "0.1.21"
+version = "0.1.24"
 rust-version = "1.92.0"
 description = "Shared OpenMesh domain and storage logic used by the Desktop app and future CLI"
 authors = ["Openmesh Team"]
@@ -17,4 +17,7 @@ axga-ai = { git = "https://github.com/KJ-AIML/axga-harness-agent-rs.git", rev = 
 axga-shared = { git = "https://github.com/KJ-AIML/axga-harness-agent-rs.git", rev = "f47ebba523a0b59754e3ba2eb200e55b2e7d5d35" }
 tokio = { version = "1", features = ["rt", "time", "macros"] }
 futures = "0.3"
-reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls", "blocking"] }
+
+[dev-dependencies]
+tempfile = "3"

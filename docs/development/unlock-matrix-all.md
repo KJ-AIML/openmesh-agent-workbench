@@ -20,7 +20,9 @@ Package versions continue from shipped history (0.1.13 Desktop, 0.1.14 Ter×Yo).
 | **0.1.19** | **Organization Graph Preview** | Spec 0.1.18 | **RELEASED** |
 | **0.1.20** | **Enterprise Pilot Readiness** | Spec 0.1.19 | **RELEASED** |
 | **0.1.21** | **1.0 Release Candidate Program** | Spec 0.1.20 | **RELEASED** |
-| **1.0.0** | **Real-Team Coordination Platform** | Spec 1.0.0 | **UNLOCKED (gate only; ship when RC program PASS)** |
+| **0.1.22** | **LAN Relay + Live Ask** | (post-RC additive transport) | **UNLOCKED** — human waived RC feature freeze for this track only (2026-08-03) |
+| **0.1.23** | **Agent Engine + Tool Loop** | (post-RC; OpenMesh-branded engine; grok-build concepts only) | **UNLOCKED** — human Scope B 2026-08-03; Work Proxy draft stays tool-free |
+| **1.0.0** | **Real-Team Coordination Platform** | Spec 1.0.0 | **UNLOCKED (gate only; ship when RC program PASS)** — temp-lab CLI RC PASS 2026-08-03; GUI + real-team evidence still required |
 
 ## Global invariants (never waived by unlock)
 
@@ -45,4 +47,13 @@ Package versions continue from shipped history (0.1.13 Desktop, 0.1.14 Ter×Yo).
 ## Plans
 
 - `docs/development/openmesh-0.1.15-execution-plan.md` … `openmesh-0.1.21-execution-plan.md`  
+- `docs/development/openmesh-0.1.22-execution-plan.md` — LAN Relay + Live Ask (RC freeze waived for this track)  
 - `docs/development/openmesh-1.0.0-execution-plan.md`
+
+## Amendment — 0.1.22 during RC window
+
+RC freeze (0.1.21) still applies to unrelated feature expansion. **Exception:** human unlocked **0.1.22 LAN Relay + Live Ask** only. Filesystem relay, mesh query semantics, and 1.0.0 gate requirements are unchanged.
+
+## Amendment — 0.1.23 Agent Engine (Scope B)
+
+Human unlocked **0.1.23 Agent Engine + Tool Loop** (2026-08-03). Work Proxy draft path remains tool-free. grok-build is reference-only (no vendor/fork).

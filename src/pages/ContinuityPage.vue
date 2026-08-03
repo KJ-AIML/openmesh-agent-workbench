@@ -16,6 +16,7 @@ import {
   Network,
   ClipboardCheck,
   Flag,
+  Radio,
 } from "lucide-vue-next";
 import { useStore } from "../lib/useStore";
 import {
@@ -33,6 +34,8 @@ import {
   type OrgGraphView,
   type PilotPackView,
   type RcPackView,
+  type LanServeStatus,
+  type LanPeerInfo,
   getContinuityHubSummary,
   getPendingQuestions,
   getReturnDigest,
@@ -49,14 +52,22 @@ import {
   getOrgGraph,
   getPilotStatus,
   getRcStatus,
+  lanServeStart,
+  lanServeStop,
+  lanServeStatus,
+  lanDiscover,
+  lanSendPackage,
+  lanAskPeer,
   type MeshRemoteQueryAnswer,
 } from "../lib/continuityClient";
 
-type TabId = "pending" | "digest" | "mesh" | "relay" | "online-proxy" | "team" | "trust" | "connectors" | "org" | "pilot" | "rc";
+type TabId = "pending" | "digest" | "mesh" | "relay" | "online-proxy" | "lan" | "team" | "trust" | "connectors" | "org" | "pilot" | "rc";
+type GroupId = "you" | "team" | "mesh" | "gate";
 
 const { currentProject, currentProjectPath } = useStore();
 
 const tab = ref<TabId>("pending");
+const group = ref<GroupId>("you");
 const loading = ref(false);
 const error = ref<string | null>(null);
 const summary = ref<ContinuityHubSummary | null>(null);
@@ -75,6 +86,14 @@ const meshPeer = ref("");
 const meshQuestion = ref("");
 const meshTier = ref("low-impact");
 const meshAnswer = ref<MeshRemoteQueryAnswer | null>(null);
+const lanStatus = ref<LanServeStatus | null>(null);
+const lanPeers = ref<LanPeerInfo[]>([]);
+const lanSendId = ref("");
+const lanSendTo = ref("");
+const lanAskTo = ref("");
+const lanAskQuestion = ref("");
+const lanAskTier = ref("low-impact");
+const lanAskAnswer = ref<MeshRemoteQueryAnswer | null>(null);
 const acting = ref(false);
 const teamWs = ref<TeamWorkspaceView | null>(null);
 const trustPolicy = ref<TeamTrustPolicyView | null>(null);
@@ -85,19 +104,56 @@ const rcPack = ref<RcPackView | null>(null);
 
 const hasProject = computed(() => !!currentProjectPath.value);
 
-const tabs: { id: TabId; label: string; icon: typeof Inbox }[] = [
-  { id: "pending", label: "Pending", icon: Inbox },
-  { id: "digest", label: "Digest", icon: Clock },
-  { id: "mesh", label: "Mesh", icon: Users },
-  { id: "team", label: "Team", icon: Users },
-  { id: "trust", label: "Trust", icon: Shield },
-  { id: "connectors", label: "Connectors", icon: Plug },
-  { id: "org", label: "Org", icon: Network },
-  { id: "pilot", label: "Pilot", icon: ClipboardCheck },
-  { id: "rc", label: "RC", icon: Flag },
-  { id: "relay", label: "Relay", icon: Share2 },
-  { id: "online-proxy", label: "Online Proxy", icon: Cloud },
+const groups: { id: GroupId; label: string; tabs: TabId[] }[] = [
+  { id: "you", label: "You", tabs: ["pending", "digest"] },
+  { id: "team", label: "Team", tabs: ["team", "trust", "connectors", "org"] },
+  { id: "mesh", label: "Mesh", tabs: ["mesh", "relay", "online-proxy", "lan"] },
+  { id: "gate", label: "Gate", tabs: ["pilot", "rc"] },
 ];
+
+const tabMeta: Record<TabId, { label: string; icon: typeof Inbox }> = {
+  pending: { label: "Pending", icon: Inbox },
+  digest: { label: "Digest", icon: Clock },
+  mesh: { label: "Peers", icon: Users },
+  team: { label: "Workspace", icon: Users },
+  trust: { label: "Trust", icon: Shield },
+  connectors: { label: "Connectors", icon: Plug },
+  org: { label: "Org", icon: Network },
+  pilot: { label: "Pilot", icon: ClipboardCheck },
+  rc: { label: "RC", icon: Flag },
+  relay: { label: "Relay", icon: Share2 },
+  "online-proxy": { label: "Proxy", icon: Cloud },
+  lan: { label: "LAN", icon: Radio },
+};
+
+const visibleTabs = computed(() => {
+  const g = groups.find((x) => x.id === group.value) ?? groups[0];
+  return g.tabs.map((id) => ({ id, ...tabMeta[id] }));
+});
+
+const statusLine = computed(() => {
+  if (!summary.value) return null;
+  const s = summary.value;
+  return [
+    `${s.openPendingCount} pending`,
+    `${s.peerCount} peers`,
+    s.onlineProxyInitialized ? "proxy on" : "proxy off",
+  ].join(" · ");
+});
+
+function selectGroup(id: GroupId) {
+  group.value = id;
+  const g = groups.find((x) => x.id === id);
+  if (g && !g.tabs.includes(tab.value)) {
+    tab.value = g.tabs[0];
+  }
+}
+
+function selectTab(id: TabId) {
+  tab.value = id;
+  const owner = groups.find((g) => g.tabs.includes(id));
+  if (owner) group.value = owner.id;
+}
 
 async function loadSummary() {
   if (!currentProjectPath.value) {
@@ -136,6 +192,9 @@ async function loadTab() {
         break;
       case "online-proxy":
         onlineConfig.value = await getOnlineProxyStatus(path);
+        break;
+      case "lan":
+        lanStatus.value = await lanServeStatus(path);
         break;
       case "team":
         teamWs.value = await getTeamWorkspace(path);
@@ -204,6 +263,91 @@ async function handleAsk() {
   }
 }
 
+async function handleLanStart() {
+  if (!currentProjectPath.value) return;
+  acting.value = true;
+  error.value = null;
+  try {
+    lanStatus.value = await lanServeStart(currentProjectPath.value, {
+      ownerLabel: currentProject.value?.name || "local-operator",
+    });
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    acting.value = false;
+  }
+}
+
+async function handleLanStop() {
+  acting.value = true;
+  error.value = null;
+  try {
+    lanStatus.value = await lanServeStop();
+    if (currentProjectPath.value) {
+      lanStatus.value = await lanServeStatus(currentProjectPath.value);
+    }
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    acting.value = false;
+  }
+}
+
+async function handleLanDiscover() {
+  if (!currentProjectPath.value) return;
+  acting.value = true;
+  error.value = null;
+  try {
+    lanPeers.value = await lanDiscover(currentProjectPath.value, { seconds: 3 });
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    acting.value = false;
+  }
+}
+
+function selectLanPeer(peer: LanPeerInfo) {
+  lanSendTo.value = peer.address;
+  lanAskTo.value = peer.address;
+}
+
+async function handleLanSend() {
+  if (!currentProjectPath.value || !lanSendId.value.trim() || !lanSendTo.value.trim()) {
+    return;
+  }
+  acting.value = true;
+  error.value = null;
+  try {
+    await lanSendPackage(
+      currentProjectPath.value,
+      lanSendId.value.trim(),
+      lanSendTo.value.trim(),
+    );
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    acting.value = false;
+  }
+}
+
+async function handleLanAsk() {
+  if (!lanAskTo.value.trim() || !lanAskQuestion.value.trim()) return;
+  acting.value = true;
+  error.value = null;
+  lanAskAnswer.value = null;
+  try {
+    lanAskAnswer.value = await lanAskPeer(
+      lanAskTo.value.trim(),
+      lanAskQuestion.value.trim(),
+      { tier: lanAskTier.value },
+    );
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    acting.value = false;
+  }
+}
+
 async function handleMeshQuery() {
   if (!currentProjectPath.value || !meshPeer.value.trim() || !meshQuestion.value.trim()) {
     return;
@@ -238,6 +382,8 @@ function missedCounts(d: ReturnDigest) {
 }
 
 watch(tab, () => {
+  const owner = groups.find((g) => g.tabs.includes(tab.value));
+  if (owner) group.value = owner.id;
   loadTab();
 });
 
@@ -264,29 +410,23 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="space-y-6 animate-fade-in">
-    <div class="flex items-start justify-between gap-4">
-      <div>
-        <h1 class="text-title">Continuity</h1>
-        <p class="text-body text-muted mt-1">
-          Mesh, team, trust, connectors, and org graph — desktop surfaces for continuity through 0.1.19.
-        </p>
+  <div class="cont animate-fade-in">
+    <header class="cont__head">
+      <div class="cont__head-main">
+        <h1 class="cont__title">Continuity</h1>
+        <p v-if="hasProject && statusLine" class="cont__meta">{{ statusLine }}</p>
+        <p v-else-if="!hasProject" class="cont__meta">Select a project to load surfaces</p>
       </div>
       <button
         type="button"
-        class="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-[12px] font-medium"
-        style="
-          background: var(--surface-2);
-          border: 1px solid var(--border);
-          color: var(--foreground);
-        "
+        class="cont__refresh"
         :disabled="!hasProject || loading"
+        title="Refresh"
         @click="refresh"
       >
         <RefreshCw class="h-3.5 w-3.5" :class="{ 'animate-spin': loading }" />
-        Refresh
       </button>
-    </div>
+    </header>
 
     <div
       v-if="!hasProject"
@@ -296,32 +436,37 @@ onMounted(() => {
     </div>
 
     <template v-else>
-      <!-- Summary chips -->
-      <div v-if="summary" class="flex flex-wrap gap-2">
-        <span class="chip">Pending open: {{ summary.openPendingCount }}</span>
-        <span class="chip">Peers: {{ summary.peerCount }}</span>
-        <span class="chip">Envelopes: {{ summary.envelopeCount }}</span>
-        <span class="chip">Relay audit: {{ summary.auditEventCount }}</span>
-        <span class="chip">
-          Online proxy:
-          {{ summary.onlineProxyInitialized ? "ready" : "not init" }}
-        </span>
-      </div>
-
-      <!-- Tabs -->
-      <div class="flex flex-wrap gap-1 border-b pb-0" style="border-color: var(--border)">
-        <button
-          v-for="t in tabs"
-          :key="t.id"
-          type="button"
-          class="tab-btn inline-flex items-center gap-1.5 px-3 py-2 text-[12px] font-medium"
-          :class="{ active: tab === t.id }"
-          @click="tab = t.id"
-        >
-          <component :is="t.icon" class="h-3.5 w-3.5" />
-          {{ t.label }}
-        </button>
-      </div>
+      <nav class="om-nav" aria-label="Continuity sections">
+        <div class="om-seg" role="tablist" aria-label="Section groups">
+          <button
+            v-for="g in groups"
+            :key="g.id"
+            type="button"
+            role="tab"
+            class="om-seg__btn"
+            :class="{ 'is-active': group === g.id }"
+            :aria-selected="group === g.id"
+            @click="selectGroup(g.id)"
+          >
+            {{ g.label }}
+          </button>
+        </div>
+        <div class="om-tabs" role="tablist" aria-label="Views">
+          <button
+            v-for="t in visibleTabs"
+            :key="t.id"
+            type="button"
+            role="tab"
+            class="om-tab"
+            :class="{ 'is-active': tab === t.id }"
+            :aria-selected="tab === t.id"
+            @click="selectTab(t.id)"
+          >
+            <component :is="t.icon" class="h-3.5 w-3.5" />
+            {{ t.label }}
+          </button>
+        </div>
+      </nav>
 
       <div
         v-if="error"
@@ -339,17 +484,31 @@ onMounted(() => {
 
       <!-- Pending -->
       <div v-else-if="tab === 'pending'" class="space-y-3">
-        <div v-if="pending" class="workbench-card p-4 space-y-3">
-          <div class="flex items-center justify-between text-[12px] text-muted">
-            <span>Open: {{ pending.openCount }}</span>
+        <div v-if="pending" class="workbench-card p-5 space-y-3">
+          <div
+            v-if="pending.items.length === 0"
+            class="cont__empty"
+          >
+            <p class="cont__empty-title">You're clear</p>
+            <p class="cont__empty-body">
+              No pending questions
+              <span class="text-muted">
+                · proxy {{ pending.sourceCounts.proxyPending }}
+                · attention {{ pending.sourceCounts.continuityAttention }}
+                · signal {{ pending.sourceCounts.unresolvedSignal }}
+              </span>
+            </p>
+          </div>
+          <div
+            v-else
+            class="flex items-center justify-between text-[12px] text-muted"
+          >
+            <span>{{ pending.openCount }} open</span>
             <span>
               proxy {{ pending.sourceCounts.proxyPending }} · attention
               {{ pending.sourceCounts.continuityAttention }} · signal
               {{ pending.sourceCounts.unresolvedSignal }}
             </span>
-          </div>
-          <div v-if="pending.items.length === 0" class="text-[13px] text-muted py-4 text-center">
-            Nothing pending — you are clear.
           </div>
           <div
             v-for="item in pending.items"
@@ -525,6 +684,138 @@ onMounted(() => {
               from {{ e.attributedTo }} · evidence {{ e.evidenceItemCount }} ·
               {{ e.generatedAt }}
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- LAN -->
+      <div v-else-if="tab === 'lan'" class="space-y-3">
+        <div class="workbench-card p-4 space-y-3">
+          <h3 class="section-label">LAN listener</h3>
+          <p class="text-[12px] text-muted">
+            Trusted-LAN alpha: UDP discovery + HTTP package transfer / live ask.
+            macOS may prompt for firewall on first bind. UDP can fail on some
+            VPN interfaces — use manual host:port.
+          </p>
+          <div v-if="lanStatus?.running" class="flex items-center gap-2 text-[13px]">
+            <CheckCircle2 class="h-4 w-4" style="color: var(--accent-green)" />
+            <span class="font-medium">Listening</span>
+            <span class="badge">{{ lanStatus.httpHost }}:{{ lanStatus.httpPort }}</span>
+          </div>
+          <div v-else class="text-[12px] text-muted">Listener is stopped.</div>
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              class="btn-primary"
+              :disabled="acting || !!lanStatus?.running"
+              @click="handleLanStart"
+            >
+              Start listener
+            </button>
+            <button
+              type="button"
+              class="btn-ghost"
+              :disabled="acting || !lanStatus?.running"
+              @click="handleLanStop"
+            >
+              Stop
+            </button>
+            <button
+              type="button"
+              class="btn-ghost"
+              :disabled="acting"
+              @click="handleLanDiscover"
+            >
+              Refresh discover
+            </button>
+          </div>
+          <div v-if="lanStatus?.note" class="text-[11px] text-muted">{{ lanStatus.note }}</div>
+        </div>
+        <div class="workbench-card p-4 space-y-3">
+          <h3 class="section-label">Peers ({{ lanPeers.length }})</h3>
+          <div v-if="lanPeers.length === 0" class="text-[12px] text-muted">
+            No peers discovered yet. Start a listener on another device, then
+            Refresh discover — or enter host:port manually below.
+          </div>
+          <div
+            v-for="p in lanPeers"
+            :key="p.peerId + p.address"
+            class="rounded-lg p-3 text-[12px] cursor-pointer"
+            style="background: var(--surface-2); border: 1px solid var(--border)"
+            @click="selectLanPeer(p)"
+          >
+            <div class="font-medium text-[13px]">{{ p.ownerLabel }}</div>
+            <div class="text-muted">id={{ p.peerId }} · {{ p.address }}</div>
+            <div class="text-muted text-[11px]">seen {{ p.lastSeenAt }}</div>
+          </div>
+        </div>
+        <div class="workbench-card p-4 space-y-3">
+          <h3 class="section-label">Send approved package</h3>
+          <input
+            v-model="lanSendId"
+            class="input-sm w-full"
+            placeholder="Package id (approved)"
+          />
+          <input
+            v-model="lanSendTo"
+            class="input-sm w-full"
+            placeholder="Peer host:port"
+          />
+          <button
+            type="button"
+            class="btn-primary"
+            :disabled="acting || !lanSendId.trim() || !lanSendTo.trim()"
+            @click="handleLanSend"
+          >
+            Send over LAN
+          </button>
+        </div>
+        <div class="workbench-card p-4 space-y-3">
+          <h3 class="section-label">Ask peer (live)</h3>
+          <p class="text-[12px] text-muted">
+            Read-only draft from the peer’s local Work Proxy while they are
+            online. Does not write the local ledger.
+          </p>
+          <input
+            v-model="lanAskTo"
+            class="input-sm w-full"
+            placeholder="Peer host:port"
+          />
+          <textarea
+            v-model="lanAskQuestion"
+            rows="2"
+            class="input-area w-full"
+            placeholder="What is in progress?"
+          />
+          <div class="flex items-center gap-2">
+            <select v-model="lanAskTier" class="input-sm">
+              <option value="low-impact">low-impact</option>
+              <option value="standard">standard</option>
+              <option value="critical">critical</option>
+            </select>
+            <button
+              type="button"
+              class="btn-primary"
+              :disabled="acting || !lanAskTo.trim() || !lanAskQuestion.trim()"
+              @click="handleLanAsk"
+            >
+              Ask peer
+            </button>
+          </div>
+          <div
+            v-if="lanAskAnswer"
+            class="rounded-lg p-3 space-y-2"
+            style="background: var(--surface-2); border: 1px solid var(--border)"
+          >
+            <div class="flex items-center gap-2 text-[12px]">
+              <span class="badge">{{ lanAskAnswer.peerLabel }}</span>
+              <span v-if="lanAskAnswer.readOnly" class="badge">read-only</span>
+              <span v-if="lanAskAnswer.refused" class="badge">refused</span>
+            </div>
+            <div class="text-[12px] text-muted">{{ lanAskAnswer.freshness.statement }}</div>
+            <pre class="text-[12px] whitespace-pre-wrap font-sans">{{
+              lanAskAnswer.answerText
+            }}</pre>
           </div>
         </div>
       </div>
@@ -835,6 +1126,71 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.cont {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 920px;
+}
+
+.cont__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cont__title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.cont__meta {
+  margin: 0.2rem 0 0;
+  font-size: 0.78rem;
+  color: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
+}
+
+.cont__refresh {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--foreground);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.cont__refresh:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.cont__empty {
+  text-align: center;
+  padding: 2.25rem 1rem;
+}
+
+.cont__empty-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.cont__empty-body {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  color: var(--muted-foreground);
+}
+
 .chip {
   display: inline-flex;
   align-items: center;
@@ -844,15 +1200,6 @@ onMounted(() => {
   background: var(--surface-2);
   border: 1px solid var(--border);
   color: var(--muted-foreground);
-}
-.tab-btn {
-  color: var(--muted-foreground);
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-}
-.tab-btn.active {
-  color: var(--foreground);
-  border-bottom-color: var(--accent-blue);
 }
 .badge {
   display: inline-flex;

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from "vue";
-import { Minus, Square, X, LayoutGrid } from "lucide-vue-next";
+import { Minus, Square, X, LayoutGrid, MessageSquare } from "lucide-vue-next";
 import {
   minimizeWindow,
   toggleMaximizeWindow,
@@ -88,6 +88,14 @@ async function handleDrag(e: MouseEvent) {
     </div>
 
     <nav class="tb__nav" data-no-drag>
+      <router-link
+        to="/agent-chat"
+        class="tb__tab"
+        :class="{ 'is-active': $route.path === '/agent-chat' }"
+      >
+        <MessageSquare class="tb__tab-icon" />
+        Chat
+      </router-link>
       <router-link to="/" class="tb__tab" :class="{ 'is-active': $route.path === '/' }">
         <LayoutGrid class="tb__tab-icon" />
         Work
@@ -98,13 +106,6 @@ async function handleDrag(e: MouseEvent) {
         :class="{ 'is-active': $route.path === '/docs' }"
       >
         Docs
-      </router-link>
-      <router-link
-        to="/agent-sessions"
-        class="tb__tab"
-        :class="{ 'is-active': $route.path === '/agent-sessions' }"
-      >
-        Agents
       </router-link>
       <router-link
         to="/sprint"

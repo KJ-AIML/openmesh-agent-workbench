@@ -2,7 +2,7 @@
 
 **Status:** PLAN_FROZEN — UNLOCKED FOR IMPLEMENTATION  
 **Human unlock:** 2026-08-02 (“Unlock all”)  
-**Depends on:** prior package track RELEASED (sequential ship)  
+**Depends on:** prior package track RELEASED (sequential ship) + RC dogfood at real-team scale  
 **Branch (suggested):** `feat/openmesh-1.0.0`
 
 ## Mission
@@ -26,6 +26,20 @@ See Development Spec / unlock-matrix-all.md invariants. Track PASS requires auto
 - F: E2E / dogfood  
 - G: Version, CHANGELOG, ship  
 
+### Dogfood precondition status (2026-08-03)
+
+| Evidence | Status |
+|----------|--------|
+| `v0.1.21` RELEASED | yes |
+| `cargo test --workspace` green | yes (1895 passed / 0 failed / 1 ignored after flake fix) |
+| `npm run typecheck` green | yes |
+| CLI `pilot check` + `rc check` on temp lab | **PASS** (`rc_ready=true`) |
+| Optional CLI depth (cloud/connector/org/matrix) | **PASS** |
+| GUI Continuity smoke | **not performed** |
+| Real multi-person team project RC | **not performed** — **blocks claiming 1.0.0 ready** |
+
+Do **not** start Checkpoint G (version bump / tag) until GUI smoke + real-team RC evidence are recorded.
+
 ## Unlock matrix
 | Track | Authorization |
 |-------|---------------|
@@ -35,3 +49,4 @@ See Development Spec / unlock-matrix-all.md invariants. Track PASS requires auto
 ## Validation commands
 - `cargo test --workspace`
 - `npm run verify` (when frontend touched)
+- `docs/development/handoff-dogfood-rc-1.0.md` (pilot → rc path)

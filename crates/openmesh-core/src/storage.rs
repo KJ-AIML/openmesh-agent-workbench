@@ -169,6 +169,9 @@ pub struct ProviderSettings {
     pub default_model: Option<String>,
     pub fallback_model: Option<String>,
     pub usage_tracking_enabled: bool,
+    /// Optional OpenAI-compatible API base URL (e.g. https://api.x.ai/v1). Never stores the key.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_base_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -207,6 +210,18 @@ pub struct SessionDirsSettings {
     pub claude_code_enabled: bool,
     pub opencode_dir: Option<String>,
     pub opencode_enabled: bool,
+    #[serde(default)]
+    pub cursor_dir: Option<String>,
+    #[serde(default)]
+    pub cursor_enabled: bool,
+    #[serde(default)]
+    pub gemini_dir: Option<String>,
+    #[serde(default)]
+    pub gemini_enabled: bool,
+    #[serde(default)]
+    pub grok_dir: Option<String>,
+    #[serde(default)]
+    pub grok_enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -850,6 +865,7 @@ pub fn default_settings() -> Settings {
             default_model: None,
             fallback_model: None,
             usage_tracking_enabled: false,
+            api_base_url: None,
         },
         models: ModelsSettings {
             coding_model: None,
@@ -870,12 +886,19 @@ pub fn default_settings() -> Settings {
             axga_path: None,
         },
         session_dirs: SessionDirsSettings {
+            // Paths optional — runtime auto-detects per OS. Enabled flags unused for scan.
             codex_dir: None,
-            codex_enabled: false,
+            codex_enabled: true,
             claude_code_dir: None,
-            claude_code_enabled: false,
+            claude_code_enabled: true,
             opencode_dir: None,
-            opencode_enabled: false,
+            opencode_enabled: true,
+            cursor_dir: None,
+            cursor_enabled: true,
+            gemini_dir: None,
+            gemini_enabled: true,
+            grok_dir: None,
+            grok_enabled: true,
         },
         local_paths: LocalPathsSettings {
             default_projects_dir: None,

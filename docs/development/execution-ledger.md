@@ -2880,3 +2880,142 @@ Added:
 Parent workspace pointer: `openmesh-ws/docs/handoff-openmesh-agent-workbench-post-0.1.21.md`
 Next: dogfood RC / 1.0.0 gate.
 
+## 2026-08-03 — Agent Chat shell (human-unlocked)
+
+Status: FEATURE_LOCAL (Unreleased; not a version bump)
+Branch: main (local WIP)
+Authorization: human “ทำเลย” — Codex-like in-app chat with tools on active project path (explicit override of RC feature freeze for this surface).
+What changed:
+- `src/pages/AgentChatPage.vue` — chat UI scoped to `currentProjectPath`
+- `src/lib/agentChat/{tools,runner}.ts` — slash/keyword tool router over existing Tauri IPC (docs/notes/sprint/continuity/team/trust/connectors/org/pilot/rc/mesh/ask_proxy)
+- Nav: Sidebar Agents → Agent Chat; Titlebar Agents → `/agent-chat`
+- Tests: `tests/agentChatTools.test.ts`
+- CHANGELOG `[Unreleased]`
+Non-goals this slice: full LLM tool-calling loop, new Rust commands, write tools that mutate without confirmation.
+Commands run:
+- `npm run typecheck` → exit 0
+- `npm test -- tests/agentChatTools.test.ts` → 8 passed
+Next: GUI dogfood of `/agent-chat`; later track for true multi-step LLM tool loop if authorized.
+
+## 2026-08-03 — Dev Track 0.1.22 UNLOCKED (LAN Relay + Live Ask)
+
+Status: UNLOCKED_FOR_IMPLEMENTATION
+Branch: main (local)
+Authorization: human unlock despite RC feature freeze — **this track only**.
+Objective: LAN peer discovery + HTTP relay package transfer + live mesh ask; CLI + Continuity LAN tab; version 0.1.22 when complete.
+Plan: `docs/development/openmesh-0.1.22-execution-plan.md`
+Harness task: `lan-relay-alpha`
+Non-goals: human chat UI, cloud proxy, WAN/NAT, breaking filesystem relay.
+Next: implement `openmesh_core::lan` → CLI → Desktop → dogfood → version bump.
+
+## 2026-08-03 — Dev Track 0.1.22 COMPLETED (LAN Relay + Live Ask)
+
+Status: COMPLETED (PASS) — uncommitted; tag/release not performed
+Branch: main (local WIP; preserve Agent Chat / RC dogfood dirty files)
+Authorization: human unlock despite RC freeze (this track only)
+Objective: Ship LAN discovery + HTTP relay package transfer + live ask (CLI + Continuity LAN tab); bump public version to 0.1.22
+What changed:
+- `openmesh_core::lan` — beacon, peer table, HTTP server/client, serve lifecycle, live ask → `MeshRemoteQueryAnswer`
+- `relay::receive_package_payload` — quarantine receive for alternate transports
+- CLI `lan serve|discover|send|ask|status` + `tests/lan_workflow.rs`
+- Tauri IPC + Continuity Mesh → LAN tab + `continuityClient` wrappers
+- Docs: execution plan, unlock matrix amendment, CHANGELOG 0.1.22, version fields → 0.1.22
+Tests added: core `lan::*` unit/loopback; CLI `lan_workflow`
+Commands run:
+- `cargo test -p openmesh-core --lib lan` → **PASS** (7 lan + 1 unrelated filter hit)
+- `cargo test -p openmesh-cli --test lan_workflow` → **PASS** (1)
+- `npm run typecheck` → exit 0
+- `cargo check -p openmesh` → ok
+- Dogfood two temp projects (loopback):
+  - `lan serve --host 127.0.0.1 --http-port 0 --seconds 35 --json` → running, port bound
+  - `lan send --id pkg-dogfood-1 --to 127.0.0.1:<port>` → ok; `relay/received/pkg-dogfood-1.json` present
+  - `lan ask --question "What is in progress?"` → readOnly=true, refused=false
+  - `lan discover --seconds 1` → `[]` (UDP broadcast empty on loopback; documented fallback `--to`)
+Exact results: automated + CLI dogfood PASS; Desktop GUI smoke not performed this session
+Manual QA actually performed: CLI two-process loopback dogfood only
+Architecture decisions:
+- LAN is alternate transport into quarantine receive + live local-proxy ask; filesystem relay unchanged
+- Hand-rolled HTTP server (no new web framework); reqwest blocking client
+Known limitations:
+- Trusted-LAN alpha (no e2e encryption / WAN / NAT)
+- UDP discover may fail on VPN/loopback — use manual `host:port`
+Next recommended track: tag/release v0.1.22 on ask; continue 1.0.0 gate / real-team RC dogfood
+
+## 2026-08-03 — Dev Track 0.1.22 FOLLOW-UP (stale serve-status + dogfood)
+
+Status: COMPLETED (PASS) — still uncommitted; no tag/release
+Branch: main (local WIP; preserve Agent Chat / RC dogfood dirty files)
+Objective: Close high-value leftover — persisted `lan/serve-status.json` stuck `running` after crash; reconfirm CLI dogfood + tauri:dev
+What changed:
+- `openmesh_core::lan::serve` — on status read / start, if disk claims `running` but this process has no live serve, TCP-probe recorded host:port (map `0.0.0.0`→`127.0.0.1`); clear + rewrite when dead; keep running when another process’s serve is alive
+- Unit: `stale_persisted_running_cleared_on_status_read`
+Commands run:
+- `cargo test -p openmesh-core --lib lan` → **PASS** (incl. stale clear)
+- `cargo test -p openmesh-cli --test lan_workflow` → **PASS**
+- `npm run typecheck` → exit 0
+- CLI dogfood (`/tmp/openmesh-lan-a-zYWj88` / `…-b-OliJpJ`):
+  - fake disk `running` + closed port → status `running=false` note contains “Stale serve status cleared”
+  - `lan serve --host 127.0.0.1 --http-port 0 --seconds 45` → port 59766; cross-process `lan status` → `running=true`
+  - `lan send` pkg-dog-1 → `relay/received/pkg-dog-1.json` present
+  - `lan ask` → `readOnly=true`, `refused=false`
+  - `lan discover --seconds 1` → `[]` (loopback UDP; documented)
+- Desktop: Continuity Mesh → LAN tab wired (`lan_serve_*` / `lan_discover` / `lan_send_package` / `lan_ask_peer` in `lib.rs` + `continuityClient` + `ContinuityPage.vue`); `npm run tauri:dev` running with rebuild after serve.rs change. Full GUI click-path not automated this session.
+Exact results: automated + CLI dogfood PASS; Desktop path verified by code review + live tauri:dev rebuild
+Next: await human for commit / tag `v0.1.22` / release
+
+## 2026-08-03 — RC dogfood READ+RUN + docs sync
+
+Status: DOGFOOD_PASS_TEMP_LAB (GUI + real-team still open)
+Branch: main
+Objective: Full read of post-0.1.21 handoff docs; run verify + CLI dogfood path; update living docs from evidence; fix blocking flake under RC freeze (tests allowed).
+What changed:
+- `crates/openmesh-core/tests/context_pack_continuity_compatibility.rs` — ignore wall-clock `generatedAt` when asserting continuity views unchanged across context-pack build (1s race flake).
+- `docs/development/handoff-post-0.1.21.md` — measured dogfood results; require `init` on fresh dirs; Tauri command footgun clarified (lib.rs 53 / handler 73); acceptance boxes for this session.
+- `docs/development/handoff-dogfood-rc-1.0.md` — add `init` before profile; session evidence table §G.
+- `docs/development/openmesh-1.0.0-execution-plan.md` — dogfood checkpoint status.
+- Parent pointer `openmesh-ws/docs/handoff-openmesh-agent-workbench-post-0.1.21.md` + heli profile version fact → 0.1.21.
+Tests added: none (flake harden only).
+Commands run:
+- `git checkout main && git pull` — already at `v0.1.21` / clean vs origin
+- `git describe --tags --abbrev=0` → `v0.1.21`
+- versions: package.json + Cargo.toml (core/cli/tauri) + tauri.conf → `0.1.21`
+- `cargo test --workspace` (first run) → **FAIL** 1 test: `context_pack_and_continuity_views_coexist_without_semantic_coupling` (`generatedAt` 18:36:58Z vs 18:36:59Z)
+- same test re-run ×3 → PASS (flake confirmed)
+- after fix: `cargo test --workspace` → **PASS** aggregate **1895 passed; 0 failed; 1 ignored**
+- `npm run typecheck` → exit 0
+- CLI temp lab `PROJ=/tmp/openmesh-rc-dogfood-v4EETh`:
+  - `init` → profile → team → trust-admin → `pilot check` exit **0** (`pilot_ready=true` pass=4)
+  - `rc check` exit **0** (`rc_ready=true` p0_fail=0 p1_fail=0)
+  - optional: team cloud local-sim + sync-scaffold + connector register/collect + org graph + rc matrix + freeze-policy
+  - recheck: pilot pass=6; rc still ready; matrix warn only `m-online` optional missing
+Exact results:
+- CLI min + optional depth: **PASS** on temp lab
+- GUI `npm run tauri:dev`: **not performed**
+- Real multi-person project dogfood: **not performed**
+Manual QA actually performed: CLI dogfood only (no Desktop GUI).
+Architecture decisions:
+- RC freeze respected: docs + test harden only; no domain feature expansion.
+- Runbook must call `openmesh-cli init` before profile/team on fresh roots.
+Known limitations:
+- Temp-lab `rc_ready` is not real-team scale evidence for 1.0.0.
+- Desktop Continuity smoke still unchecked.
+- README still documents stale `web-demo/` clone path (pre-existing tech debt; not fixed this slice).
+Next recommended track: GUI smoke + real-team RC dogfood evidence, then **1.0.0 gate package** on `feat/openmesh-1.0.0`.
+
+## 2026-08-03 — Dev Track 0.1.23 UNLOCKED + IMPLEMENTING (Agent Engine + Tool Loop)
+
+Status: HUMAN UNLOCK Scope B — Agent Engine Alpha + native tool loop
+Objective: OpenMesh-branded agent engine; live LLM; tool loop; Desktop Chat + CLI; secrets outside project JSON
+Plan: `docs/development/openmesh-0.1.23-execution-plan.md`
+Non-goals: grok-build fork; Work Proxy draft tool calls; marketplace/subagents
+
+## 2026-08-03 — Dev Track 0.1.23 COMPLETED (Agent Engine + Tool Loop)
+
+Status: IMPLEMENTATION COMPLETE (local; uncommitted; tag/release pending ask)
+Evidence:
+- `cargo test -p openmesh-core --lib agent_engine` PASS (4)
+- `cargo test -p openmesh-cli --test agent_engine_workflow` PASS (3)
+- `cargo check -p openmesh` ok; `npm run typecheck` ok; agentChat vitest PASS
+- `cargo test -p openmesh-core --test ledger_boundary` PASS
+- Version → 0.1.23; CHANGELOG section added
+
