@@ -1,0 +1,102 @@
+name: Release
+
+# Builds native OpenMesh desktop installers (macOS .dmg, Windows .msi/.exe,
+# Linux .deb/.AppImage) with tauri-action and attaches them to a GitHub
+# Release.
+#
+# Triggers:
+#   1. Pushing a tag matching `v*` — builds installers and creates/updates
+#      the release for that tag.
+#   2. Manual `workflow_dispatch` with a `tag` input — rebuilds installers
+#      for an *existing* tag/release (used when a release was published
+#      before this workflow existed, or to re-run a failed platform).
+#
+# Code signing: this repo does not currently provide Apple Developer ID or
+# Windows Authenticode signing secrets, so installers are built unsigned.
+# macOS users will need to right-click → Open (or clear the quarantine
+# attribute) and Windows users will see a SmartScreen warning. Add
+# `APPLE_CERTIFICATE` / `APPLE_CERTIFICATE_PASSWORD` / `APPLE_SIGNING_IDENTITY`
+# / `APPLE_ID` / `APPLE_PASSWORD` / `APPLE_TEAM_ID` (macOS) and
+# `WINDOWS_CERTIFICATE` / `WINDOWS_CERTIFICATE_PASSWORD` (Windows) repo
+# secrets to enable signing later — tauri-action picks them up automatically.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag to (re)build installers for, e.g. v0.1.24. Leave empty to use the ref the workflow was run on.'
+        required: false
+        default: ''
+
+jobs:
+  publish-tauri:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'macos-latest' # Apple Silicon (M1 and above)
+            args: '--target aarch64-apple-darwin'
+          - platform: 'macos-latest' # Intel
+            args: '--target x86_64-apple-darwin'
+          - platform: 'ubuntu-22.04'
+            args: ''
+          - platform: 'windows-latest'
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # Only used on macOS runners so it's conditional to slightly speed up windows/linux builds.
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: install dependencies (ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: install frontend dependencies
+        run: npm ci
+
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.event.inputs.tag || github.ref_name }}
+          releaseName: 'OpenMesh ${{ github.event.inputs.tag || github.ref_name }}'
+          releaseBody: |
+            Installers below are built by CI and are currently **unsigned**
+            (no Apple Developer ID / Windows Authenticode certificates are
+            configured for this project yet).
+
+            - macOS: right-click the `.app` (or the file inside the `.dmg`) and choose "Open" the first time, or run `xattr -dr com.apple.quarantine /Applications/OpenMesh.app` after installing.
+            - Windows: click "More info" → "Run anyway" on the SmartScreen prompt.
+            - Linux: `.deb` / `.AppImage` do not require any extra step.
+
+            See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${{ github.event.inputs.tag || github.ref_name }}/CHANGELOG.md) for full release notes.
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
