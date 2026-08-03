@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **CI**: `.github/workflows/release.yml` — multi-OS (macOS/Windows/Linux) Tauri installer build via `tauri-apps/tauri-action`, triggered on `v*` tag push or manual `workflow_dispatch` (used to backfill installers onto releases published before this workflow existed, e.g. v0.1.24)
+
+### Fixed
+
+- `src-tauri`: `git2` now builds with the `vendored-openssl` feature so cross-compiling for `x86_64-apple-darwin` from an Apple Silicon CI runner no longer fails looking for a system OpenSSL via `pkg-config`
+
 ## [0.1.24] - 2026-08-03
 
 ### Added

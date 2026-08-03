@@ -86,17 +86,15 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.event.inputs.tag || github.ref_name }}
-          releaseName: 'OpenMesh ${{ github.event.inputs.tag || github.ref_name }}'
-          releaseBody: |
-            Installers below are built by CI and are currently **unsigned**
-            (no Apple Developer ID / Windows Authenticode certificates are
-            configured for this project yet).
-
-            - macOS: right-click the `.app` (or the file inside the `.dmg`) and choose "Open" the first time, or run `xattr -dr com.apple.quarantine /Applications/OpenMesh.app` after installing.
-            - Windows: click "More info" → "Run anyway" on the SmartScreen prompt.
-            - Linux: `.deb` / `.AppImage` do not require any extra step.
-
-            See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${{ github.event.inputs.tag || github.ref_name }}/CHANGELOG.md) for full release notes.
+          # releaseName/generateReleaseNotes are ONLY passed on a real `v*`
+          # tag push, where tauri-action is creating a brand-new release
+          # and needs a title. On a manual workflow_dispatch backfill run
+          # (used to attach installers to a release that predates this
+          # workflow) these are left empty so the existing, hand-written
+          # release title/notes are not clobbered — tauri-action just
+          # uploads the built assets to the release it finds for `tagName`.
+          releaseName: ${{ github.event_name == 'push' && format('OpenMesh {0}', github.ref_name) || '' }}
+          generateReleaseNotes: ${{ github.event_name == 'push' }}
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
