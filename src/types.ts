@@ -207,6 +207,12 @@ export type Settings = {
 		theme: "dark" | "light" | "system";
 		fontSize: "small" | "medium" | "large";
 	};
+	/** Skills / hooks / plugins enable maps (opt-out; missing ⇒ enabled). */
+	extensions?: {
+		skills: Record<string, boolean>;
+		hooks: Record<string, boolean>;
+		plugins: Record<string, boolean>;
+	};
 };
 
 export type AppState = {

@@ -65,6 +65,7 @@ function defaultSettings(): Settings {
 		},
 		localPaths: {},
 		appearance: { theme: "dark", fontSize: "medium" },
+		extensions: { skills: {}, hooks: {}, plugins: {} },
 	};
 }
 

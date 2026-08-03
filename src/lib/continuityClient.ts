@@ -124,6 +124,8 @@ export interface OnlineProxyAnswer {
   };
   refused: boolean;
   mode: string;
+  /** True when answer came from Agent Engine (not LocalScaffold paste). */
+  liveEngine?: boolean;
 }
 
 export interface ContinuityHubSummary {
@@ -483,6 +485,18 @@ export async function lanDiscover(
       udpPort: opts?.udpPort,
     },
   });
+}
+
+export async function lanListLastPeers(
+  projectPath: string,
+): Promise<LanPeerInfo[]> {
+  return invoke<LanPeerInfo[]>("lan_list_last_peers", { projectPath });
+}
+
+export async function lanListApprovedPackages(
+  projectPath: string,
+): Promise<string[]> {
+  return invoke<string[]>("lan_list_approved_packages", { projectPath });
 }
 
 export async function lanSendPackage(

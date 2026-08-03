@@ -271,8 +271,8 @@ fn handle_mesh_ask(body: &[u8], identity: &LanHttpIdentity) -> (u16, Vec<u8>, &'
     match answer_live_ask(&identity.project_path, &req) {
         Ok(answer) => json_ok(&answer),
         Err(e) => (
-            400,
-            format!(r#"{{"error":"{e}"}}"#).into_bytes(),
+            e.http_status(),
+            e.to_json_body().into_bytes(),
             "application/json",
         ),
     }
@@ -300,6 +300,8 @@ fn write_response(
         400 => "Bad Request",
         404 => "Not Found",
         409 => "Conflict",
+        502 => "Bad Gateway",
+        503 => "Service Unavailable",
         _ => "Error",
     };
     let header = format!(
@@ -408,9 +410,27 @@ mod tests {
             .join(".openmesh/relay/received/pkg-lan-1.json")
             .exists());
 
-        let answer = ask_peer("127.0.0.1", port, "What is in progress?", Some("low-impact")).unwrap();
-        assert!(answer.read_only);
-        assert!(!answer.answer_text.is_empty());
+        // Without a configured peer API key, live ask must fail closed (not LocalScaffold).
+        let ask_err = ask_peer("127.0.0.1", port, "What is in progress?", Some("low-impact"));
+        match ask_err {
+            Err(crate::lan::client::LanClientError::Peer { status, body }) => {
+                assert_eq!(status, 503);
+                assert!(
+                    body.contains("missing_api_key") || body.contains("API key"),
+                    "body={body}"
+                );
+            }
+            Ok(answer) => {
+                // If the host unexpectedly has a key configured, still assert read-only shape.
+                assert!(answer.read_only);
+                assert!(!answer.answer_text.is_empty());
+                assert!(
+                    !answer.answer_text.contains("local-scaffold"),
+                    "must not return scaffold paste"
+                );
+            }
+            Err(other) => panic!("unexpected ask error: {other}"),
+        }
 
         stop.store(true, Ordering::SeqCst);
         let _ = handle.join();

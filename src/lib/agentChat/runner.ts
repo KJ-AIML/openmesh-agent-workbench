@@ -20,12 +20,39 @@ export type ChatTurnResult = {
   toolCalls: ChatToolCall[];
 };
 
+/** Lightweight mid-turn status for the in-thread thinking bubble. */
+export type ChatTurnProgress =
+  | { kind: "phase"; label: string }
+  | { kind: "tool_start"; title: string }
+  | { kind: "tool_done"; title: string; ok: boolean };
+
+export type ChatTurnOptions = {
+  settings?: Settings | null;
+  history?: { role: string; content: string }[];
+  /** Fired for UI status only — must stay sync/cheap (no stringify/IO). */
+  onProgress?: (event: ChatTurnProgress) => void;
+};
+
 export async function runAgentChatTurn(
   projectPath: string,
   userMessage: string,
-  settings?: Settings | null,
+  settingsOrOpts?: Settings | null | ChatTurnOptions,
   history?: { role: string; content: string }[],
 ): Promise<ChatTurnResult> {
+  // Back-compat: (path, msg, settings, history) or (path, msg, opts).
+  const opts: ChatTurnOptions =
+    settingsOrOpts !== null &&
+    typeof settingsOrOpts === "object" &&
+    ("settings" in settingsOrOpts ||
+      "history" in settingsOrOpts ||
+      "onProgress" in settingsOrOpts)
+      ? settingsOrOpts
+      : { settings: settingsOrOpts as Settings | null | undefined, history };
+
+  const settings = opts.settings;
+  const hist = opts.history ?? history;
+  const onProgress = opts.onProgress;
+
   if (settings !== undefined && !isChatProviderReady(settings)) {
     return {
       assistantText:
@@ -52,7 +79,9 @@ export async function runAgentChatTurn(
   const toolCalls: ChatToolCall[] = [];
 
   if (tools.length > 0) {
+    onProgress?.({ kind: "phase", label: "Working with tools…" });
     for (const tool of tools) {
+      onProgress?.({ kind: "tool_start", title: tool.title });
       try {
         const result: AgentToolResult = await tool.run(projectPath, trimmed);
         toolCalls.push({
@@ -61,6 +90,7 @@ export async function runAgentChatTurn(
           ok: result.ok,
           summary: result.summary,
         });
+        onProgress?.({ kind: "tool_done", title: tool.title, ok: result.ok });
       } catch (e) {
         toolCalls.push({
           toolId: tool.id,
@@ -68,6 +98,7 @@ export async function runAgentChatTurn(
           ok: false,
           summary: e instanceof Error ? e.message : String(e),
         });
+        onProgress?.({ kind: "tool_done", title: tool.title, ok: false });
       }
     }
 
@@ -82,9 +113,10 @@ export async function runAgentChatTurn(
   }
 
   // Freeform / LLM tool loop via OpenMesh Agent Engine
+  onProgress?.({ kind: "phase", label: "Thinking…" });
   try {
     const result = await runAgentEngineTurn(projectPath, trimmed, {
-      messages: history ?? [],
+      messages: hist ?? [],
       providerName: settings?.provider?.name,
       model:
         chatModelId(settings ?? null) ||

@@ -1,15 +1,15 @@
 //! Dev Track 0.1.23 — OpenMesh Agent Engine Desktop IPC.
 
 use openmesh_core::agent_engine::{
-    probe_provider, resolve_provider_kind, run_agent_turn, AgentDefinition, AgentSecretStore,
-    AgentSession, CascadingSecretStore, ChatMessage, ChatRole, EngineTurnResult,
-    OpenAiCompatibleProvider, ProviderConfig, ProviderProbeResult, ToolExecutor,
+    enrich_system_prompt, load_inventory, probe_provider, resolve_provider_kind, run_agent_turn,
+    AgentDefinition, AgentSecretStore, AgentSession, CascadingSecretStore, ChatMessage, ChatRole,
+    EngineTurnResult, OpenAiCompatibleProvider, ProviderConfig, ProviderProbeResult, ToolExecutor,
 };
 use openmesh_core::context_service;
 use openmesh_core::mesh::peers::list_peers;
 use openmesh_core::pilot::build_pilot_pack;
 use openmesh_core::rc::build_rc_pack;
-use openmesh_core::storage::{read_project, Project};
+use openmesh_core::storage::{default_settings, read_global, read_project, Project, Settings};
 use openmesh_core::continuity::{
     current_state_projection_path, load_continuity_input_snapshot, read_current_state_projection,
     rebuild_current_state_projection,
@@ -68,8 +68,9 @@ pub struct AgentProviderTestRequest {
     pub api_key: Option<String>,
 }
 
-#[tauri::command]
-pub fn agent_provider_test(request: AgentProviderTestRequest) -> Result<ProviderProbeResult, String> {
+fn agent_provider_test_blocking(
+    request: AgentProviderTestRequest,
+) -> Result<ProviderProbeResult, String> {
     let store = secrets();
     let api_key = request
         .api_key
@@ -94,6 +95,16 @@ pub fn agent_provider_test(request: AgentProviderTestRequest) -> Result<Provider
     .map_err(|e| e.to_string())
 }
 
+/// Blocking HTTP probe — off the UI/IPC thread (same reason as agent_engine_turn).
+#[tauri::command]
+pub async fn agent_provider_test(
+    request: AgentProviderTestRequest,
+) -> Result<ProviderProbeResult, String> {
+    tauri::async_runtime::spawn_blocking(move || agent_provider_test_blocking(request))
+        .await
+        .map_err(|e| format!("provider test failed to join: {e}"))?
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentEngineTurnRequest {
@@ -115,8 +126,10 @@ pub struct AgentUiMessage {
     pub content: String,
 }
 
-#[tauri::command]
-pub fn agent_engine_turn(
+/// Blocking LLM + tool loop. Must never run on the UI/IPC thread — Tauri's
+/// default sync command path executes inline inside `webview.on_message`,
+/// which freezes the macOS window (rainbow beachball) for the whole turn.
+fn agent_engine_turn_blocking(
     project_path: String,
     request: AgentEngineTurnRequest,
 ) -> Result<EngineTurnResult, String> {
@@ -163,6 +176,17 @@ pub fn agent_engine_turn(
             .collect(),
     };
 
+    // Inject enabled skills + declarative hooks into the system prompt.
+    let ext_settings = read_global::<Settings>("settings.json")
+        .unwrap_or_else(default_settings)
+        .extensions;
+    let inventory = load_inventory(Some(&project_path), &ext_settings);
+    let is_new_chat = !session
+        .messages
+        .iter()
+        .any(|m| matches!(m.role, ChatRole::User | ChatRole::Assistant));
+    def.system_prompt = enrich_system_prompt(&def.system_prompt, &inventory, is_new_chat);
+
     let cfg = ProviderConfig::from_definition(&def, &api_key).map_err(|e| e.to_string())?;
     let provider_client = OpenAiCompatibleProvider::new(cfg).map_err(|e| e.to_string())?;
     let executor = OpenMeshToolExecutor {
@@ -177,6 +201,18 @@ pub fn agent_engine_turn(
         &executor,
     )
     .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn agent_engine_turn(
+    project_path: String,
+    request: AgentEngineTurnRequest,
+) -> Result<EngineTurnResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        agent_engine_turn_blocking(project_path, request)
+    })
+    .await
+    .map_err(|e| format!("agent engine turn failed to join: {e}"))?
 }
 
 struct OpenMeshToolExecutor {

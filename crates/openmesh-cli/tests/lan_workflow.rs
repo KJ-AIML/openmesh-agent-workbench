@@ -228,15 +228,30 @@ fn lan_serve_send_ask_status_loopback() {
         ],
         &client,
     );
-    assert!(
-        ask.status.success(),
-        "ask failed stdout={} stderr={}",
-        String::from_utf8_lossy(&ask.stdout),
-        String::from_utf8_lossy(&ask.stderr)
-    );
-    let answer: Value = serde_json::from_slice(&ask.stdout).unwrap();
-    assert_eq!(answer["readOnly"], true);
-    assert!(answer["answerText"].as_str().unwrap().len() > 10);
+    let ask_stdout = String::from_utf8_lossy(&ask.stdout);
+    let ask_stderr = String::from_utf8_lossy(&ask.stderr);
+    if ask.status.success() {
+        // Host has a configured Agent Engine key — live answer path.
+        let answer: Value = serde_json::from_slice(&ask.stdout).unwrap();
+        assert_eq!(answer["readOnly"], true);
+        assert!(answer["answerText"].as_str().unwrap().len() > 10);
+        assert!(
+            !answer["answerText"]
+                .as_str()
+                .unwrap_or("")
+                .contains("local-scaffold"),
+            "must not return LocalScaffold paste"
+        );
+    } else {
+        // Dogfood default in CI: peer has no API key → structured fail-closed error.
+        let combined = format!("{ask_stdout}{ask_stderr}");
+        assert!(
+            combined.contains("missing_api_key")
+                || combined.contains("API key")
+                || combined.contains("503"),
+            "expected missing_api_key error, got stdout={ask_stdout} stderr={ask_stderr}"
+        );
+    }
 
     let discover = run(&["lan", "discover", "--seconds", "1", "--json"], &client);
     assert!(

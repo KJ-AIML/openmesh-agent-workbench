@@ -7,13 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.25] - 2026-08-04
+
 ### Added
 
-- **CI**: `.github/workflows/release.yml` — multi-OS (macOS/Windows/Linux) Tauri installer build via `tauri-apps/tauri-action`, triggered on `v*` tag push or manual `workflow_dispatch` (used to backfill installers onto releases published before this workflow existed, e.g. v0.1.24)
+- **Agent Extensions (Skills / Hooks / Plugins)**: local-first MVP — markdown skill packs, declarative lifecycle hooks (`on_chat_start`, `on_before_turn`, `on_after_turn`), and folder plugins (`openmesh.plugin.json`) with enable/disable toggles in Settings → Runtime → Extensions
+- **Core** `openmesh_core::agent_engine::extensions` — load from user config + project `.openmesh/`, built-in catalog skills, prompt injection into Agent Engine turns, settings persistence under `settings.extensions` (not the secrets file)
+- **Desktop IPC** `extensions_list|catalog|set_enabled|install`; folder install via native dialog; sample packs under `catalog/skills/` and `plugins/`
+- **LAN Ask → live Agent Engine**: `POST /v1/mesh/ask` answers via the peer’s configured Agent Engine provider/secret (read-only). Missing API key returns structured `{ code: "missing_api_key" }` (HTTP 503) — no LocalScaffold paste
+- **Continuity Proxy live ask**: Continuity → Proxy Ask uses the same Agent Engine path with freshness/evidence injected as optional prompt context; critical tier still hard-refuses when evidence is insufficient
+- **Core** `openmesh_core::agent_engine::live_ask` — shared live-ask helper + workspace tool executor for LAN/Proxy
+- **LAN UX**: last-known peer persistence when UDP discovery is empty; approved-package list + CLI pack/approve copy helpers in Continuity → LAN
+- **Chat UX**: `ChatComposer` + `ChatThinkingBubble`; debounced session persist (`persistQueue`) so long turns don’t freeze the UI
+- **E2E**: Playwright smoke (`e2e/smoke.spec.ts`) + Vitest GUI page contracts for Agent Chat, Continuity, Settings, Home, and Sprint/Notes/Docs/Sessions
+- **CI**: `.github/workflows/release.yml` — multi-OS (macOS/Windows/Linux) Tauri installer build via `tauri-apps/tauri-action`, triggered on `v*` tag push or manual `workflow_dispatch`
+
+### Changed
+
+- Continuity Proxy / Agent Chat `/ask` copy: honest “live Agent Engine” labeling (not a remote cloud teammate / scaffold success theater)
+- Desktop `agent_engine_turn`, `online_proxy_ask`, and `lan_ask_peer` run via `spawn_blocking` so Tauri async commands don’t beachball the GUI
+- LAN HTTP client timeout raised to 120s for live peer answers
+- Markdown / Mermaid / artifact rendering refinements on top of 0.1.24
 
 ### Fixed
 
-- `src-tauri`: `git2` now builds with the `vendored-openssl` feature so cross-compiling for `x86_64-apple-darwin` from an Apple Silicon CI runner no longer fails looking for a system OpenSSL via `pkg-config`
+- Chat beachball during Agent Engine turns (async command + spawn_blocking + debounced persist)
+- Continuity page Vitest contracts updated for nested Mesh/Relay/LAN tab IA
+- `windowAdapter` Vite/test import path fix
+- `src-tauri`: `git2` builds with `vendored-openssl` so macOS Intel (`x86_64-apple-darwin`) cross-builds succeed on Apple Silicon CI runners
 
 ## [0.1.24] - 2026-08-03
 

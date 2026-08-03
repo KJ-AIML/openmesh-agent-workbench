@@ -104,27 +104,32 @@ fn online_proxy_init_status_ask_show() {
         ],
         &project,
     );
-    assert!(
-        ask.status.success(),
-        "stderr={} stdout={}",
-        String::from_utf8_lossy(&ask.stderr),
-        String::from_utf8_lossy(&ask.stdout)
-    );
-    let ans: Value = serde_json::from_slice(&ask.stdout).unwrap();
-    assert_eq!(ans["answerId"], "ans-test-1");
-    let statement = ans["freshness"]["statement"].as_str().unwrap_or("");
-    assert!(
-        statement.to_ascii_lowercase().contains("fresh")
-            || statement.to_ascii_lowercase().contains("stale")
-            || statement.to_ascii_lowercase().contains("age"),
-        "missing freshness disclosure: {statement}"
-    );
-
-    let show = run(
-        &["online-proxy", "show", "--id", "ans-test-1", "--json"],
-        &project,
-    );
-    assert!(show.status.success());
+    let ask_stdout = String::from_utf8_lossy(&ask.stdout);
+    let ask_stderr = String::from_utf8_lossy(&ask.stderr);
+    if ask.status.success() {
+        let ans: Value = serde_json::from_slice(&ask.stdout).unwrap();
+        assert_eq!(ans["answerId"], "ans-test-1");
+        assert_eq!(ans["liveEngine"], true);
+        let statement = ans["freshness"]["statement"].as_str().unwrap_or("");
+        assert!(
+            statement.to_ascii_lowercase().contains("fresh")
+                || statement.to_ascii_lowercase().contains("stale")
+                || statement.to_ascii_lowercase().contains("age"),
+            "missing freshness disclosure: {statement}"
+        );
+        let show = run(
+            &["online-proxy", "show", "--id", "ans-test-1", "--json"],
+            &project,
+        );
+        assert!(show.status.success());
+    } else {
+        // Without Agent Engine API key, live ask must fail closed (no scaffold theater).
+        let combined = format!("{ask_stdout}{ask_stderr}");
+        assert!(
+            combined.contains("API key") || combined.contains("missing_api_key"),
+            "expected missing API key error, got stdout={ask_stdout} stderr={ask_stderr}"
+        );
+    }
 }
 
 #[test]

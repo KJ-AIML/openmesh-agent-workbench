@@ -376,32 +376,40 @@ export const AGENT_TOOLS: AgentTool[] = [
   },
   {
     id: "ask_proxy",
-    title: "Ask online proxy",
-    // Scaffold answers today — not CLI `proxy ask` (Tauri-blocked / live model).
-    description: "Online-proxy draft (freshness-gated scaffold; not live LLM)",
+    title: "Live Continuity Proxy ask",
+    description:
+      "Live Agent Engine ask with freshness disclosure (requires API key in Settings)",
     slash: "/ask",
-    keywords: ["ask proxy", "online proxy", "ask my proxy"],
+    keywords: ["ask proxy", "online proxy", "ask my proxy", "live ask"],
     async run(projectPath, question) {
       const status = await getOnlineProxyStatus(projectPath);
       if (!status) {
         return {
           ok: false,
           summary:
-            "Online proxy not initialized. Open Continuity → Online Proxy and init first, or say /ask after init.",
+            "Continuity Proxy not initialized. Open Continuity → Proxy and initialize first, or say /ask after init.",
         };
       }
       const q = question.replace(/^\/ask\s*/i, "").trim() || question;
       if (!q || q === "/ask") {
         return { ok: false, summary: "Usage: /ask <question>" };
       }
-      const answer = await askOnlineProxy(projectPath, q);
-      return {
-        ok: !answer.refused,
-        summary: clip(
-          `${answer.refused ? "REFUSED" : "Answer"}\n${answer.answerText}\n\nFreshness: ${answer.freshness.statement} (${answer.freshness.tier})`,
-        ),
-        data: answer,
-      };
+      try {
+        const answer = await askOnlineProxy(projectPath, q);
+        const live = answer.liveEngine ? "live" : "local";
+        return {
+          ok: !answer.refused,
+          summary: clip(
+            `${answer.refused ? "REFUSED" : "Answer"} (${live})\n${answer.answerText}\n\nFreshness: ${answer.freshness.statement} (${answer.freshness.tier})`,
+          ),
+          data: answer,
+        };
+      } catch (e) {
+        return {
+          ok: false,
+          summary: e instanceof Error ? e.message : String(e),
+        };
+      }
     },
   },
 ];

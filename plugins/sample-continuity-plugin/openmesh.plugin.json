@@ -1,0 +1,14 @@
+{
+  "id": "sample-continuity-plugin",
+  "name": "Continuity Brief Plugin",
+  "version": "0.1.0",
+  "description": "Sample OpenMesh plugin — Continuity-aware skill + before-turn hook.",
+  "skills": ["skills/continuity-brief"],
+  "hooks": [
+    {
+      "id": "continuity-nudge",
+      "event": "on_before_turn",
+      "appendContext": "If the question touches project status, prefer Continuity / Current State tools before answering."
+    }
+  ]
+}

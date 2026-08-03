@@ -169,9 +169,7 @@ pub struct OnlineProxyAskUiRequest {
     pub answer_id: Option<String>,
 }
 
-/// Ask always-online proxy with mandatory freshness disclosure.
-#[tauri::command]
-pub fn online_proxy_ask(
+fn online_proxy_ask_blocking(
     project_path: String,
     request: OnlineProxyAskUiRequest,
 ) -> Result<OnlineProxyAnswer, String> {
@@ -201,7 +199,28 @@ pub fn online_proxy_ask(
         answer_id,
         freshness_tier: Some(tier),
     };
-    ask_online_proxy(&project_path, &cfg, &pack, &req, true).map_err(|e| e.to_string())
+    ask_online_proxy(&project_path, &cfg, &pack, &req, true).map_err(|e| {
+        // Surface stable codes for missing key / provider errors.
+        let code = e.code();
+        if code == "missing_api_key" {
+            format!(
+                "[{code}] {e} Open Settings → Provider & Models, save an API key, then retry Live ask."
+            )
+        } else {
+            format!("[{code}] {e}")
+        }
+    })
+}
+
+/// Live Continuity Proxy ask via Agent Engine — off the UI/IPC thread (beachball fix).
+#[tauri::command]
+pub async fn online_proxy_ask(
+    project_path: String,
+    request: OnlineProxyAskUiRequest,
+) -> Result<OnlineProxyAnswer, String> {
+    tauri::async_runtime::spawn_blocking(move || online_proxy_ask_blocking(project_path, request))
+        .await
+        .map_err(|e| format!("online proxy ask failed to join: {e}"))?
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -357,11 +376,13 @@ pub fn rc_status(project_path: String) -> Result<RcPack, String> {
 // ── LAN Relay + Live Ask (0.1.22) ────────────────────────────────────
 
 use openmesh_core::lan::{
-    ask_peer, lan_serve_status_for_project, listen_beacons, parse_host_port, send_package_to_peer,
-    start_lan_serve, stop_lan_serve, LanPeerInfo, LanServeStatus, PeerTable, DEFAULT_HTTP_PORT,
-    DEFAULT_UDP_PORT,
+    ask_peer, lan_serve_status_for_project, listen_beacons, parse_host_port, read_last_peers,
+    remember_discovered_peers, send_package_to_peer, start_lan_serve, stop_lan_serve, LanPeerInfo,
+    LanServeStatus, PeerTable, DEFAULT_HTTP_PORT, DEFAULT_UDP_PORT,
 };
-use openmesh_core::relay::{is_package_approved, read_approved_package};
+use openmesh_core::relay::{
+    is_package_approved, list_approved_package_ids, read_approved_package,
+};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -428,13 +449,29 @@ pub fn lan_discover(
     let ignore = read_project::<Project>(&project_path, "project.json")
         .map(|p| format!("lan-{}", p.id));
     let table = PeerTable::new();
-    listen_beacons(
+    let discovered = listen_beacons(
         &table,
         udp_port,
         seconds,
         ignore.as_deref(),
     )
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?;
+    if discovered.is_empty() {
+        // Fail soft: surface last-known peers when UDP/VPN discovery finds nothing.
+        return Ok(read_last_peers(&project_path));
+    }
+    remember_discovered_peers(&project_path, &discovered)?;
+    Ok(discovered)
+}
+
+#[tauri::command]
+pub fn lan_list_last_peers(project_path: String) -> Result<Vec<LanPeerInfo>, String> {
+    Ok(read_last_peers(&project_path))
+}
+
+#[tauri::command]
+pub fn lan_list_approved_packages(project_path: String) -> Result<Vec<String>, String> {
+    list_approved_package_ids(&project_path).map_err(|e| e.to_string())
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -465,8 +502,18 @@ pub struct LanAskUiRequest {
     pub tier: Option<String>,
 }
 
-#[tauri::command]
-pub fn lan_ask_peer(request: LanAskUiRequest) -> Result<MeshRemoteQueryAnswer, String> {
+fn lan_ask_peer_blocking(request: LanAskUiRequest) -> Result<MeshRemoteQueryAnswer, String> {
     let (host, port) = parse_host_port(&request.to).map_err(|e| e.to_string())?;
-    ask_peer(&host, port, &request.question, request.tier.as_deref()).map_err(|e| e.to_string())
+    ask_peer(&host, port, &request.question, request.tier.as_deref()).map_err(|e| {
+        // Prefer structured peer error bodies (code + message) when present.
+        e.to_string()
+    })
+}
+
+/// LAN peer ask waits on the remote Agent Engine — must not block the UI thread.
+#[tauri::command]
+pub async fn lan_ask_peer(request: LanAskUiRequest) -> Result<MeshRemoteQueryAnswer, String> {
+    tauri::async_runtime::spawn_blocking(move || lan_ask_peer_blocking(request))
+        .await
+        .map_err(|e| format!("lan ask failed to join: {e}"))?
 }

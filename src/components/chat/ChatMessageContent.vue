@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // Renders chat message text as rich content: Markdown (sanitized HTML),
 // Mermaid diagrams, and canvas/artifact panels, in the order they appear.
+// Segment + HTML come from the bounded caches in markdown.ts.
 import { computed } from "vue";
 import { renderMarkdownToSafeHtml, segmentChatContent } from "../../lib/agentChat/markdown";
 import MermaidDiagram from "./MermaidDiagram.vue";
@@ -8,7 +9,19 @@ import ArtifactPanel from "./ArtifactPanel.vue";
 
 const props = defineProps<{ text: string }>();
 
-const segments = computed(() => segmentChatContent(props.text));
+type RenderedSegment =
+  | { type: "markdown"; html: string }
+  | { type: "mermaid"; content: string }
+  | { type: "artifact"; lang: "canvas" | "artifact"; content: string };
+
+const segments = computed<RenderedSegment[]>(() =>
+  segmentChatContent(props.text).map((seg) => {
+    if (seg.type === "markdown") {
+      return { type: "markdown", html: renderMarkdownToSafeHtml(seg.content) };
+    }
+    return seg;
+  }),
+);
 </script>
 
 <template>
@@ -17,7 +30,7 @@ const segments = computed(() => segmentChatContent(props.text));
       <div
         v-if="seg.type === 'markdown'"
         class="chat-prose"
-        v-html="renderMarkdownToSafeHtml(seg.content)"
+        v-html="seg.html"
       />
       <MermaidDiagram v-else-if="seg.type === 'mermaid'" :source="seg.content" />
       <ArtifactPanel v-else :lang="seg.lang" :source="seg.content" />
@@ -58,9 +71,11 @@ const segments = computed(() => segmentChatContent(props.text));
 .chat-prose :deep(h1) {
   font-size: 1.1rem;
 }
+
 .chat-prose :deep(h2) {
   font-size: 1.02rem;
 }
+
 .chat-prose :deep(h3),
 .chat-prose :deep(h4) {
   font-size: 0.92rem;

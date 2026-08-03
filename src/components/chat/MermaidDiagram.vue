@@ -1,32 +1,60 @@
+<script lang="ts">
+// Module-level singleton — initialize mermaid once for the whole app,
+// not once per diagram instance.
+type MermaidApi = {
+  initialize: (config: Record<string, unknown>) => void;
+  render: (id: string, text: string) => Promise<{ svg: string }>;
+};
+
+let mermaidModule: Promise<MermaidApi> | null = null;
+let mermaidInitialized = false;
+
+function loadMermaid(): Promise<MermaidApi> {
+  if (!mermaidModule) {
+    mermaidModule = import("mermaid").then((mod) => {
+      const api = mod.default as MermaidApi;
+      if (!mermaidInitialized) {
+        api.initialize({
+          startOnLoad: false,
+          securityLevel: "strict",
+          theme: "dark",
+          fontFamily: "var(--font-sans)",
+        });
+        mermaidInitialized = true;
+      }
+      return api;
+    });
+  }
+  return mermaidModule;
+}
+</script>
+
 <script setup lang="ts">
 // Renders a fenced ```mermaid block as an SVG diagram. Mermaid is loaded
-// lazily so chats without diagrams never pay for it. Rendering runs with
-// securityLevel "strict" (mermaid sanitizes labels, disables click/script
-// bindings) and any failure falls back to the raw source — never silently
-// drops content.
-import { onMounted, ref, watch } from "vue";
+// lazily so chats without diagrams never pay for it. Each diagram waits
+// until it's near the viewport before rendering. securityLevel "strict";
+// failures fall back to raw source.
+import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { AlertTriangle } from "lucide-vue-next";
 
 const props = defineProps<{ source: string }>();
 
+const root = ref<HTMLElement | null>(null);
 const svg = ref<string | null>(null);
 const error = ref<string | null>(null);
-const loading = ref(true);
+const loading = ref(false);
+const visible = ref(false);
 let renderSeq = 0;
+let observer: IntersectionObserver | null = null;
 
 async function renderDiagram(): Promise<void> {
+  if (!visible.value) return;
   const seq = ++renderSeq;
   loading.value = true;
   error.value = null;
   svg.value = null;
   try {
-    const { default: mermaid } = await import("mermaid");
-    mermaid.initialize({
-      startOnLoad: false,
-      securityLevel: "strict",
-      theme: "dark",
-      fontFamily: "var(--font-sans)",
-    });
+    const mermaid = await loadMermaid();
     const id = `chat-mermaid-${seq}-${Math.random().toString(16).slice(2)}`;
     const { svg: rendered } = await mermaid.render(id, props.source);
     if (seq === renderSeq) svg.value = rendered;
@@ -39,12 +67,43 @@ async function renderDiagram(): Promise<void> {
   }
 }
 
-onMounted(renderDiagram);
-watch(() => props.source, renderDiagram);
+onMounted(() => {
+  const el = root.value;
+  if (!el || typeof IntersectionObserver === "undefined") {
+    visible.value = true;
+    void renderDiagram();
+    return;
+  }
+  observer = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((e) => e.isIntersecting)) {
+        visible.value = true;
+        observer?.disconnect();
+        observer = null;
+        void renderDiagram();
+      }
+    },
+    { rootMargin: "120px 0px" },
+  );
+  observer.observe(el);
+});
+
+onBeforeUnmount(() => {
+  observer?.disconnect();
+  observer = null;
+  renderSeq += 1;
+});
+
+watch(
+  () => props.source,
+  () => {
+    if (visible.value) void renderDiagram();
+  },
+);
 </script>
 
 <template>
-  <div class="chat-mermaid">
+  <div ref="root" class="chat-mermaid">
     <div v-if="svg" class="chat-mermaid__canvas" v-html="svg" />
     <div v-else-if="error" class="chat-mermaid__fallback">
       <div class="chat-mermaid__fallback-head">
@@ -53,7 +112,10 @@ watch(() => props.source, renderDiagram);
       </div>
       <pre class="chat-mermaid__source"><code>{{ source }}</code></pre>
     </div>
-    <div v-else class="chat-mermaid__loading">Rendering diagram…</div>
+    <div v-else-if="loading || visible" class="chat-mermaid__loading">
+      Rendering diagram…
+    </div>
+    <div v-else class="chat-mermaid__loading">Diagram ready when visible…</div>
   </div>
 </template>
 
@@ -64,6 +126,7 @@ watch(() => props.source, renderDiagram);
   border: 1px solid var(--border);
   background: var(--surface-1);
   overflow: hidden;
+  min-height: 48px;
 }
 
 .chat-mermaid__canvas {

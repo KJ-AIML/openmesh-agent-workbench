@@ -56,6 +56,7 @@ import {
   lanServeStop,
   lanServeStatus,
   lanDiscover,
+  lanListApprovedPackages,
   lanSendPackage,
   lanAskPeer,
   type MeshRemoteQueryAnswer,
@@ -88,12 +89,17 @@ const meshTier = ref("low-impact");
 const meshAnswer = ref<MeshRemoteQueryAnswer | null>(null);
 const lanStatus = ref<LanServeStatus | null>(null);
 const lanPeers = ref<LanPeerInfo[]>([]);
+const lanApprovedPackages = ref<string[]>([]);
 const lanSendId = ref("");
 const lanSendTo = ref("");
 const lanAskTo = ref("");
 const lanAskQuestion = ref("");
 const lanAskTier = ref("low-impact");
 const lanAskAnswer = ref<MeshRemoteQueryAnswer | null>(null);
+const packCliHint = computed(
+  () =>
+    "openmesh-cli relay pack --envelope-id <id> --package-id <pkg> && openmesh-cli relay approve --id <pkg>",
+);
 const acting = ref(false);
 const teamWs = ref<TeamWorkspaceView | null>(null);
 const trustPolicy = ref<TeamTrustPolicyView | null>(null);
@@ -195,6 +201,7 @@ async function loadTab() {
         break;
       case "lan":
         lanStatus.value = await lanServeStatus(path);
+        await refreshLanApproved();
         break;
       case "team":
         teamWs.value = await getTeamWorkspace(path);
@@ -263,6 +270,14 @@ async function handleAsk() {
   }
 }
 
+async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    error.value = "Could not copy to clipboard";
+  }
+}
+
 async function handleLanStart() {
   if (!currentProjectPath.value) return;
   acting.value = true;
@@ -298,11 +313,23 @@ async function handleLanDiscover() {
   acting.value = true;
   error.value = null;
   try {
+    // Falls back to last-known peers when UDP finds nothing (VPN/loopback).
     lanPeers.value = await lanDiscover(currentProjectPath.value, { seconds: 3 });
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
   } finally {
     acting.value = false;
+  }
+}
+
+async function refreshLanApproved() {
+  if (!currentProjectPath.value) return;
+  try {
+    lanApprovedPackages.value = await lanListApprovedPackages(
+      currentProjectPath.value,
+    );
+  } catch {
+    lanApprovedPackages.value = [];
   }
 }
 
@@ -693,17 +720,21 @@ onMounted(() => {
         <div class="workbench-card p-4 space-y-3">
           <h3 class="section-label">LAN listener</h3>
           <p class="text-[12px] text-muted">
-            Trusted-LAN alpha: UDP discovery + HTTP package transfer / live ask.
-            macOS may prompt for firewall on first bind. UDP can fail on some
-            VPN interfaces — use manual host:port.
+            Trusted-LAN alpha: UDP discovery + HTTP package transfer / live Agent
+            Engine ask. macOS may prompt for firewall on first bind. VPN or
+            loopback-only networks often break UDP — paste the peer’s
+            <code class="text-[11px]">host:port</code> manually.
           </p>
           <div v-if="lanStatus?.running" class="flex items-center gap-2 text-[13px]">
             <CheckCircle2 class="h-4 w-4" style="color: var(--accent-green)" />
             <span class="font-medium">Listening</span>
             <span class="badge">{{ lanStatus.httpHost }}:{{ lanStatus.httpPort }}</span>
           </div>
-          <div v-else class="text-[12px] text-muted">Listener is stopped.</div>
-          <div class="flex items-center gap-2">
+          <div v-else class="text-[12px] text-muted">
+            Listener is stopped
+            <span v-if="lanStatus?.note"> — {{ lanStatus.note }}</span>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
             <button
               type="button"
               class="btn-primary"
@@ -729,14 +760,31 @@ onMounted(() => {
               Refresh discover
             </button>
           </div>
-          <div v-if="lanStatus?.note" class="text-[11px] text-muted">{{ lanStatus.note }}</div>
+          <div v-if="lanStatus?.running && lanStatus?.note" class="text-[11px] text-muted">
+            {{ lanStatus.note }}
+          </div>
         </div>
         <div class="workbench-card p-4 space-y-3">
           <h3 class="section-label">Peers ({{ lanPeers.length }})</h3>
-          <div v-if="lanPeers.length === 0" class="text-[12px] text-muted">
-            No peers discovered yet. Start a listener on another device, then
-            Refresh discover — or enter host:port manually below.
+          <div v-if="lanPeers.length === 0" class="text-[12px] text-muted space-y-2">
+            <p>No peers discovered this scan.</p>
+            <ul class="list-disc pl-4 space-y-1">
+              <li>Start a listener on the other machine (Continuity → LAN).</li>
+              <li>
+                If you’re on VPN / different subnet / loopback-only, skip UDP and
+                enter <code class="text-[11px]">host:httpPort</code> under Ask /
+                Send (default HTTP port 41778).
+              </li>
+              <li>
+                Peer needs an API key in Settings — otherwise Ask returns
+                <code class="text-[11px]">missing_api_key</code>.
+              </li>
+            </ul>
           </div>
+          <p v-else class="text-[11px] text-muted">
+            Click a row to fill host:port. If UDP was quiet, this list may be
+            last-known peers from a previous scan.
+          </p>
           <div
             v-for="p in lanPeers"
             :key="p.peerId + p.address"
@@ -751,6 +799,36 @@ onMounted(() => {
         </div>
         <div class="workbench-card p-4 space-y-3">
           <h3 class="section-label">Send approved package</h3>
+          <p class="text-[12px] text-muted">
+            Pack / approve stay CLI-first. Desktop only sends packages already
+            under <code class="text-[11px]">relay/approved/</code>.
+          </p>
+          <pre
+            class="text-[11px] whitespace-pre-wrap font-mono rounded p-2"
+            style="background: var(--surface-3)"
+          >{{ packCliHint }}</pre>
+          <button
+            type="button"
+            class="btn-ghost"
+            @click="copyText(packCliHint)"
+          >
+            Copy pack+approve commands
+          </button>
+          <div v-if="lanApprovedPackages.length" class="space-y-1">
+            <div class="text-[12px] font-medium">Approved on this project</div>
+            <button
+              v-for="id in lanApprovedPackages"
+              :key="id"
+              type="button"
+              class="btn-ghost text-[12px] block"
+              @click="lanSendId = id"
+            >
+              {{ id }}
+            </button>
+          </div>
+          <div v-else class="text-[12px] text-muted">
+            No approved packages yet — run the CLI helpers above.
+          </div>
           <input
             v-model="lanSendId"
             class="input-sm w-full"
@@ -771,15 +849,16 @@ onMounted(() => {
           </button>
         </div>
         <div class="workbench-card p-4 space-y-3">
-          <h3 class="section-label">Ask peer (live)</h3>
+          <h3 class="section-label">Ask peer (live Agent Engine)</h3>
           <p class="text-[12px] text-muted">
-            Read-only draft from the peer’s local Work Proxy while they are
-            online. Does not write the local ledger.
+            Read-only live answer from the peer’s Agent Engine (their configured
+            provider/key). Not LocalScaffold. Does not write their project files
+            or your ledger.
           </p>
           <input
             v-model="lanAskTo"
             class="input-sm w-full"
-            placeholder="Peer host:port"
+            placeholder="Peer host:port (e.g. 192.168.1.20:41778)"
           />
           <textarea
             v-model="lanAskQuestion"
@@ -799,7 +878,7 @@ onMounted(() => {
               :disabled="acting || !lanAskTo.trim() || !lanAskQuestion.trim()"
               @click="handleLanAsk"
             >
-              Ask peer
+              {{ acting ? "Asking…" : "Ask peer" }}
             </button>
           </div>
           <div
@@ -807,9 +886,10 @@ onMounted(() => {
             class="rounded-lg p-3 space-y-2"
             style="background: var(--surface-2); border: 1px solid var(--border)"
           >
-            <div class="flex items-center gap-2 text-[12px]">
+            <div class="flex items-center gap-2 text-[12px] flex-wrap">
               <span class="badge">{{ lanAskAnswer.peerLabel }}</span>
               <span v-if="lanAskAnswer.readOnly" class="badge">read-only</span>
+              <span class="badge">live</span>
               <span v-if="lanAskAnswer.refused" class="badge">refused</span>
             </div>
             <div class="text-[12px] text-muted">{{ lanAskAnswer.freshness.statement }}</div>
@@ -850,12 +930,14 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- Online proxy -->
+      <!-- Continuity Proxy (live Agent Engine) -->
       <div v-else-if="tab === 'online-proxy'" class="space-y-3">
         <div class="workbench-card p-4 space-y-3">
           <template v-if="!onlineConfig">
             <p class="text-[13px] text-muted">
-              Always-online proxy is not initialized for this project.
+              Continuity Proxy is not initialized for this project. Init stores
+              local config; Ask uses your Agent Engine provider (Settings → API
+              key) — not a remote cloud teammate.
             </p>
             <button
               type="button"
@@ -863,14 +945,15 @@ onMounted(() => {
               :disabled="acting"
               @click="handleInitProxy"
             >
-              Initialize local scaffold
+              Initialize Continuity Proxy
             </button>
           </template>
           <template v-else>
-            <div class="flex items-center gap-2 text-[13px]">
+            <div class="flex items-center gap-2 text-[13px] flex-wrap">
               <CheckCircle2 class="h-4 w-4" style="color: var(--accent-green)" />
               <span class="font-medium">{{ onlineConfig.proxyId }}</span>
               <span class="badge">{{ onlineConfig.mode }}</span>
+              <span class="badge">live ask = Agent Engine</span>
             </div>
             <div class="text-[12px] text-muted">
               owner={{ onlineConfig.ownerLabel }} · relay-received={{
@@ -878,8 +961,13 @@ onMounted(() => {
               }}
               · default tier={{ onlineConfig.defaultFreshnessTier }}
             </div>
+            <p class="text-[12px] text-muted">
+              Mode label may still say local-scaffold (config legacy). Answers
+              are live LLM via Agent Engine with freshness injected as context.
+              Critical tier still refuses when evidence is insufficient.
+            </p>
             <div class="space-y-2 pt-2">
-              <label class="text-[12px] font-medium">Ask (mandatory freshness)</label>
+              <label class="text-[12px] font-medium">Live ask</label>
               <textarea
                 v-model="askQuestion"
                 rows="3"
@@ -898,7 +986,7 @@ onMounted(() => {
                   :disabled="acting || !askQuestion.trim()"
                   @click="handleAsk"
                 >
-                  Ask
+                  {{ acting ? "Asking…" : "Live ask" }}
                 </button>
               </div>
             </div>
@@ -907,7 +995,7 @@ onMounted(() => {
               class="rounded-lg p-3 space-y-2 mt-2"
               style="background: var(--surface-2); border: 1px solid var(--border)"
             >
-              <div class="flex items-center gap-2 text-[12px]">
+              <div class="flex items-center gap-2 text-[12px] flex-wrap">
                 <ShieldAlert
                   v-if="lastAnswer.refused"
                   class="h-4 w-4"
@@ -919,6 +1007,7 @@ onMounted(() => {
                   style="color: var(--accent-green)"
                 />
                 <span class="font-medium">{{ lastAnswer.answerId }}</span>
+                <span v-if="lastAnswer.liveEngine" class="badge">live</span>
                 <span v-if="lastAnswer.refused" class="badge">refused</span>
               </div>
               <div

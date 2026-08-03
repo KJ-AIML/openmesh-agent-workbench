@@ -12,6 +12,11 @@ node_modules
 
 # testing
 /coverage
+.pw-browsers/
+.playwright-browsers/
+/test-results/
+/playwright-report/
+/blob-report/
 
 # next.js
 /.next/

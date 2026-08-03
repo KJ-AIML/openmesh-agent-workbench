@@ -7,8 +7,8 @@ pub mod package;
 pub mod transport;
 
 pub use approve::{
-    approve_relay_package, approved_dir, approved_package_path, read_approved_package,
-    RelayApproveError,
+    approve_relay_package, approved_dir, approved_package_path, list_approved_package_ids,
+    read_approved_package, RelayApproveError,
 };
 pub use audit::{
     append_audit_event, audit_dir, list_audit_events, make_audit_event, RelayAuditError,

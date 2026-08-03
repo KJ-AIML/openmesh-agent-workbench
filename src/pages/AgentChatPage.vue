@@ -1,28 +1,39 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  ref,
+  shallowRef,
+  triggerRef,
+  watch,
+} from "vue";
 import { useRouter } from "vue-router";
 import {
   AlertCircle,
   CheckCircle2,
   Eraser,
-  Loader2,
   MessageSquare,
   Pencil,
   Plus,
-  Send,
   Settings,
   Sparkles,
   Trash2,
   Wrench,
 } from "lucide-vue-next";
 import { useStore } from "../lib/useStore";
-import { runAgentChatTurn } from "../lib/agentChat/runner";
+import {
+  runAgentChatTurn,
+  type ChatTurnProgress,
+} from "../lib/agentChat/runner";
+import { resolveToolsForMessage } from "../lib/agentChat/tools";
 import {
   chatModelId,
   getChatSetupChecks,
   isChatProviderReady,
 } from "../lib/agentChat/ready";
 import {
+  type ChatMessage,
   type ChatSession,
   createChatMessage,
   createChatSession,
@@ -31,20 +42,42 @@ import {
   persistSessions,
   touchSession,
 } from "../lib/agentChat/chatSessions";
+import { createPersistQueue } from "../lib/agentChat/persistQueue";
 import ChatMessageContent from "../components/chat/ChatMessageContent.vue";
+import ChatComposer from "../components/chat/ChatComposer.vue";
+import ChatThinkingBubble from "../components/chat/ChatThinkingBubble.vue";
 
 const router = useRouter();
 const { currentProjectPath, currentProject, settings } = useStore();
 
-const sessions = ref<ChatSession[]>([]);
+/** Shallow — avoid deep-watching the whole session tree on every keystroke/send. */
+const sessions = shallowRef<ChatSession[]>([]);
+/** Live message array for the active chat; bumped via triggerRef on mutate. */
+const activeMessages = shallowRef<ChatMessage[]>([]);
 const activeSessionId = ref<string | null>(null);
 const renamingId = ref<string | null>(null);
 const renameValue = ref("");
 
-const input = ref("");
 const busy = ref(false);
+/** Primary status line for the in-thread thinking bubble. */
+const busyLabel = ref("Thinking…");
+/** Compact mid-turn tool line (e.g. "Pilot status"). */
+const busyDetail = ref<string | null>(null);
 const error = ref<string | null>(null);
 const scroller = ref<HTMLElement | null>(null);
+const composer = ref<InstanceType<typeof ChatComposer> | null>(null);
+
+/** Rotating CLI-style status while waiting on the LLM (no streaming events). */
+const LLM_STATUS_LINES = [
+  "Thinking…",
+  "Reasoning…",
+  "Working with tools…",
+  "Composing reply…",
+] as const;
+let statusRotateTimer: ReturnType<typeof setInterval> | null = null;
+let statusRotateIdx = 0;
+
+const persistQueue = createPersistQueue(persistSessions, 400);
 
 const hasProject = computed(() => !!currentProjectPath.value);
 const projectLabel = computed(
@@ -57,7 +90,6 @@ const activeModel = computed(() => chatModelId(settings.value));
 const activeSession = computed(
   () => sessions.value.find((s) => s.id === activeSessionId.value) ?? null,
 );
-const messages = computed(() => activeSession.value?.messages ?? []);
 
 function welcomeText(): string {
   const provider = settings.value.provider?.name?.trim() || "provider";
@@ -73,6 +105,32 @@ function seedWelcome(session: ChatSession) {
   session.messages.push(createChatMessage("system", welcomeText()));
 }
 
+/** Bind the thread view to a session's messages array (same ref; trigger to refresh). */
+function bindActiveMessages(session: ChatSession | null) {
+  activeMessages.value = session?.messages ?? [];
+}
+
+/** After mutating session/message data — refresh shallow refs + schedule idle persist. */
+function afterSessionMutation(session?: ChatSession | null) {
+  triggerRef(sessions);
+  const active =
+    session && session.id === activeSessionId.value
+      ? session
+      : (sessions.value.find((s) => s.id === activeSessionId.value) ?? null);
+  if (active) {
+    if (activeMessages.value !== active.messages) {
+      activeMessages.value = active.messages;
+    } else {
+      triggerRef(activeMessages);
+    }
+  } else {
+    activeMessages.value = [];
+  }
+  if (currentProjectPath.value) {
+    persistQueue.schedule(currentProjectPath.value, sessions.value);
+  }
+}
+
 function loadForProject(path: string) {
   const loaded = loadSessions(path);
   if (loaded.length === 0) {
@@ -80,36 +138,37 @@ function loadForProject(path: string) {
     seedWelcome(fresh);
     sessions.value = [fresh];
     activeSessionId.value = fresh.id;
+    bindActiveMessages(fresh);
+    // Persist the seeded welcome once (idle) so reload keeps it.
+    persistQueue.schedule(path, sessions.value);
   } else {
     sessions.value = loaded;
     activeSessionId.value = loaded[0].id;
+    bindActiveMessages(loaded[0]);
   }
 }
 
 watch(
   [currentProjectPath, chatReady],
   ([path, ready]) => {
+    // Flush any pending write for the previous project before swapping state.
+    persistQueue.flush();
     error.value = null;
     renamingId.value = null;
     if (path && ready) loadForProject(path);
     else {
       sessions.value = [];
       activeSessionId.value = null;
+      activeMessages.value = [];
     }
   },
   { immediate: true },
 );
 
-// Persist on every change — the storage key always matches the project
-// these sessions were just loaded for, so this is safe even right after
-// a project switch.
-watch(
-  sessions,
-  () => {
-    if (currentProjectPath.value) persistSessions(currentProjectPath.value, sessions.value);
-  },
-  { deep: true },
-);
+onBeforeUnmount(() => {
+  stopStatusRotate();
+  persistQueue.flush();
+});
 
 async function scrollBottom() {
   await nextTick();
@@ -117,20 +176,80 @@ async function scrollBottom() {
   if (el) el.scrollTop = el.scrollHeight;
 }
 
+/** Yield until the next paint so optimistic UI lands before agent work. */
+function afterPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => resolve());
+    });
+  });
+}
+
+/** One more macrotask so the event loop can service window chrome before IPC. */
+function afterEventLoop(): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
+}
+
+function stopStatusRotate() {
+  if (statusRotateTimer !== null) {
+    clearInterval(statusRotateTimer);
+    statusRotateTimer = null;
+  }
+  statusRotateIdx = 0;
+}
+
+function startLlmStatusRotate() {
+  stopStatusRotate();
+  statusRotateIdx = 0;
+  busyLabel.value = LLM_STATUS_LINES[0];
+  busyDetail.value = null;
+  statusRotateTimer = setInterval(() => {
+    statusRotateIdx = (statusRotateIdx + 1) % LLM_STATUS_LINES.length;
+    busyLabel.value = LLM_STATUS_LINES[statusRotateIdx];
+  }, 2400);
+}
+
+function applyTurnProgress(event: ChatTurnProgress) {
+  if (event.kind === "phase") {
+    busyLabel.value = event.label;
+    if (event.label === "Thinking…") {
+      // Keep rotating ambient lines for long LLM waits.
+      if (!statusRotateTimer) startLlmStatusRotate();
+    } else {
+      stopStatusRotate();
+      busyDetail.value = null;
+    }
+    return;
+  }
+  if (event.kind === "tool_start") {
+    stopStatusRotate();
+    busyLabel.value = "Working with tools…";
+    busyDetail.value = event.title;
+    return;
+  }
+  // tool_done — keep last tool visible until next event / reply lands
+  busyLabel.value = event.ok ? "Finishing…" : "Tool failed…";
+  busyDetail.value = event.title;
+}
+
 function startNewChat() {
   const fresh = createChatSession();
   seedWelcome(fresh);
   sessions.value = [fresh, ...sessions.value];
   activeSessionId.value = fresh.id;
+  bindActiveMessages(fresh);
   renamingId.value = null;
-  input.value = "";
   error.value = null;
+  afterSessionMutation(fresh);
   scrollBottom();
 }
 
 function switchToSession(id: string) {
   if (id === activeSessionId.value) return;
   activeSessionId.value = id;
+  bindActiveMessages(sessions.value.find((s) => s.id === id) ?? null);
   error.value = null;
   scrollBottom();
 }
@@ -151,6 +270,7 @@ function commitRename() {
     session.title = trimmed;
     session.titleIsDefault = false;
     touchSession(session);
+    afterSessionMutation(session);
   }
 }
 
@@ -163,9 +283,13 @@ function removeSession(id: string) {
   if (activeSessionId.value === id) {
     if (sessions.value.length > 0) {
       activeSessionId.value = sessions.value[0].id;
+      bindActiveMessages(sessions.value[0]);
+      afterSessionMutation(sessions.value[0]);
     } else {
       startNewChat();
     }
+  } else {
+    afterSessionMutation();
   }
 }
 
@@ -174,6 +298,7 @@ function clearActiveChat() {
   if (!session) return;
   session.messages = [];
   touchSession(session);
+  afterSessionMutation(session);
 }
 
 function relativeTime(ts: number): string {
@@ -188,36 +313,51 @@ function relativeTime(ts: number): string {
   return new Date(ts).toLocaleDateString();
 }
 
-async function send() {
+async function send(text: string) {
   if (!currentProjectPath.value || busy.value || !chatReady.value) return;
   const session = activeSession.value;
   if (!session) return;
-  const text = input.value.trim();
-  if (!text) return;
+  const trimmed = text.trim();
+  if (!trimmed) return;
+  const projectPath = currentProjectPath.value;
 
-  session.messages.push(createChatMessage("user", text));
+  // 1) Optimistic UI only — no stringify / IPC / markdown of history here.
+  // Persist is explicit + idle; composer textarea stays enabled while busy.
+  session.messages.push(createChatMessage("user", trimmed));
   if (session.titleIsDefault) {
-    session.title = deriveTitleFromMessage(text);
+    session.title = deriveTitleFromMessage(trimmed);
     session.titleIsDefault = false;
   }
   touchSession(session);
-  input.value = "";
+  afterSessionMutation(session);
+
+  const usesLocalTools =
+    trimmed.startsWith("/") || resolveToolsForMessage(trimmed).length > 0;
+  busyLabel.value = usesLocalTools ? "Working…" : "Thinking…";
+  busyDetail.value = null;
   busy.value = true;
   error.value = null;
+
+  // Paint user bubble + thinking indicator, then yield the event loop before IPC.
   await scrollBottom();
+  await afterPaint();
+  await afterEventLoop();
+
+  if (!usesLocalTools) startLlmStatusRotate();
 
   try {
+    // Cheap history slice — maps a few strings only; old bubbles stay v-memo'd.
     const history = session.messages
       .filter((m) => m.role === "user" || m.role === "assistant")
       .slice(0, -1)
       .slice(-12)
       .map((m) => ({ role: m.role, content: m.text }));
-    const result = await runAgentChatTurn(
-      currentProjectPath.value,
-      text,
-      settings.value,
+
+    const result = await runAgentChatTurn(projectPath, trimmed, {
+      settings: settings.value,
       history,
-    );
+      onProgress: applyTurnProgress,
+    });
     session.messages.push(
       createChatMessage("assistant", result.assistantText, result.toolCalls),
     );
@@ -225,14 +365,17 @@ async function send() {
     error.value = e instanceof Error ? e.message : String(e);
     session.messages.push(createChatMessage("assistant", `Error: ${error.value}`));
   } finally {
+    stopStatusRotate();
     busy.value = false;
+    busyDetail.value = null;
     touchSession(session);
+    afterSessionMutation(session);
     await scrollBottom();
   }
 }
 
 function insertSlash(cmd: string) {
-  input.value = cmd === "/tools" ? "/tools" : `${cmd} `;
+  composer.value?.insertSlash(cmd);
 }
 
 const quick = [
@@ -260,7 +403,7 @@ const quick = [
           </p>
         </div>
         <button
-          v-if="hasProject && chatReady && messages.length > 0"
+          v-if="hasProject && chatReady && activeMessages.length > 0"
           type="button"
           class="chat__clear"
           title="Clear this chat"
@@ -352,6 +495,13 @@ const quick = [
               :key="s.id"
               class="chat__rail-row"
               :class="{ 'is-active': s.id === activeSessionId }"
+              v-memo="[
+                s.id === activeSessionId,
+                s.title,
+                s.updatedAt,
+                renamingId === s.id,
+                renamingId === s.id ? renameValue : '',
+              ]"
             >
               <button type="button" class="chat__rail-item" @click="switchToSession(s.id)">
                 <input
@@ -392,7 +542,7 @@ const quick = [
         <div class="chat__main">
           <Transition name="chat-switch" mode="out-in">
             <div :key="activeSessionId ?? 'none'" class="chat__thread-wrap">
-              <div v-if="messages.length === 0" class="chat__thread-empty">
+              <div v-if="activeMessages.length === 0" class="chat__thread-empty">
                 <Sparkles :size="20" />
                 <p class="chat__thread-empty-title">This chat is empty</p>
                 <p class="chat__thread-empty-body">
@@ -400,55 +550,45 @@ const quick = [
                 </p>
               </div>
               <div v-else ref="scroller" class="chat__thread">
-                <TransitionGroup name="msg" tag="div" class="chat__thread-inner">
-                  <article
-                    v-for="m in messages"
-                    :key="m.id"
-                    class="bubble"
-                    :class="`bubble--${m.role}`"
-                  >
-                    <div v-if="m.toolCalls?.length" class="bubble__tools">
-                      <div
-                        v-for="(t, i) in m.toolCalls"
-                        :key="`${m.id}-${t.toolId}-${i}`"
-                        class="tool"
-                        :class="t.ok ? 'tool--ok' : 'tool--fail'"
-                      >
-                        <Wrench :size="12" />
-                        <span>{{ t.title }}</span>
-                        <span class="tool__flag">{{ t.ok ? "ok" : "fail" }}</span>
+                <div class="chat__thread-inner">
+                  <!-- Plain list (no TransitionGroup) — avoids O(n) move FLIP
+                       work when appending; v-memo keeps old markdown bubbles cold. -->
+                  <div class="chat__thread-msgs">
+                    <article
+                      v-for="m in activeMessages"
+                      :key="m.id"
+                      class="bubble"
+                      :class="`bubble--${m.role}`"
+                      v-memo="[m.id, m.text, m.toolCalls]"
+                    >
+                      <div v-if="m.toolCalls?.length" class="bubble__tools">
+                        <div
+                          v-for="(t, i) in m.toolCalls"
+                          :key="`${m.id}-${t.toolId}-${i}`"
+                          class="tool"
+                          :class="t.ok ? 'tool--ok' : 'tool--fail'"
+                        >
+                          <Wrench :size="12" />
+                          <span>{{ t.title }}</span>
+                          <span v-if="!t.ok" class="tool__flag">fail</span>
+                        </div>
                       </div>
-                    </div>
-                    <ChatMessageContent :text="m.text" />
-                  </article>
-                </TransitionGroup>
-                <div v-if="busy" class="bubble bubble--assistant bubble--busy">
-                  <Loader2 class="spin" :size="16" />
-                  Running tools…
+                      <ChatMessageContent :text="m.text" />
+                    </article>
+                  </div>
+                  <Transition name="think">
+                    <ChatThinkingBubble
+                      v-if="busy"
+                      :label="busyLabel"
+                      :detail="busyDetail"
+                    />
+                  </Transition>
                 </div>
               </div>
             </div>
           </Transition>
 
-          <footer class="chat__composer">
-            <textarea
-              v-model="input"
-              class="chat__input"
-              rows="2"
-              placeholder="Ask the workspace… (/tools for commands)"
-              :disabled="busy"
-              @keydown.enter.exact.prevent="send"
-            />
-            <button
-              type="button"
-              class="btn-primary chat__send"
-              :disabled="busy || !input.trim()"
-              @click="send"
-            >
-              <Send :size="16" />
-              Send
-            </button>
-          </footer>
+          <ChatComposer ref="composer" :busy="busy" @send="send" />
           <p class="chat__hint">
             Slash tools run locally. Freeform uses OpenMesh Agent Engine (live LLM + tools).
             Needs a normal OpenAI-compatible provider — not DashScope Coding Plan.
@@ -900,6 +1040,12 @@ const quick = [
   gap: 0.75rem;
 }
 
+.chat__thread-msgs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
 .bubble {
   max-width: min(820px, 100%);
   border-radius: 12px;
@@ -912,20 +1058,13 @@ const quick = [
   align-self: flex-end;
   background: var(--surface-3);
   border-color: var(--border-strong);
+  transform-origin: bottom right;
 }
 
 .bubble--assistant,
 .bubble--system {
   align-self: flex-start;
-}
-
-.bubble--busy {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: var(--muted-foreground);
-  font-size: 0.85rem;
-  margin-top: 0.75rem;
+  transform-origin: bottom left;
 }
 
 .bubble__tools {
@@ -963,44 +1102,6 @@ const quick = [
   letter-spacing: 0.04em;
 }
 
-.chat__composer {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 0.65rem;
-  align-items: end;
-  flex-shrink: 0;
-}
-
-.chat__input {
-  resize: vertical;
-  min-height: 56px;
-  max-height: 160px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  color: var(--foreground);
-  padding: 0.75rem 0.9rem;
-  font: inherit;
-  font-size: 0.875rem;
-  transition: border-color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
-}
-
-.chat__input:focus {
-  outline: none;
-  border-color: var(--border-strong);
-  background: var(--surface-3);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-blue) 18%, transparent);
-}
-
-.chat__send {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  height: 42px;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
 .chat__hint {
   margin: 0;
   font-size: 0.72rem;
@@ -1029,18 +1130,9 @@ const quick = [
   opacity: 1;
 }
 
-.spin {
-  animation: spin 0.9s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 /* ============================================================================
-   MOTION — session switch presence, new-message entrance, clear-chat exit
+   MOTION — session switch, snappy message pop-in, thinking bubble enter
+   All motion is in-chat only (never an OS wait cursor).
    ============================================================================ */
 
 .chat-switch-enter-active,
@@ -1054,17 +1146,31 @@ const quick = [
   transform: translateY(3px);
 }
 
+/* User bubble: snappy pop / slide-up (premium, short) */
 .msg-enter-active {
-  transition: opacity 220ms ease, transform 220ms ease;
+  transition:
+    opacity 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .msg-enter-from {
   opacity: 0;
-  transform: translateY(6px);
+  transform: translateY(10px) scale(0.97);
+}
+
+.bubble--user.msg-enter-active {
+  transition:
+    opacity 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 160ms cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+.bubble--user.msg-enter-from {
+  opacity: 0;
+  transform: translateY(12px) scale(0.94);
 }
 
 .msg-leave-active {
-  transition: opacity 150ms ease;
+  transition: opacity 140ms ease;
 }
 
 .msg-leave-to {
@@ -1072,7 +1178,28 @@ const quick = [
 }
 
 .msg-move {
-  transition: transform 200ms ease;
+  transition: transform 180ms ease;
+}
+
+/* Thinking bubble slides in right after the user message paints */
+.think-enter-active {
+  transition:
+    opacity 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.think-leave-active {
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.think-enter-from {
+  opacity: 0;
+  transform: translateY(8px) scale(0.98);
+}
+
+.think-leave-to {
+  opacity: 0;
+  transform: translateY(-2px);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1080,14 +1207,20 @@ const quick = [
   .chat-switch-leave-active,
   .msg-enter-active,
   .msg-leave-active,
-  .msg-move {
+  .msg-move,
+  .bubble--user.msg-enter-active,
+  .think-enter-active,
+  .think-leave-active {
     transition: none !important;
   }
 
   .chat-switch-enter-from,
   .chat-switch-leave-to,
   .msg-enter-from,
-  .msg-leave-to {
+  .msg-leave-to,
+  .bubble--user.msg-enter-from,
+  .think-enter-from,
+  .think-leave-to {
     opacity: 1 !important;
     transform: none !important;
   }

@@ -1,0 +1,14 @@
+{
+  "id": "sample-concise-plugin",
+  "name": "Concise Pack",
+  "version": "0.1.0",
+  "description": "Sample plugin wrapping a concise-replies skill for local install dogfood.",
+  "skills": ["skills/keep-it-short"],
+  "hooks": [
+    {
+      "id": "chat-start-tone",
+      "event": "on_chat_start",
+      "appendContext": "Default to concise replies unless the user asks for depth."
+    }
+  ]
+}

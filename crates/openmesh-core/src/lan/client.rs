@@ -40,8 +40,9 @@ pub fn parse_host_port(to: &str) -> Result<(String, u16), LanClientError> {
 }
 
 fn blocking_client() -> Result<reqwest::blocking::Client, LanClientError> {
+    // Live Agent Engine asks can exceed a short HTTP timeout.
     reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
+        .timeout(std::time::Duration::from_secs(120))
         .build()
         .map_err(|e| LanClientError::Http(e.to_string()))
 }

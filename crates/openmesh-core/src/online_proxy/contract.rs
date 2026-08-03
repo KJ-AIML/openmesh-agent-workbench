@@ -8,7 +8,8 @@ use serde::{Deserialize, Serialize};
 pub const ONLINE_PROXY_PROTOCOL_VERSION: &str = "1.0";
 pub const MAX_PROXY_ID_BYTES: usize = 128;
 pub const MAX_LABEL_BYTES: usize = 128;
-pub const MAX_ANSWER_TEXT_BYTES: usize = 8192;
+/// Raised for live Agent Engine answers (scaffold drafts were 8 KiB).
+pub const MAX_ANSWER_TEXT_BYTES: usize = 32768;
 pub const MAX_FRESHNESS_STATEMENT_BYTES: usize = 1024;
 pub const MAX_WARNING_BYTES: usize = 512;
 pub const MAX_WARNINGS: usize = 16;
@@ -73,6 +74,9 @@ pub struct OnlineProxyAnswer {
     /// True when answer was refused due to freshness/policy (answer_text explains).
     pub refused: bool,
     pub mode: OnlineProxyMode,
+    /// True when answer text came from Agent Engine (not LocalScaffold paste).
+    #[serde(default)]
+    pub live_engine: bool,
 }
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
@@ -163,8 +167,9 @@ pub fn validate_online_proxy_answer(a: &OnlineProxyAnswer) -> Result<(), OnlineP
     }
     validate_utc_timestamp(&a.generated_at).map_err(OnlineProxyValidationError::InvalidTimestamp)?;
     validate_evidence_freshness_statement(&a.freshness)?;
-    // Gate: never silently stale — insufficient freshness must refuse.
-    if !a.freshness.is_sufficient && !a.refused {
+    // Scaffold gate: never silently stale — insufficient freshness must refuse.
+    // Live Agent Engine answers disclose freshness in-prompt; soft-warn only.
+    if !a.freshness.is_sufficient && !a.refused && !a.live_engine {
         return Err(OnlineProxyValidationError::MissingFreshness);
     }
     Ok(())

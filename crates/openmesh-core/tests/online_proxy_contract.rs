@@ -78,8 +78,27 @@ fn insufficient_must_refuse() {
         freshness: sample_freshness(false),
         refused: false,
         mode: OnlineProxyMode::LocalScaffold,
+        live_engine: false,
     };
     assert!(validate_online_proxy_answer(&ans).is_err());
+}
+
+#[test]
+fn live_engine_may_answer_with_stale_disclosure() {
+    let ans = OnlineProxyAnswer {
+        protocol_version: ONLINE_PROXY_PROTOCOL_VERSION.into(),
+        answer_id: "ans-live".into(),
+        proxy_id: "online-ws-1".into(),
+        workspace_id: "ws-1".into(),
+        question: "status?".into(),
+        answer_text: "Live Continuity Proxy answer (Agent Engine): working.".into(),
+        generated_at: "2026-08-02T19:00:00Z".into(),
+        freshness: sample_freshness(false),
+        refused: false,
+        mode: OnlineProxyMode::LocalScaffold,
+        live_engine: true,
+    };
+    validate_online_proxy_answer(&ans).expect("live engine soft-warn ok");
 }
 
 #[test]
@@ -95,6 +114,7 @@ fn refused_stale_answer_ok() {
         freshness: sample_freshness(false),
         refused: true,
         mode: OnlineProxyMode::LocalScaffold,
+        live_engine: false,
     };
     validate_online_proxy_answer(&ans).expect("refused ok");
 }

@@ -8,10 +8,24 @@ vi.mock("@/lib/continuityClient", () => ({
   getReturnDigest: vi.fn(),
   listMeshPeers: vi.fn(),
   listMeshEnvelopes: vi.fn(),
+  queryMeshPeer: vi.fn(),
   listRelayAudit: vi.fn(),
   getOnlineProxyStatus: vi.fn(),
   initOnlineProxy: vi.fn(),
   askOnlineProxy: vi.fn(),
+  getTeamWorkspace: vi.fn(),
+  getTeamTrustPolicy: vi.fn(),
+  listConnectors: vi.fn(),
+  getOrgGraph: vi.fn(),
+  getPilotStatus: vi.fn(),
+  getRcStatus: vi.fn(),
+  lanServeStart: vi.fn(),
+  lanServeStop: vi.fn(),
+  lanServeStatus: vi.fn(),
+  lanDiscover: vi.fn(),
+  lanListApprovedPackages: vi.fn(),
+  lanSendPackage: vi.fn(),
+  lanAskPeer: vi.fn(),
 }));
 
 vi.mock("vue-router", () => ({
@@ -37,6 +51,12 @@ import {
   getContinuityHubSummary,
   getPendingQuestions,
   getOnlineProxyStatus,
+  lanServeStatus,
+  lanDiscover,
+  lanListApprovedPackages,
+  listMeshPeers,
+  listMeshEnvelopes,
+  listRelayAudit,
 } from "@/lib/continuityClient";
 
 describe("ContinuityPage", () => {
@@ -81,18 +101,32 @@ describe("ContinuityPage", () => {
       limitations: [],
     });
     (getOnlineProxyStatus as any).mockResolvedValue(null);
+    (lanServeStatus as any).mockResolvedValue({
+      running: false,
+      httpHost: "127.0.0.1",
+      httpPort: 41778,
+      note: null,
+    });
+    (lanDiscover as any).mockResolvedValue([]);
+    (lanListApprovedPackages as any).mockResolvedValue([]);
+    (listMeshPeers as any).mockResolvedValue([]);
+    (listMeshEnvelopes as any).mockResolvedValue([]);
+    (listRelayAudit as any).mockResolvedValue([]);
   });
 
-  it("renders Continuity header and tabs", async () => {
+  it("renders Continuity header and section groups", async () => {
     const wrapper = mount(ContinuityPage);
     await nextTick();
     await nextTick();
     expect(wrapper.text()).toContain("Continuity");
+    // Grouped nav (You / Team / Mesh / Gate) — not the old flat tab strip.
+    expect(wrapper.text()).toContain("You");
+    expect(wrapper.text()).toContain("Team");
+    expect(wrapper.text()).toContain("Mesh");
+    expect(wrapper.text()).toContain("Gate");
+    // Default group "You" shows Pending + Digest.
     expect(wrapper.text()).toContain("Pending");
     expect(wrapper.text()).toContain("Digest");
-    expect(wrapper.text()).toContain("Mesh");
-    expect(wrapper.text()).toContain("Relay");
-    expect(wrapper.text()).toContain("Online Proxy");
   });
 
   it("shows no-project state when none selected", async () => {
@@ -109,6 +143,69 @@ describe("ContinuityPage", () => {
     await nextTick();
     expect(getPendingQuestions).toHaveBeenCalledWith("/tmp/test");
     expect(wrapper.text()).toContain("Need decision on API shape");
-    expect(wrapper.text()).toContain("Pending open: 2");
+    // Status line uses summary.openPendingCount.
+    expect(wrapper.text()).toMatch(/2 pending/);
+    expect(wrapper.text()).toContain("1 open");
+  });
+
+  it("Mesh group exposes Peers, Relay, Proxy, and LAN tabs", async () => {
+    const wrapper = mount(ContinuityPage);
+    await flushPromises();
+
+    const meshGroup = wrapper
+      .findAll('[role="tab"]')
+      .find((b) => b.text().trim() === "Mesh");
+    expect(meshGroup).toBeTruthy();
+    await meshGroup!.trigger("click");
+    await nextTick();
+
+    const text = wrapper.text();
+    expect(text).toContain("Peers");
+    expect(text).toContain("Relay");
+    expect(text).toContain("Proxy");
+    expect(text).toContain("LAN");
+  });
+
+  it("LAN tab shows listener controls", async () => {
+    const wrapper = mount(ContinuityPage);
+    await flushPromises();
+
+    await wrapper
+      .findAll('[role="tab"]')
+      .find((b) => b.text().trim() === "Mesh")!
+      .trigger("click");
+    await nextTick();
+    await wrapper
+      .findAll('[role="tab"]')
+      .find((b) => b.text().includes("LAN"))!
+      .trigger("click");
+    await flushPromises();
+    await nextTick();
+
+    expect(lanServeStatus).toHaveBeenCalledWith("/tmp/test");
+    expect(wrapper.text()).toContain("LAN listener");
+    expect(wrapper.text()).toContain("Start listener");
+    expect(wrapper.text()).toContain("Refresh discover");
+    expect(wrapper.text()).toContain("Listener is stopped");
+  });
+
+  it("Proxy tab shows initialize control when not configured", async () => {
+    const wrapper = mount(ContinuityPage);
+    await flushPromises();
+
+    await wrapper
+      .findAll('[role="tab"]')
+      .find((b) => b.text().trim() === "Mesh")!
+      .trigger("click");
+    await nextTick();
+    await wrapper
+      .findAll('[role="tab"]')
+      .find((b) => b.text().includes("Proxy"))!
+      .trigger("click");
+    await flushPromises();
+    await nextTick();
+
+    expect(getOnlineProxyStatus).toHaveBeenCalledWith("/tmp/test");
+    expect(wrapper.text()).toContain("Initialize Continuity Proxy");
   });
 });

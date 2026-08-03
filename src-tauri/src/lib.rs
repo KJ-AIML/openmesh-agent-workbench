@@ -1,5 +1,6 @@
 mod continuity_desktop;
 mod agent_engine_desktop;
+mod extensions_desktop;
 
 use openmesh_core::context_service;
 use openmesh_core::session_readers;
@@ -1259,6 +1260,8 @@ pub fn run() {
             continuity_desktop::lan_serve_stop,
             continuity_desktop::lan_serve_status,
             continuity_desktop::lan_discover,
+            continuity_desktop::lan_list_last_peers,
+            continuity_desktop::lan_list_approved_packages,
             continuity_desktop::lan_send_package,
             continuity_desktop::lan_ask_peer,
             // Agent Engine + Tool Loop (0.1.23)
@@ -1267,6 +1270,11 @@ pub fn run() {
             agent_engine_desktop::agent_secret_clear,
             agent_engine_desktop::agent_provider_test,
             agent_engine_desktop::agent_engine_turn,
+            // Skills / Hooks / Plugins (local marketplace MVP)
+            extensions_desktop::extensions_list,
+            extensions_desktop::extensions_catalog,
+            extensions_desktop::extensions_set_enabled,
+            extensions_desktop::extensions_install,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

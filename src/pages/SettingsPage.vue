@@ -15,9 +15,11 @@ import {
   FolderTree,
   Palette,
   Database,
+  Puzzle,
 } from "lucide-vue-next";
 import * as fileSystemAdapter from "../lib/adapters/fileSystemAdapter";
 import SettingsToolsPanel from "../components/settings/SettingsToolsPanel.vue";
+import SettingsExtensionsPanel from "../components/settings/SettingsExtensionsPanel.vue";
 import AgentToolIcon from "../components/AgentToolIcon.vue";
 import {
   clearAgentSecret,
@@ -35,6 +37,7 @@ type SectionId =
   | "overview"
   | "provider"
   | "agents"
+  | "extensions"
   | "sessions"
   | "server"
   | "tools"
@@ -58,6 +61,7 @@ const sectionMeta: Record<
   overview: { label: "Overview", icon: LayoutDashboard },
   provider: { label: "Provider", icon: KeyRound },
   agents: { label: "Agents", icon: Bot },
+  extensions: { label: "Extensions", icon: Puzzle },
   sessions: { label: "Sessions", icon: FolderClock },
   server: { label: "Server", icon: Server },
   tools: { label: "Tools", icon: Wrench },
@@ -72,7 +76,11 @@ const groups: {
   sections: SectionId[];
 }[] = [
   { id: "setup", label: "Setup", sections: ["overview", "provider"] },
-  { id: "runtime", label: "Runtime", sections: ["agents", "sessions", "server"] },
+  {
+    id: "runtime",
+    label: "Runtime",
+    sections: ["agents", "extensions", "sessions", "server"],
+  },
   { id: "project", label: "Project", sections: ["tools", "paths"] },
   { id: "app", label: "App", sections: ["appearance", "data"] },
 ];
@@ -812,6 +820,13 @@ const statusLine = computed(() => {
       <button @click="saveSection('agentClis')" class="btn-primary">
         Save Agent CLIs
       </button>
+    </div>
+
+    <div
+      v-show="activeSection === 'extensions'"
+      class="workbench-card p-5 space-y-4"
+    >
+      <SettingsExtensionsPanel @toast="showToast" />
     </div>
 
     <div

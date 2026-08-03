@@ -2,11 +2,17 @@
 // happy-dom's HTML coverage is incomplete enough to make it under-sanitize,
 // so this file runs under jsdom instead of the project-wide happy-dom env.
 // @vitest-environment jsdom
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
+  __clearMarkdownCaches,
+  __markdownCacheSizes,
   renderMarkdownToSafeHtml,
   segmentChatContent,
 } from "../src/lib/agentChat/markdown";
+
+beforeEach(() => {
+  __clearMarkdownCaches();
+});
 
 describe("segmentChatContent", () => {
   it("returns a single markdown segment for plain text", () => {
@@ -78,5 +84,30 @@ describe("renderMarkdownToSafeHtml", () => {
   it("strips javascript: URLs from links", () => {
     const html = renderMarkdownToSafeHtml("[click me](javascript:alert(1))");
     expect(html).not.toContain("javascript:");
+  });
+});
+
+describe("markdown caches", () => {
+  it("reuses segment and html results for identical source", () => {
+    const text = "hello **world**\n\n```mermaid\nA-->B\n```";
+    const a = segmentChatContent(text);
+    const b = segmentChatContent(text);
+    expect(a).toBe(b);
+
+    const htmlA = renderMarkdownToSafeHtml("**bold**");
+    const htmlB = renderMarkdownToSafeHtml("**bold**");
+    expect(htmlA).toBe(htmlB);
+    expect(htmlA).toContain("<strong>bold</strong>");
+
+    expect(__markdownCacheSizes()).toEqual({ segments: 1, html: 1 });
+  });
+
+  it("clears caches via the test helper", () => {
+    segmentChatContent("one");
+    renderMarkdownToSafeHtml("two");
+    expect(__markdownCacheSizes().segments).toBeGreaterThan(0);
+    expect(__markdownCacheSizes().html).toBeGreaterThan(0);
+    __clearMarkdownCaches();
+    expect(__markdownCacheSizes()).toEqual({ segments: 0, html: 0 });
   });
 });

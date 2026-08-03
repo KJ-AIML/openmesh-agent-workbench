@@ -15,15 +15,8 @@ pub fn run_agent_turn(
     executor: &dyn ToolExecutor,
 ) -> Result<EngineTurnResult, AgentEngineError> {
     let tools = filter_tools(&def.tool_allowlist);
-    if session.messages.is_empty() {
-        session.messages.push(ChatMessage {
-            role: ChatRole::System,
-            content: def.system_prompt.clone(),
-            tool_call_id: None,
-            name: None,
-            tool_calls: vec![],
-        });
-    }
+    // Keep system prompt current (skills/hooks may change between turns).
+    ensure_system_prompt(session, &def.system_prompt);
     session.messages.push(ChatMessage {
         role: ChatRole::User,
         content: user_text.to_string(),
@@ -101,6 +94,25 @@ pub fn run_agent_turn(
             });
         }
     }
+}
+
+fn ensure_system_prompt(session: &mut AgentSession, prompt: &str) {
+    if let Some(first) = session.messages.first_mut() {
+        if first.role == ChatRole::System {
+            first.content = prompt.to_string();
+            return;
+        }
+    }
+    session.messages.insert(
+        0,
+        ChatMessage {
+            role: ChatRole::System,
+            content: prompt.to_string(),
+            tool_call_id: None,
+            name: None,
+            tool_calls: vec![],
+        },
+    );
 }
 
 fn clip(s: &str, max: usize) -> String {

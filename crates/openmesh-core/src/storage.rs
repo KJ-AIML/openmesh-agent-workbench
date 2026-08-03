@@ -151,6 +151,9 @@ pub struct Settings {
     pub session_dirs: SessionDirsSettings,
     pub local_paths: LocalPathsSettings,
     pub appearance: AppearanceSettings,
+    /// Skills / hooks / plugins enable map (not secrets).
+    #[serde(default)]
+    pub extensions: crate::agent_engine::ExtensionsSettings,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -909,6 +912,7 @@ pub fn default_settings() -> Settings {
             theme: "dark".to_string(),
             font_size: "medium".to_string(),
         },
+        extensions: crate::agent_engine::ExtensionsSettings::default(),
     }
 }
 

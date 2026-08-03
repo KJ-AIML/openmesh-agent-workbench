@@ -8,6 +8,7 @@ pub mod ask;
 pub mod beacon;
 pub mod client;
 pub mod contract;
+pub mod last_peers;
 pub mod peer;
 pub mod serve;
 pub mod server;
@@ -23,6 +24,7 @@ pub use contract::{
     validate_lan_beacon, LanAskHttpBody, LanBeacon, LanHealthResponse, LanPeerInfo,
     LanProtocolError, LanServeStatus, DEFAULT_HTTP_PORT, DEFAULT_UDP_PORT, LAN_PROTOCOL,
 };
+pub use last_peers::{read_last_peers, remember_discovered_peers, write_last_peers};
 pub use peer::{merge_peer, peer_table_snapshot, PeerTable};
 pub use serve::{
     current_lan_serve_status, lan_serve_status_for_project, start_lan_serve, stop_lan_serve,

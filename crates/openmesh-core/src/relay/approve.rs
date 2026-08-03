@@ -101,6 +101,30 @@ pub fn approve_relay_package(
     Ok(pkg)
 }
 
+/// List approved package ids (filenames under relay/approved/, newest-ish lexical).
+pub fn list_approved_package_ids(project_path: &str) -> Result<Vec<String>, RelayApproveError> {
+    let _ = load_project(project_path)?;
+    let dir = approved_dir(project_path);
+    if !dir.exists() {
+        return Ok(Vec::new());
+    }
+    let mut ids = Vec::new();
+    for entry in fs::read_dir(&dir).map_err(|_| RelayApproveError::Io)? {
+        let entry = entry.map_err(|_| RelayApproveError::Io)?;
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("json") {
+            continue;
+        }
+        if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+            if validate_package_id_for_storage(stem).is_ok() {
+                ids.push(stem.to_string());
+            }
+        }
+    }
+    ids.sort();
+    Ok(ids)
+}
+
 fn load_project(project_path: &str) -> Result<Project, RelayApproveError> {
     read_project::<Project>(project_path, "project.json")
         .ok_or(RelayApproveError::ProjectNotInitialized)

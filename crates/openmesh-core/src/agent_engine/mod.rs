@@ -4,12 +4,23 @@
 //! Inspired by coding-agent architecture concepts; OpenMesh-branded reimplementation.
 
 pub mod engine_loop;
+pub mod extensions;
+pub mod live_ask;
 pub mod provider;
 pub mod registry;
 pub mod secrets;
 pub mod types;
 
 pub use engine_loop::run_agent_turn;
+pub use extensions::{
+    build_skills_prompt_section, enrich_system_prompt, install_from_path, load_inventory,
+    local_catalog, parse_skill_markdown, CatalogEntry, ExtensionSource, ExtensionsInventory,
+    ExtensionsSettings, HookDefinition, HookEvent, PluginRecord, SkillPack,
+};
+pub use live_ask::{
+    run_live_ask, run_live_ask_with_provider, LiveAskError, LiveAskRequest, WorkspaceToolExecutor,
+    LIVE_ASK_SYSTEM_PROMPT,
+};
 pub use provider::{
     build_request_body, parse_chat_completion, probe_provider, resolve_provider_kind,
     AssistantTurn, ChatProvider, OpenAiCompatibleProvider, ProviderConfig, ProviderProbeResult,

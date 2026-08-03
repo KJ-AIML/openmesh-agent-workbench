@@ -1,11 +1,15 @@
-//! Ask the always-online proxy with mandatory freshness disclosure.
+//! Ask the Continuity Proxy — live Agent Engine with freshness disclosure.
+//!
+//! LocalScaffold mode remains a config label for init; answers are produced by
+//! Agent Engine when a key is configured. Missing keys fail closed (no scaffold theater).
 
+use crate::agent_engine::{run_live_ask, LiveAskError, LiveAskRequest};
 use crate::authority_freshness::{evaluate_evidence_freshness, FreshnessResult};
 use crate::authority_policy::FreshnessTier;
 use crate::domain::ProxyContextPack;
 use crate::online_proxy::contract::{
     build_freshness_statement_text, validate_online_proxy_answer, EvidenceFreshnessStatement,
-    OnlineProxyAnswer, OnlineProxyConfig, ONLINE_PROXY_PROTOCOL_VERSION,
+    OnlineProxyAnswer, OnlineProxyConfig, ONLINE_PROXY_PROTOCOL_VERSION, MAX_ANSWER_TEXT_BYTES,
 };
 use crate::online_proxy::storage::{write_answer, OnlineProxyStorageError};
 use crate::relay::transport::received_dir;
@@ -29,9 +33,22 @@ pub enum OnlineProxyAskError {
     Storage(#[from] OnlineProxyStorageError),
     #[error("empty question")]
     EmptyQuestion,
+    #[error("{0}")]
+    Live(#[from] LiveAskError),
 }
 
-/// Produce an always-online answer with explicit freshness; refuse if critical/stale.
+impl OnlineProxyAskError {
+    pub fn code(&self) -> &'static str {
+        match self {
+            OnlineProxyAskError::EmptyQuestion => "empty_question",
+            OnlineProxyAskError::Validation(_) => "validation",
+            OnlineProxyAskError::Storage(_) => "storage",
+            OnlineProxyAskError::Live(e) => e.code(),
+        }
+    }
+}
+
+/// Produce a Continuity Proxy answer via Agent Engine with explicit freshness context.
 pub fn ask_online_proxy(
     project_path: &str,
     config: &OnlineProxyConfig,
@@ -63,7 +80,7 @@ pub fn ask_online_proxy(
 
     let statement_text = build_freshness_statement_text(&freshness_eval, tier);
     let freshness = EvidenceFreshnessStatement {
-        statement: statement_text,
+        statement: statement_text.clone(),
         evaluated_at: request
             .now
             .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
@@ -75,31 +92,61 @@ pub fn ask_online_proxy(
         evidence_source_ids: source_ids,
     };
 
-    let refused = !freshness_eval.is_sufficient
-        && matches!(tier, FreshnessTier::Critical | FreshnessTier::Standard);
+    // Critical tier still hard-refuses when evidence is insufficient (no invented certainty).
+    let hard_refuse = !freshness_eval.is_sufficient && matches!(tier, FreshnessTier::Critical);
+    if hard_refuse {
+        let answer = OnlineProxyAnswer {
+            protocol_version: ONLINE_PROXY_PROTOCOL_VERSION.into(),
+            answer_id: request.answer_id.clone(),
+            proxy_id: config.proxy_id.clone(),
+            workspace_id: config.workspace_id.clone(),
+            question: request.question.clone(),
+            answer_text: format!(
+                "Cannot answer Continuity Proxy (critical tier): evidence is not fresh enough.\n\n{}\n\nQuestion was: {}",
+                freshness.statement, request.question
+            ),
+            generated_at: request
+                .now
+                .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+            freshness,
+            refused: true,
+            mode: config.mode,
+            live_engine: false,
+        };
+        validate_online_proxy_answer(&answer)
+            .map_err(|e| OnlineProxyAskError::Validation(e.to_string()))?;
+        if persist {
+            write_answer(project_path, &answer)?;
+        }
+        return Ok(answer);
+    }
 
-    let answer_text = if refused {
-        format!(
-            "Cannot answer from always-online proxy: evidence is not fresh enough.\n\n{}\n\nQuestion was: {}",
-            freshness.statement, request.question
-        )
-    } else {
-        // Deterministic alpha scaffold answer (no live model required for gate).
-        format!(
-            "Always-online proxy ({}) draft answer for: {}\n\nBased on available local{} evidence. This is non-executing draft text.\n\n{}",
-            match config.mode {
-                crate::online_proxy::contract::OnlineProxyMode::LocalScaffold => "local-scaffold",
-                crate::online_proxy::contract::OnlineProxyMode::CloudScaffold => "cloud-scaffold",
-            },
-            request.question,
-            if config.use_relay_received {
-                "+relay-received"
-            } else {
-                ""
-            },
-            freshness.statement
-        )
+    let context_prefix = Some(format!(
+        "Continuity Proxy live ask (Agent Engine). Freshness disclosure:\n{statement_text}\n\n\
+         Use tools for project facts. Treat stale evidence as uncertain. Do not claim to be a remote cloud teammate."
+    ));
+
+    let live_req = LiveAskRequest {
+        question: request.question.clone(),
+        context_prefix,
+        provider_name: None,
+        model: None,
+        base_url: None,
+        system_extra: Some(format!(
+            "You are the local Continuity Proxy for owner '{}'. Config mode label is {:?} (scaffold label only; you answer via Agent Engine).",
+            config.owner_label, config.mode
+        )),
     };
+
+    let engine = run_live_ask(project_path, &live_req)?;
+    let mut answer_text = format!(
+        "Live Continuity Proxy answer (Agent Engine / {}):\n\n{}",
+        engine.model, engine.assistant_text
+    );
+    if answer_text.len() > MAX_ANSWER_TEXT_BYTES {
+        answer_text.truncate(MAX_ANSWER_TEXT_BYTES.saturating_sub(32));
+        answer_text.push_str("\n…(truncated)");
+    }
 
     let answer = OnlineProxyAnswer {
         protocol_version: ONLINE_PROXY_PROTOCOL_VERSION.into(),
@@ -112,8 +159,9 @@ pub fn ask_online_proxy(
             .now
             .to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
         freshness,
-        refused,
+        refused: engine.refused,
         mode: config.mode,
+        live_engine: true,
     };
 
     validate_online_proxy_answer(&answer)
