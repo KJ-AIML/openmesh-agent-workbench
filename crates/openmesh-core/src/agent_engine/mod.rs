@@ -3,6 +3,7 @@
 //! Parallel to Work Proxy draft (`proxy_runtime_axga`), which remains tool-free.
 //! Inspired by coding-agent architecture concepts; OpenMesh-branded reimplementation.
 
+pub mod chat_store;
 pub mod continue_ops;
 pub mod engine_loop;
 pub mod extensions;
@@ -13,10 +14,12 @@ pub mod provider;
 pub mod recipes;
 pub mod registry;
 pub mod secrets;
+pub mod turn_cancel;
 pub mod types;
 pub mod workspace_tools;
 
-pub use engine_loop::run_agent_turn;
+pub use engine_loop::{run_agent_turn, run_agent_turn_cancellable};
+pub use chat_store::{load_chat_sessions, save_chat_sessions, StoredChatMessage, StoredChatSession};
 pub use extensions::{
     build_skills_prompt_section, enrich_system_prompt, install_from_path, load_inventory,
     local_catalog, parse_skill_markdown, CatalogEntry, ExtensionSource, ExtensionsInventory,
@@ -44,8 +47,10 @@ pub use provider::{
     ScriptedProvider,
 };
 pub use registry::{
-    builtin_tool_specs, default_tool_names, filter_tools, StubToolExecutor, ToolExecutor,
+    act_tool_names, ask_tool_names, builtin_tool_specs, default_tool_names, delegate_tool_names,
+    filter_tools, plan_tool_names, tools_for_mode, StubToolExecutor, ToolExecutor,
 };
+pub use turn_cancel::{cancel_turn, register_turn, remove_turn};
 pub use secrets::{
     AgentSecretStore, CascadingSecretStore, EnvSecretStore, FileSecretStore, MemorySecretStore,
 };

@@ -18,6 +18,14 @@ vi.mock("@/lib/agentEngineClient", () => ({
     configured: true,
     store: "/tmp/mock-secret",
   })),
+  extractPatchIds: (text: string) => {
+    const m = text.match(/patch-[a-f0-9]+/gi);
+    return m ?? [];
+  },
+  cancelAgentEngineTurn: vi.fn(async () => true),
+  cancelAgentRecipe: vi.fn(async () => true),
+  loadDurableChats: vi.fn(async () => []),
+  saveDurableChats: vi.fn(async () => {}),
 }));
 
 const mockStore = {
@@ -115,7 +123,8 @@ describe("AgentChatPage", () => {
     // Starter chips live in the thread column (not a full-width header dump).
     expect(wrapper.text()).toContain("/pilot");
     expect(wrapper.text()).toContain("More…");
-    expect(wrapper.text()).toMatch(/Slash = local/);
+    expect(wrapper.text()).toMatch(/slash = local/i);
+    expect(wrapper.text()).toMatch(/ask|plan|act|delegate/i);
     expect(wrapper.text()).not.toContain("DashScope Coding Plan");
   });
 

@@ -2,7 +2,7 @@
 
 use crate::storage::safe_child_path;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 pub fn workspace_root(project_path: &str) -> Result<PathBuf, String> {
     fs::canonicalize(project_path).map_err(|e| format!("workspace root unavailable: {e}"))
@@ -20,7 +20,6 @@ pub fn normalize_rel(relative: &str) -> Result<String, String> {
 }
 
 pub fn deny_sensitive_path(path: &Path) -> Result<(), String> {
-    let lowered = path.to_string_lossy().to_lowercase();
     let file_name = path
         .file_name()
         .map(|s| s.to_string_lossy().to_lowercase())
@@ -49,8 +48,12 @@ pub fn deny_sensitive_path(path: &Path) -> Result<(), String> {
         return Err(format!("refusing sensitive path: {file_name}"));
     }
 
-    if lowered.contains("/.git/") || lowered.ends_with("/.git") {
-        return Err("refusing .git paths".into());
+    for component in path.components() {
+        if let Component::Normal(name) = component {
+            if name.to_string_lossy().eq_ignore_ascii_case(".git") {
+                return Err("refusing .git paths".into());
+            }
+        }
     }
     Ok(())
 }
@@ -83,14 +86,6 @@ pub fn resolve_write_target(project_path: &str, relative: &str) -> Result<(PathB
                 fs::canonicalize(parent).map_err(|e| format!("parent unavailable: {e}"))?;
             if !parent_canon.starts_with(&root) {
                 return Err("path escapes workspace root".into());
-            }
-        } else if parent != root.as_path() {
-            // Ensure each component is Normal-only (already via safe_child_path).
-            let mut check = root.clone();
-            if let Ok(stripped) = parent.strip_prefix(&root) {
-                for c in stripped.components() {
-                    check.push(c.as_os_str());
-                }
             }
         }
     }
@@ -215,4 +210,64 @@ fn sha256(data: &[u8]) -> [u8; 32] {
         out[i * 4..(i + 1) * 4].copy_from_slice(&word.to_be_bytes());
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn denies_git_dir_and_nested_entries() {
+        assert!(deny_sensitive_path(Path::new(".git")).is_err());
+        assert!(deny_sensitive_path(Path::new(".git/config")).is_err());
+        assert!(deny_sensitive_path(Path::new("src/../.git/HEAD")).is_err());
+        assert!(deny_sensitive_path(Path::new(".GIT/config")).is_err());
+    }
+
+    #[test]
+    fn denies_windows_style_git_paths() {
+        // Forward-slash form parses `.git` as a Normal component on all platforms.
+        assert!(deny_sensitive_path(Path::new(r"C:/proj/.git/config")).is_err());
+
+        // Backslash form: on Windows, `\` is a separator so `.git` is a component.
+        // On Unix it is a single Normal name; still assert via PathBuf push.
+        let mut win = PathBuf::from("C:");
+        win.push("proj");
+        win.push(".git");
+        win.push("config");
+        assert!(deny_sensitive_path(&win).is_err());
+
+        #[cfg(windows)]
+        assert!(deny_sensitive_path(Path::new(r"C:\proj\.git\config")).is_err());
+    }
+
+    #[test]
+    fn allows_normal_source_paths() {
+        assert!(deny_sensitive_path(Path::new("README.md")).is_ok());
+        assert!(deny_sensitive_path(Path::new("src/main.rs")).is_ok());
+        assert!(deny_sensitive_path(Path::new("crates/openmesh-core/src/lib.rs")).is_ok());
+    }
+
+    #[test]
+    fn denies_sensitive_basenames() {
+        assert!(deny_sensitive_path(Path::new(".env")).is_err());
+        assert!(deny_sensitive_path(Path::new(".env.local")).is_err());
+        assert!(deny_sensitive_path(Path::new("config/.env.staging")).is_err());
+        assert!(deny_sensitive_path(Path::new("credentials.json")).is_err());
+        assert!(deny_sensitive_path(Path::new("secrets.json")).is_err());
+        assert!(deny_sensitive_path(Path::new("agent-api-key")).is_err());
+        assert!(deny_sensitive_path(Path::new("id_rsa")).is_err());
+        assert!(deny_sensitive_path(Path::new("id_ed25519")).is_err());
+        assert!(deny_sensitive_path(Path::new("certs/server.pem")).is_err());
+        assert!(deny_sensitive_path(Path::new("keys/app.key")).is_err());
+        assert!(deny_sensitive_path(Path::new("store.p12")).is_err());
+        assert!(deny_sensitive_path(Path::new("store.pfx")).is_err());
+    }
+
+    #[test]
+    fn does_not_false_positive_git_prefixed_names() {
+        assert!(deny_sensitive_path(Path::new("gitignore")).is_ok());
+        assert!(deny_sensitive_path(Path::new("src/git_helpers.rs")).is_ok());
+        assert!(deny_sensitive_path(Path::new(".github/workflows/ci.yml")).is_ok());
+    }
 }

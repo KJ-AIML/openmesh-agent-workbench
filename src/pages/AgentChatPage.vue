@@ -42,6 +42,7 @@ import {
   isChatProviderReady,
 } from "../lib/agentChat/ready";
 import {
+  cancelAgentEngineTurn,
   extractPatchIds,
   getAgentSecretStatus,
 } from "../lib/agentEngineClient";
@@ -53,8 +54,9 @@ import {
   deriveTitleFromMessage,
   forkSessionAt,
   isAutoTitleWorthy,
-  loadSessions,
+  loadSessionsAsync,
   persistSessions,
+  persistSessionsAsync,
   touchSession,
 } from "../lib/agentChat/chatSessions";
 import { createPersistQueue } from "../lib/agentChat/persistQueue";
@@ -62,6 +64,9 @@ import ChatMessageContent from "../components/chat/ChatMessageContent.vue";
 import ChatComposer from "../components/chat/ChatComposer.vue";
 import ChatThinkingBubble from "../components/chat/ChatThinkingBubble.vue";
 import PatchApprovalCard from "../components/chat/PatchApprovalCard.vue";
+import VerifyLogPanel from "../components/chat/VerifyLogPanel.vue";
+
+type ChatMode = "ask" | "plan" | "act" | "delegate";
 
 const router = useRouter();
 const { currentProjectPath, currentProject, settings, saveSettings } = useStore();
@@ -83,6 +88,9 @@ const busyLabel = ref("Thinking…");
 /** Compact mid-turn tool line (e.g. "Pilot status"). */
 const busyDetail = ref<string | null>(null);
 const error = ref<string | null>(null);
+const chatMode = ref<ChatMode>("ask");
+const activeTurnId = ref<string | null>(null);
+const verifyRunKey = ref<string | null>(null);
 const scroller = ref<HTMLElement | null>(null);
 const composer = ref<InstanceType<typeof ChatComposer> | null>(null);
 /** Expanded /tools dump message ids (collapsed by default). */
@@ -104,7 +112,10 @@ const LLM_STATUS_LINES = [
 let statusRotateTimer: ReturnType<typeof setInterval> | null = null;
 let statusRotateIdx = 0;
 
-const persistQueue = createPersistQueue(persistSessions, 400);
+const persistQueue = createPersistQueue<ChatSession>((path, list) => {
+  persistSessions(path, list);
+  void persistSessionsAsync(path, list);
+}, 400);
 
 const hasProject = computed(() => !!currentProjectPath.value);
 const projectLabel = computed(
@@ -184,8 +195,8 @@ function afterSessionMutation(session?: ChatSession | null) {
   }
 }
 
-function loadForProject(path: string) {
-  const loaded = loadSessions(path);
+async function loadForProject(path: string) {
+  const loaded = await loadSessionsAsync(path);
   if (loaded.length === 0) {
     const fresh = createChatSession();
     seedWelcome(fresh);
@@ -208,7 +219,7 @@ watch(
     persistQueue.flush();
     error.value = null;
     renamingId.value = null;
-    if (path && ready) loadForProject(path);
+    if (path && ready) void loadForProject(path);
     else {
       sessions.value = [];
       activeSessionId.value = null;
@@ -448,6 +459,13 @@ async function send(text: string) {
   busyDetail.value = null;
   busy.value = true;
   error.value = null;
+  const turnId = `turn-${Date.now().toString(16)}`;
+  activeTurnId.value = turnId;
+  const verifyMatch = trimmed.match(/^\/verify\s+(\S+)/i);
+  verifyRunKey.value =
+    verifyMatch && verifyMatch[1] && verifyMatch[1].toLowerCase() !== "list"
+      ? `${projectPath}:${verifyMatch[1]}`
+      : null;
 
   // Paint user bubble + thinking indicator, then yield the event loop before IPC.
   await scrollBottom();
@@ -468,6 +486,8 @@ async function send(text: string) {
       settings: settings.value,
       history,
       onProgress: applyTurnProgress,
+      mode: chatMode.value,
+      turnId,
     });
     session.messages.push(
       createChatMessage("assistant", result.assistantText, result.toolCalls),
@@ -479,10 +499,33 @@ async function send(text: string) {
     stopStatusRotate();
     busy.value = false;
     busyDetail.value = null;
+    activeTurnId.value = null;
+    // Keep verify panel briefly after completion so logs remain visible.
+    if (!verifyRunKey.value) verifyRunKey.value = null;
     touchSession(session);
     afterSessionMutation(session);
     await scrollBottom();
   }
+}
+
+async function stopTurn() {
+  const id = activeTurnId.value;
+  if (id) {
+    try {
+      await cancelAgentEngineTurn(id);
+    } catch {
+      /* ignore */
+    }
+  }
+  if (verifyRunKey.value) {
+    try {
+      const { cancelAgentRecipe } = await import("../lib/agentEngineClient");
+      await cancelAgentRecipe(verifyRunKey.value);
+    } catch {
+      /* ignore */
+    }
+  }
+  busyLabel.value = "Stopping…";
 }
 
 function insertSlash(cmd: string) {
@@ -775,10 +818,29 @@ function toggleToolsExpanded(id: string) {
                       :detail="busyDetail"
                     />
                   </Transition>
+                  <VerifyLogPanel
+                    v-if="verifyRunKey"
+                    :run-key="verifyRunKey"
+                    :active="busy"
+                  />
                 </div>
               </div>
             </div>
           </Transition>
+
+          <div class="chat__modes" aria-label="Agent mode">
+            <button
+              v-for="m in (['ask', 'plan', 'act', 'delegate'] as const)"
+              :key="m"
+              type="button"
+              class="chat__mode"
+              :class="{ 'chat__mode--on': chatMode === m }"
+              :disabled="busy"
+              @click="chatMode = m"
+            >
+              {{ m }}
+            </button>
+          </div>
 
           <div class="chat__starters" aria-label="Starter tools">
             <button
@@ -802,9 +864,14 @@ function toggleToolsExpanded(id: string) {
             </button>
           </div>
 
-          <ChatComposer ref="composer" :busy="busy" @send="send" />
+          <ChatComposer
+            ref="composer"
+            :busy="busy"
+            @send="send"
+            @stop="stopTurn"
+          />
           <p class="chat__hint">
-            Slash = local · freeform = Agent Engine ·
+            Mode {{ chatMode }} · slash = local · freeform = Agent Engine ·
             <button type="button" class="chat__link" @click="runToolsDump">
               Tools
             </button>
@@ -888,6 +955,31 @@ function toggleToolsExpanded(id: string) {
   color: var(--foreground);
 }
 
+.chat__modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.45rem;
+}
+.chat__mode {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted-foreground);
+  border-radius: 999px;
+  padding: 0.2rem 0.65rem;
+  font-size: 0.72rem;
+  text-transform: capitalize;
+  cursor: pointer;
+}
+.chat__mode--on {
+  color: var(--foreground);
+  border-color: color-mix(in srgb, var(--accent-blue, #3d7eff) 55%, var(--border));
+  background: color-mix(in srgb, var(--accent-blue, #3d7eff) 16%, transparent);
+}
+.chat__mode:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 .chat__starters {
   display: flex;
   flex-wrap: wrap;

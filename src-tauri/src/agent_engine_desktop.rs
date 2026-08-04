@@ -1,12 +1,14 @@
 //! Dev Track 0.1.23 — OpenMesh Agent Engine Desktop IPC.
 
 use openmesh_core::agent_engine::{
-    apply_patch, cancel_recipe_run, enrich_system_prompt, format_patch_summary, get_recipe,
-    list_recipes, list_recent_runs, load_inventory, probe_provider, read_patch, reject_patch,
-    resolve_provider_kind, rollback_patch, run_agent_turn, run_recipe, write_delegate_brief,
+    apply_patch, cancel_recipe_run, cancel_turn, enrich_system_prompt, format_patch_summary,
+    get_recipe, list_recipes, list_recent_runs, load_chat_sessions, load_inventory, probe_provider,
+    read_patch, register_turn, reject_patch, remove_turn, resolve_provider_kind, rollback_patch,
+    run_agent_turn_cancellable, run_recipe, save_chat_sessions, tools_for_mode, write_delegate_brief,
     AgentDefinition, AgentSecretStore, AgentSession, CascadingSecretStore, ChatMessage, ChatRole,
     EngineTurnResult, LogCallback, OpenAiCompatibleProvider, PatchRecord, ProviderConfig,
-    ProviderProbeResult, Recipe, RecipeRunResult, ToolExecutor, WorkspaceToolExecutor,
+    ProviderProbeResult, Recipe, RecipeRunResult, StoredChatSession, ToolExecutor,
+    WorkspaceToolExecutor,
 };
 use openmesh_core::storage::{default_settings, read_global, Settings};
 use serde::{Deserialize, Serialize};
@@ -110,6 +112,12 @@ pub struct AgentEngineTurnRequest {
     pub model: Option<String>,
     #[serde(default)]
     pub base_url: Option<String>,
+    /// ask | plan | act | delegate — selects tool allowlist.
+    #[serde(default)]
+    pub mode: Option<String>,
+    /// Optional id for cooperative cancellation via `agent_engine_cancel`.
+    #[serde(default)]
+    pub turn_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -146,6 +154,8 @@ fn agent_engine_turn_blocking(
     let mut def = AgentDefinition::default_workspace_agent(&model);
     def.provider = provider;
     def.base_url = base_url;
+    let mode = request.mode.as_deref().unwrap_or("ask");
+    def.tool_allowlist = tools_for_mode(mode);
 
     let mut session = AgentSession {
         messages: request
@@ -186,14 +196,30 @@ fn agent_engine_turn_blocking(
         project_path: project_path.clone(),
     };
 
-    run_agent_turn(
+    let turn_id = request
+        .turn_id
+        .clone()
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| {
+            format!(
+                "turn-{}",
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis())
+                    .unwrap_or(0)
+            )
+        });
+    let cancel = register_turn(&turn_id);
+    let result = run_agent_turn_cancellable(
         &def,
         &mut session,
         &request.question,
         &provider_client,
         &executor,
-    )
-    .map_err(|e| e.to_string())
+        Some(cancel),
+    );
+    remove_turn(&turn_id);
+    result.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -206,6 +232,28 @@ pub async fn agent_engine_turn(
     })
     .await
     .map_err(|e| format!("agent engine turn failed to join: {e}"))?
+}
+
+#[tauri::command]
+pub fn agent_engine_cancel(turn_id: String) -> Result<bool, String> {
+    Ok(cancel_turn(&turn_id))
+}
+
+#[tauri::command]
+pub async fn agent_chat_load(project_path: String) -> Result<Vec<StoredChatSession>, String> {
+    tauri::async_runtime::spawn_blocking(move || load_chat_sessions(&project_path))
+        .await
+        .map_err(|e| format!("chat load failed to join: {e}"))?
+}
+
+#[tauri::command]
+pub async fn agent_chat_save(
+    project_path: String,
+    sessions: Vec<StoredChatSession>,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || save_chat_sessions(&project_path, &sessions))
+        .await
+        .map_err(|e| format!("chat save failed to join: {e}"))?
 }
 
 /// Direct read-tool invoke for Agent Chat slash/keyword fast paths.

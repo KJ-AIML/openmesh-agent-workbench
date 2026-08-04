@@ -334,12 +334,13 @@ export const AGENT_TOOLS: AgentTool[] = [
           };
         }
         const runKey = `${projectPath}:${rest}`;
+        // Live lines stream via Tauri `agent-run-log` (VerifyLogPanel). Final blob below.
         const result = await runAgentRecipe(projectPath, rest, runKey);
         return {
           ok: result.ok,
           summary: clip(
             `Recipe ${result.recipeId} ok=${result.ok} exit=${result.exitCode ?? "n/a"} ` +
-              `duration=${result.durationMs}ms` +
+              `duration=${result.durationMs}ms runKey=${runKey}` +
               (result.timedOut ? " timed_out" : "") +
               (result.cancelled ? " cancelled" : "") +
               `\n\n${result.stdout}\n${result.stderr}`,

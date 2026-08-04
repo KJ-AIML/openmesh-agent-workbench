@@ -5,6 +5,7 @@ import {
   getAgentPatch,
   rejectAgentPatch,
   rollbackAgentPatch,
+  runAgentWorkspaceTool,
   type PatchRecord,
 } from "../../lib/agentEngineClient";
 
@@ -15,11 +16,13 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   done: [result: { action: string; patch: PatchRecord }];
+  handoff: [summary: string];
 }>();
 
 const patch = ref<PatchRecord | null>(null);
 const error = ref<string | null>(null);
 const busy = ref(false);
+const handoffNote = ref<string | null>(null);
 
 async function load() {
   error.value = null;
@@ -43,6 +46,24 @@ async function run(action: "apply" | "reject" | "rollback") {
     const next = await fn(props.projectPath, props.patchId);
     patch.value = next;
     emit("done", { action, patch: next });
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function createHandoff() {
+  busy.value = true;
+  error.value = null;
+  handoffNote.value = null;
+  try {
+    const out = await runAgentWorkspaceTool(props.projectPath, "create_handoff_draft", {
+      recipient: "teammate",
+      role: "engineer",
+    });
+    handoffNote.value = out;
+    emit("handoff", out);
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
   } finally {
@@ -94,7 +115,17 @@ onMounted(load);
         >
           Rollback
         </button>
+        <button
+          v-if="patch.status === 'applied' || patch.status === 'proposed'"
+          type="button"
+          class="patch-card__btn"
+          :disabled="busy"
+          @click="createHandoff"
+        >
+          Create handoff
+        </button>
       </div>
+      <pre v-if="handoffNote" class="patch-card__handoff">{{ handoffNote }}</pre>
     </template>
     <p v-else class="patch-card__meta">Loading…</p>
   </div>
@@ -156,5 +187,15 @@ onMounted(load);
 .patch-card__err {
   color: #e07070;
   margin: 0.35rem 0 0;
+}
+.patch-card__handoff {
+  margin: 0.55rem 0 0;
+  padding: 0.45rem 0.55rem;
+  max-height: 140px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-size: 0.75rem;
+  border-radius: 6px;
+  background: color-mix(in srgb, #000 30%, transparent);
 }
 </style>

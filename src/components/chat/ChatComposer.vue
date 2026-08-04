@@ -1,8 +1,8 @@
 <script setup lang="ts">
 // Isolated composer so keystrokes don't re-render the message thread /
-// session rail. Local input state stays here; parent only hears send.
+// session rail. Local input state stays here; parent only hears send/stop.
 import { ref } from "vue";
-import { Send } from "lucide-vue-next";
+import { Send, Square } from "lucide-vue-next";
 
 const props = defineProps<{
   busy: boolean;
@@ -10,6 +10,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   send: [text: string];
+  stop: [];
 }>();
 
 const input = ref("");
@@ -38,9 +39,19 @@ defineExpose({ insertSlash });
       @keydown.enter.exact.prevent="submit"
     />
     <button
+      v-if="busy"
+      type="button"
+      class="btn-secondary chat-composer__send"
+      @click="emit('stop')"
+    >
+      <Square :size="14" />
+      Stop
+    </button>
+    <button
+      v-else
       type="button"
       class="btn-primary chat-composer__send"
-      :disabled="busy || !input.trim()"
+      :disabled="!input.trim()"
       @click="submit"
     >
       <Send :size="16" />
@@ -82,14 +93,7 @@ defineExpose({ insertSlash });
 .chat-composer__send {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  height: 42px;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-
-.chat-composer__send:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
+  gap: 0.35rem;
+  min-height: 40px;
 }
 </style>

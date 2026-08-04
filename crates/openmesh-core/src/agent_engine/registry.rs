@@ -1,10 +1,10 @@
-//! Built-in OpenMesh tool specs. Empty allowlist = default (read + propose + continue) tools only.
+//! Built-in OpenMesh tool specs. Empty allowlist = Ask (read-only) tools only.
 
 use super::types::ToolSpec;
 use serde_json::json;
 
-/// Tools available when `tool_allowlist` is empty (Ask / default workspace agent).
-pub fn default_tool_names() -> &'static [&'static str] {
+/// Ask mode — inspect only (no propose / metadata writes).
+pub fn ask_tool_names() -> &'static [&'static str] {
     &[
         "project_info",
         "list_docs",
@@ -19,14 +19,80 @@ pub fn default_tool_names() -> &'static [&'static str] {
         "list_mesh_peers",
         "pilot_status",
         "rc_status",
-        "propose_patch",
         "pending_questions",
+        "list_recipes",
+    ]
+}
+
+/// Plan mode — gather evidence and propose patches / handoff drafts.
+pub fn plan_tool_names() -> &'static [&'static str] {
+    &[
+        "project_info",
+        "list_docs",
+        "list_notes",
+        "list_dir",
+        "read_file",
+        "grep",
+        "git_diff",
+        "git_status",
+        "search_context",
+        "continuity_summary",
+        "list_mesh_peers",
+        "pilot_status",
+        "rc_status",
+        "pending_questions",
+        "list_recipes",
+        "propose_patch",
+        "create_handoff_draft",
+    ]
+}
+
+/// Act mode — plan tools plus OpenMesh task/session continuity writes.
+/// Source-file apply remains human-gated IPC (not a model tool).
+pub fn act_tool_names() -> &'static [&'static str] {
+    &[
+        "project_info",
+        "list_docs",
+        "list_notes",
+        "list_dir",
+        "read_file",
+        "grep",
+        "git_diff",
+        "git_status",
+        "search_context",
+        "continuity_summary",
+        "list_mesh_peers",
+        "pilot_status",
+        "rc_status",
+        "pending_questions",
+        "list_recipes",
+        "propose_patch",
         "create_handoff_draft",
         "update_task",
         "link_session",
         "mesh_query",
-        "list_recipes",
     ]
+}
+
+/// Delegate mode — inspect + recipes; launch happens via slash/IPC, not model apply.
+pub fn delegate_tool_names() -> &'static [&'static str] {
+    ask_tool_names()
+}
+
+/// Tools available when `tool_allowlist` is empty (Ask).
+pub fn default_tool_names() -> &'static [&'static str] {
+    ask_tool_names()
+}
+
+/// Resolve a chat mode name to an allowlist.
+pub fn tools_for_mode(mode: &str) -> Vec<String> {
+    let names = match mode.trim().to_ascii_lowercase().as_str() {
+        "plan" => plan_tool_names(),
+        "act" => act_tool_names(),
+        "delegate" => delegate_tool_names(),
+        _ => ask_tool_names(),
+    };
+    names.iter().map(|s| (*s).to_string()).collect()
 }
 
 /// Explicitly human-gated / not model-callable by default.
@@ -337,10 +403,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn empty_allowlist_excludes_human_only() {
+    fn empty_allowlist_is_ask_read_only() {
         let tools = filter_tools(&[]);
-        assert!(tools.iter().any(|t| t.name == "propose_patch"));
         assert!(tools.iter().any(|t| t.name == "read_file"));
+        assert!(!tools.iter().any(|t| t.name == "propose_patch"));
+        assert!(!tools.iter().any(|t| t.name == "approve_handoff"));
+        assert!(!tools.iter().any(|t| t.name == "update_task"));
+    }
+
+    #[test]
+    fn act_mode_includes_propose_not_approve() {
+        let tools = filter_tools(&tools_for_mode("act"));
+        assert!(tools.iter().any(|t| t.name == "propose_patch"));
+        assert!(tools.iter().any(|t| t.name == "update_task"));
         assert!(!tools.iter().any(|t| t.name == "approve_handoff"));
     }
 }

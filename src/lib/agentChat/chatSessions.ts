@@ -1,6 +1,4 @@
-// Local persistence for Chat app conversations ("chats"), scoped per project.
-// Deliberately lightweight: localStorage only, no Rust backend command,
-// so the Agent Engine wiring in runner.ts stays untouched.
+// Chat persistence: localStorage cache + durable `.openmesh/agent/chats/` via Tauri.
 
 export type ChatRole = "user" | "assistant" | "system";
 
@@ -117,6 +115,70 @@ export function persistSessions(projectPath: string, sessions: ChatSession[]): v
     );
   } catch {
     // Storage unavailable/full — chat keeps working in-memory for this run.
+  }
+}
+
+/** Load durable disk sessions (Tauri), falling back to localStorage. */
+export async function loadSessionsAsync(projectPath: string): Promise<ChatSession[]> {
+  try {
+    const { loadDurableChats } = await import("../agentEngineClient");
+    const disk = await loadDurableChats(projectPath);
+    if (Array.isArray(disk) && disk.length > 0) {
+      const mapped = disk
+        .map((s) => ({
+          id: s.id,
+          title: s.title,
+          titleIsDefault: !!s.titleIsDefault,
+          messages: (s.messages ?? [])
+            .filter(isChatMessage)
+            .map((m) => ({
+              ...m,
+              toolCalls: Array.isArray(m.toolCalls)
+                ? (m.toolCalls as ChatToolCallRecord[])
+                : undefined,
+            })),
+          createdAt: s.createdAt,
+          updatedAt: s.updatedAt,
+        }))
+        .filter(isChatSession)
+        .sort((a, b) => b.updatedAt - a.updatedAt);
+      persistSessions(projectPath, mapped);
+      return mapped;
+    }
+  } catch {
+    // Web / IPC unavailable — localStorage only.
+  }
+  return loadSessions(projectPath);
+}
+
+/** Write-through: localStorage + durable disk when Tauri is available. */
+export async function persistSessionsAsync(
+  projectPath: string,
+  sessions: ChatSession[],
+): Promise<void> {
+  const capped = sessions.slice(0, MAX_SESSIONS_PER_PROJECT);
+  persistSessions(projectPath, capped);
+  try {
+    const { saveDurableChats } = await import("../agentEngineClient");
+    await saveDurableChats(
+      projectPath,
+      capped.map((s) => ({
+        id: s.id,
+        title: s.title,
+        titleIsDefault: s.titleIsDefault,
+        messages: s.messages.map((m) => ({
+          id: m.id,
+          role: m.role,
+          text: m.text,
+          toolCalls: m.toolCalls,
+          at: m.at,
+        })),
+        createdAt: s.createdAt,
+        updatedAt: s.updatedAt,
+      })),
+    );
+  } catch {
+    // localStorage already updated
   }
 }
 

@@ -2,10 +2,13 @@
 
 use super::provider::ChatProvider;
 use super::registry::{filter_tools, ToolExecutor};
+use super::turn_cancel;
 use super::types::{
     AgentDefinition, AgentEngineError, AgentSession, ChatMessage, ChatRole, EngineTurnResult,
     ToolStep, DEFAULT_TOOL_RESULT_MAX_CHARS,
 };
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
 
 pub fn run_agent_turn(
     def: &AgentDefinition,
@@ -14,8 +17,18 @@ pub fn run_agent_turn(
     provider: &dyn ChatProvider,
     executor: &dyn ToolExecutor,
 ) -> Result<EngineTurnResult, AgentEngineError> {
+    run_agent_turn_cancellable(def, session, user_text, provider, executor, None)
+}
+
+pub fn run_agent_turn_cancellable(
+    def: &AgentDefinition,
+    session: &mut AgentSession,
+    user_text: &str,
+    provider: &dyn ChatProvider,
+    executor: &dyn ToolExecutor,
+    cancel: Option<Arc<AtomicBool>>,
+) -> Result<EngineTurnResult, AgentEngineError> {
     let tools = filter_tools(&def.tool_allowlist);
-    // Keep system prompt current (skills/hooks may change between turns).
     ensure_system_prompt(session, &def.system_prompt);
     session.messages.push(ChatMessage {
         role: ChatRole::User,
@@ -29,6 +42,22 @@ pub fn run_agent_turn(
     let mut iterations = 0u32;
 
     loop {
+        if cancel
+            .as_ref()
+            .map(|f| turn_cancel::is_cancelled(f))
+            .unwrap_or(false)
+        {
+            return Ok(EngineTurnResult {
+                assistant_text: "Turn cancelled.".into(),
+                tool_steps,
+                iterations,
+                model: def.model.clone(),
+                provider: format!("{:?}", def.provider),
+                refused: false,
+                error: Some("cancelled".into()),
+            });
+        }
+
         iterations += 1;
         if iterations > def.max_tool_iterations {
             return Err(AgentEngineError::MaxIterations(def.max_tool_iterations));
@@ -60,7 +89,6 @@ pub fn run_agent_turn(
             });
         }
 
-        // Assistant message with tool_calls
         session.messages.push(ChatMessage {
             role: ChatRole::Assistant,
             content: turn.content.clone(),
@@ -70,6 +98,21 @@ pub fn run_agent_turn(
         });
 
         for call in &turn.tool_calls {
+            if cancel
+                .as_ref()
+                .map(|f| turn_cancel::is_cancelled(f))
+                .unwrap_or(false)
+            {
+                return Ok(EngineTurnResult {
+                    assistant_text: "Turn cancelled during tool execution.".into(),
+                    tool_steps,
+                    iterations,
+                    model: def.model.clone(),
+                    provider: format!("{:?}", def.provider),
+                    refused: false,
+                    error: Some("cancelled".into()),
+                });
+            }
             let allowed = tools.iter().any(|t| t.name == call.name);
             let (ok, summary) = if !allowed {
                 (false, format!("tool not allowed: {}", call.name))
@@ -131,6 +174,7 @@ mod tests {
     use crate::agent_engine::registry::StubToolExecutor;
     use crate::agent_engine::types::ToolCallRequest;
     use std::collections::BTreeMap;
+    use std::sync::atomic::Ordering;
 
     #[test]
     fn tool_call_then_final_answer() {
@@ -182,5 +226,30 @@ mod tests {
         let result = run_agent_turn(&def, &mut session, "hi", &provider, &executor).unwrap();
         assert_eq!(result.assistant_text, "Hello.");
         assert!(result.tool_steps.is_empty());
+    }
+
+    #[test]
+    fn cancelled_before_first_complete() {
+        let provider = ScriptedProvider::new(vec![AssistantTurn {
+            content: "should not run".into(),
+            tool_calls: vec![],
+        }]);
+        let executor = StubToolExecutor {
+            responses: BTreeMap::new(),
+        };
+        let def = AgentDefinition::default_workspace_agent("m");
+        let mut session = AgentSession::default();
+        let flag = Arc::new(AtomicBool::new(true));
+        let result = run_agent_turn_cancellable(
+            &def,
+            &mut session,
+            "hi",
+            &provider,
+            &executor,
+            Some(flag.clone()),
+        )
+        .unwrap();
+        assert_eq!(result.error.as_deref(), Some("cancelled"));
+        assert!(flag.load(Ordering::SeqCst));
     }
 }

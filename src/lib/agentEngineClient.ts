@@ -73,6 +73,8 @@ export async function runAgentEngineTurn(
     providerName?: string;
     model?: string;
     baseUrl?: string;
+    mode?: "ask" | "plan" | "act" | "delegate";
+    turnId?: string;
   },
 ): Promise<EngineTurnResult> {
   return invoke("agent_engine_turn", {
@@ -83,8 +85,42 @@ export async function runAgentEngineTurn(
       providerName: opts?.providerName,
       model: opts?.model,
       baseUrl: opts?.baseUrl,
+      mode: opts?.mode ?? "ask",
+      turnId: opts?.turnId,
     },
   });
+}
+
+export async function cancelAgentEngineTurn(turnId: string): Promise<boolean> {
+  return invoke("agent_engine_cancel", { turnId });
+}
+
+export type StoredChatSession = {
+  id: string;
+  title: string;
+  titleIsDefault: boolean;
+  messages: Array<{
+    id: string;
+    role: string;
+    text: string;
+    toolCalls?: unknown;
+    at: number;
+  }>;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export async function loadDurableChats(
+  projectPath: string,
+): Promise<StoredChatSession[]> {
+  return invoke("agent_chat_load", { projectPath });
+}
+
+export async function saveDurableChats(
+  projectPath: string,
+  sessions: StoredChatSession[],
+): Promise<void> {
+  return invoke("agent_chat_save", { projectPath, sessions });
 }
 
 /** Read-mostly workspace tool for slash/keyword fast paths (no LLM). */

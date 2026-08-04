@@ -31,6 +31,8 @@ export type ChatTurnOptions = {
   history?: { role: string; content: string }[];
   /** Fired for UI status only — must stay sync/cheap (no stringify/IO). */
   onProgress?: (event: ChatTurnProgress) => void;
+  mode?: "ask" | "plan" | "act" | "delegate";
+  turnId?: string;
 };
 
 export async function runAgentChatTurn(
@@ -45,7 +47,9 @@ export async function runAgentChatTurn(
     typeof settingsOrOpts === "object" &&
     ("settings" in settingsOrOpts ||
       "history" in settingsOrOpts ||
-      "onProgress" in settingsOrOpts)
+      "onProgress" in settingsOrOpts ||
+      "mode" in settingsOrOpts ||
+      "turnId" in settingsOrOpts)
       ? settingsOrOpts
       : { settings: settingsOrOpts as Settings | null | undefined, history };
 
@@ -123,6 +127,8 @@ export async function runAgentChatTurn(
         settings?.provider?.defaultModel ||
         settings?.models?.codingModel,
       baseUrl: settings?.provider?.apiBaseUrl,
+      mode: opts.mode ?? "ask",
+      turnId: opts.turnId,
     });
 
     for (const step of result.toolSteps ?? []) {
