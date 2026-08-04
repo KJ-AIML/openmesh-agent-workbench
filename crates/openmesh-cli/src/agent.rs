@@ -4,17 +4,10 @@ use clap::{Args, Subcommand};
 use openmesh_core::agent_engine::{
     probe_provider, resolve_provider_kind, run_agent_turn, AgentDefinition, AgentSecretStore,
     AgentSession, CascadingSecretStore, OpenAiCompatibleProvider, ProviderConfig,
+    WorkspaceToolExecutor,
 };
-use openmesh_core::context_service;
-use openmesh_core::mesh::peers::list_peers;
-use openmesh_core::pilot::build_pilot_pack;
-use openmesh_core::rc::build_rc_pack;
-use openmesh_core::storage::{read_project, Project};
-use openmesh_core::agent_engine::ToolExecutor;
 use serde_json::json;
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::path::Path;
 
 use crate::project::resolve_project;
 
@@ -195,7 +188,7 @@ fn run_ask(args: &AgentAskArgs, cwd: &Path) -> i32 {
             return 2;
         }
     };
-    let executor = CliToolExecutor {
+    let executor = WorkspaceToolExecutor {
         project_path: project_path.clone(),
     };
     let mut session = AgentSession::default();
@@ -225,76 +218,4 @@ fn run_ask(args: &AgentAskArgs, cwd: &Path) -> i32 {
             1
         }
     }
-}
-
-struct CliToolExecutor {
-    project_path: String,
-}
-
-impl ToolExecutor for CliToolExecutor {
-    fn execute(&self, tool_name: &str, arguments_json: &str) -> Result<String, String> {
-        match tool_name {
-            "project_info" => {
-                let project: Option<Project> = read_project(&self.project_path, "project.json");
-                Ok(serde_json::to_string_pretty(&json!({
-                    "path": self.project_path,
-                    "project": project,
-                }))
-                .unwrap_or_else(|_| "{}".into()))
-            }
-            "list_docs" => list_dir_names(&self.project_path, "docs"),
-            "list_notes" => list_dir_names(&self.project_path, "notes"),
-            "list_mesh_peers" => {
-                let peers = list_peers(&self.project_path).map_err(|e| e.to_string())?;
-                Ok(serde_json::to_string_pretty(&peers).unwrap_or_else(|_| "[]".into()))
-            }
-            "pilot_status" => {
-                let pack = build_pilot_pack(&self.project_path).map_err(|e| e.to_string())?;
-                Ok(serde_json::to_string_pretty(&pack).unwrap_or_else(|_| "{}".into()))
-            }
-            "rc_status" => {
-                let pack = build_rc_pack(&self.project_path).map_err(|e| e.to_string())?;
-                Ok(serde_json::to_string_pretty(&pack).unwrap_or_else(|_| "{}".into()))
-            }
-            "git_status" => {
-                let output = Command::new("git")
-                    .args(["-C", &self.project_path, "status", "--porcelain=v1", "-b"])
-                    .output()
-                    .map_err(|e| e.to_string())?;
-                Ok(String::from_utf8_lossy(&output.stdout).to_string())
-            }
-            "search_context" => {
-                let args: serde_json::Value =
-                    serde_json::from_str(arguments_json).unwrap_or(json!({}));
-                let query = args.get("query").and_then(|v| v.as_str()).unwrap_or("");
-                let hits = context_service::search_project_context(
-                    &self.project_path,
-                    query,
-                    None,
-                    Some(12),
-                )
-                .map_err(|e| e.to_string())?;
-                Ok(serde_json::to_string_pretty(&hits).unwrap_or_else(|_| "[]".into()))
-            }
-            "continuity_summary" => Ok(json!({
-                "note": "use Desktop Continuity or pilot/rc tools for full summary",
-                "peers": list_peers(&self.project_path).map(|p| p.len()).unwrap_or(0),
-            })
-            .to_string()),
-            other => Err(format!("unknown tool: {other}")),
-        }
-    }
-}
-
-fn list_dir_names(project_path: &str, folder: &str) -> Result<String, String> {
-    let dir = PathBuf::from(project_path).join(folder);
-    if !dir.is_dir() {
-        return Ok(format!("(no {folder}/ directory)"));
-    }
-    let mut names = Vec::new();
-    for entry in fs::read_dir(&dir).map_err(|e| e.to_string())? {
-        names.push(entry.map_err(|e| e.to_string())?.file_name().to_string_lossy().to_string());
-    }
-    names.sort();
-    Ok(serde_json::to_string_pretty(&names).unwrap_or_else(|_| "[]".into()))
 }

@@ -23,6 +23,7 @@ import SettingsExtensionsPanel from "../components/settings/SettingsExtensionsPa
 import AgentToolIcon from "../components/AgentToolIcon.vue";
 import {
   clearAgentSecret,
+  getAgentSecretStatus,
   setAgentSecret,
   testAgentProvider,
   type ProviderProbeResult,
@@ -210,10 +211,25 @@ function goToSection(id: string) {
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   const section = String(route.query.section || "overview");
   if (sections.some((s) => s.id === section)) {
     goToSection(section);
+  }
+  // Reconcile settings JSON flag with the real user secret store.
+  try {
+    const status = await getAgentSecretStatus();
+    if (form.value.provider.apiKeyConfigured !== status.configured) {
+      form.value.provider.apiKeyConfigured = status.configured;
+      await saveSettings({
+        provider: {
+          ...form.value.provider,
+          apiKeyConfigured: status.configured,
+        },
+      });
+    }
+  } catch {
+    /* web / mock — keep settings flag */
   }
 });
 
@@ -520,6 +536,10 @@ const statusLine = computed(() => {
         <p class="settings__panel-title">Provider &amp; Models</p>
         <p class="settings__panel-desc">
           Provider, secret API key (user store), and models for Agent Engine chat.
+          Use a normal OpenAI-compatible endpoint (openai / deepseek / xai, or DashScope
+          compatible-mode) — not DashScope Coding Plan
+          (<code class="text-[11px]">coding-intl.dashscope.aliyuncs.com</code>), which only
+          works with Coding Agents.
         </p>
       </div>
       <div>

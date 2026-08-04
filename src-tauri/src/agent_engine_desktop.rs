@@ -3,22 +3,11 @@
 use openmesh_core::agent_engine::{
     enrich_system_prompt, load_inventory, probe_provider, resolve_provider_kind, run_agent_turn,
     AgentDefinition, AgentSecretStore, AgentSession, CascadingSecretStore, ChatMessage, ChatRole,
-    EngineTurnResult, OpenAiCompatibleProvider, ProviderConfig, ProviderProbeResult, ToolExecutor,
+    EngineTurnResult, OpenAiCompatibleProvider, ProviderConfig, ProviderProbeResult,
+    WorkspaceToolExecutor,
 };
-use openmesh_core::context_service;
-use openmesh_core::mesh::peers::list_peers;
-use openmesh_core::pilot::build_pilot_pack;
-use openmesh_core::rc::build_rc_pack;
-use openmesh_core::storage::{default_settings, read_global, read_project, Project, Settings};
-use openmesh_core::continuity::{
-    current_state_projection_path, load_continuity_input_snapshot, read_current_state_projection,
-    rebuild_current_state_projection,
-};
-use openmesh_core::return_digest::build_pending_questions_view;
+use openmesh_core::storage::{default_settings, read_global, Settings};
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::PathBuf;
-use std::process::Command;
 
 fn secrets() -> CascadingSecretStore {
     CascadingSecretStore::default()
@@ -63,7 +52,7 @@ pub struct AgentProviderTestRequest {
     pub model: Option<String>,
     #[serde(default)]
     pub base_url: Option<String>,
-    /// Optional unsaved key from the Settings input (not persisted by this call).
+    /// Unsaved key from the Settings input — not persisted by this call.
     #[serde(default)]
     pub api_key: Option<String>,
 }
@@ -95,7 +84,6 @@ fn agent_provider_test_blocking(
     .map_err(|e| e.to_string())
 }
 
-/// Blocking HTTP probe — off the UI/IPC thread (same reason as agent_engine_turn).
 #[tauri::command]
 pub async fn agent_provider_test(
     request: AgentProviderTestRequest,
@@ -189,7 +177,7 @@ fn agent_engine_turn_blocking(
 
     let cfg = ProviderConfig::from_definition(&def, &api_key).map_err(|e| e.to_string())?;
     let provider_client = OpenAiCompatibleProvider::new(cfg).map_err(|e| e.to_string())?;
-    let executor = OpenMeshToolExecutor {
+    let executor = WorkspaceToolExecutor {
         project_path: project_path.clone(),
     };
 
@@ -213,101 +201,4 @@ pub async fn agent_engine_turn(
     })
     .await
     .map_err(|e| format!("agent engine turn failed to join: {e}"))?
-}
-
-struct OpenMeshToolExecutor {
-    project_path: String,
-}
-
-impl ToolExecutor for OpenMeshToolExecutor {
-    fn execute(&self, tool_name: &str, arguments_json: &str) -> Result<String, String> {
-        match tool_name {
-            "project_info" => {
-                let project: Option<Project> = read_project(&self.project_path, "project.json");
-                Ok(serde_json::to_string_pretty(&serde_json::json!({
-                    "path": self.project_path,
-                    "project": project,
-                }))
-                .unwrap_or_else(|_| "{}".into()))
-            }
-            "list_docs" => list_dir_names(&self.project_path, "docs"),
-            "list_notes" => list_dir_names(&self.project_path, "notes"),
-            "continuity_summary" => continuity_summary_json(&self.project_path),
-            "list_mesh_peers" => {
-                let peers = list_peers(&self.project_path).map_err(|e| e.to_string())?;
-                Ok(serde_json::to_string_pretty(&peers).unwrap_or_else(|_| "[]".into()))
-            }
-            "pilot_status" => {
-                let pack = build_pilot_pack(&self.project_path).map_err(|e| e.to_string())?;
-                Ok(serde_json::to_string_pretty(&pack).unwrap_or_else(|_| "{}".into()))
-            }
-            "rc_status" => {
-                let pack = build_rc_pack(&self.project_path).map_err(|e| e.to_string())?;
-                Ok(serde_json::to_string_pretty(&pack).unwrap_or_else(|_| "{}".into()))
-            }
-            "git_status" => git_status_json(&self.project_path),
-            "search_context" => {
-                let args: serde_json::Value =
-                    serde_json::from_str(arguments_json).unwrap_or(serde_json::json!({}));
-                let query = args
-                    .get("query")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
-                let hits = context_service::search_project_context(
-                    &self.project_path,
-                    &query,
-                    None,
-                    Some(12),
-                )
-                .map_err(|e| e.to_string())?;
-                Ok(serde_json::to_string_pretty(&hits).unwrap_or_else(|_| "[]".into()))
-            }
-            other => Err(format!("unknown tool: {other}")),
-        }
-    }
-}
-
-fn list_dir_names(project_path: &str, folder: &str) -> Result<String, String> {
-    let dir = PathBuf::from(project_path).join(folder);
-    if !dir.is_dir() {
-        return Ok(format!("(no {folder}/ directory)"));
-    }
-    let mut names = Vec::new();
-    for entry in fs::read_dir(&dir).map_err(|e| e.to_string())? {
-        let entry = entry.map_err(|e| e.to_string())?;
-        names.push(entry.file_name().to_string_lossy().to_string());
-    }
-    names.sort();
-    Ok(serde_json::to_string_pretty(&names).unwrap_or_else(|_| "[]".into()))
-}
-
-fn continuity_summary_json(project_path: &str) -> Result<String, String> {
-    let pending = (|| {
-        let snapshot = load_continuity_input_snapshot(project_path).ok()?;
-        let current = if current_state_projection_path(project_path).exists() {
-            read_current_state_projection(project_path).ok()
-        } else {
-            rebuild_current_state_projection(project_path).ok()
-        }?;
-        build_pending_questions_view(project_path, &snapshot, &current).ok()
-    })();
-    let peers = list_peers(project_path).unwrap_or_default();
-    Ok(serde_json::to_string_pretty(&serde_json::json!({
-        "pending": pending,
-        "peerCount": peers.len(),
-        "peers": peers,
-    }))
-    .unwrap_or_else(|_| "{}".into()))
-}
-
-fn git_status_json(project_path: &str) -> Result<String, String> {
-    let output = Command::new("git")
-        .args(["-C", project_path, "status", "--porcelain=v1", "-b"])
-        .output()
-        .map_err(|e| e.to_string())?;
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).to_string());
-    }
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }

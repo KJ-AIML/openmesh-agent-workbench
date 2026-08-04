@@ -69,4 +69,32 @@ describe("chat provider gate", () => {
     const checks = getChatSetupChecks(baseSettings());
     expect(checks.every((c) => !c.done)).toBe(true);
   });
+
+  it("secretConfigured override beats stale apiKeyConfigured flag", () => {
+    const flagged = baseSettings({
+      provider: {
+        name: "OpenAI",
+        apiKeyConfigured: true,
+        usageTrackingEnabled: false,
+        defaultModel: "gpt-4",
+      },
+    });
+    expect(isChatProviderReady(flagged)).toBe(true);
+    expect(isChatProviderReady(flagged, { secretConfigured: false })).toBe(
+      false,
+    );
+
+    const unflagged = baseSettings({
+      provider: {
+        name: "OpenAI",
+        apiKeyConfigured: false,
+        usageTrackingEnabled: false,
+        defaultModel: "gpt-4",
+      },
+    });
+    expect(isChatProviderReady(unflagged)).toBe(false);
+    expect(isChatProviderReady(unflagged, { secretConfigured: true })).toBe(
+      true,
+    );
+  });
 });

@@ -471,7 +471,9 @@ pub fn delete_file(path: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn safe_child_path(base: &Path, relative: &str) -> Result<PathBuf, String> {
+/// Join a relative path under `base`, rejecting `..`, absolute paths, and other
+/// non-normal components. Used for docs/notes (and any model-facing path ops).
+pub fn safe_child_path(base: &Path, relative: &str) -> Result<PathBuf, String> {
     let relative = relative.trim();
     if relative.is_empty() {
         return Err("Path cannot be empty".to_string());

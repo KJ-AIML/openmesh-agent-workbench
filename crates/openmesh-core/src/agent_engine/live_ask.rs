@@ -8,17 +8,8 @@ use super::provider::{resolve_provider_kind, ChatProvider, OpenAiCompatibleProvi
 use super::registry::ToolExecutor;
 use super::secrets::{AgentSecretStore, CascadingSecretStore};
 use super::types::{AgentDefinition, AgentEngineError, AgentSession, EngineTurnResult};
-use crate::context_service;
-use crate::mesh::peers::list_peers;
-use crate::pilot::build_pilot_pack;
-use crate::rc::build_rc_pack;
-use crate::storage::{
-    default_settings, read_global, read_project, Project, Settings,
-};
-use serde_json::json;
-use std::fs;
-use std::path::PathBuf;
-use std::process::Command;
+use super::workspace_tools::WorkspaceToolExecutor;
+use crate::storage::{default_settings, read_global, Settings};
 use thiserror::Error;
 
 pub const LIVE_ASK_SYSTEM_PROMPT: &str = r#"You are answering a read-only OpenMesh live ask against this local workspace.
@@ -165,88 +156,6 @@ pub fn run_live_ask(
     run_live_ask_with_provider(&def, request, &client, &executor)
 }
 
-/// Read-mostly workspace tools shared by LAN / Proxy live ask (no file writes).
-pub struct WorkspaceToolExecutor {
-    pub project_path: String,
-}
-
-impl ToolExecutor for WorkspaceToolExecutor {
-    fn execute(&self, tool_name: &str, arguments_json: &str) -> Result<String, String> {
-        match tool_name {
-            "project_info" => {
-                let project: Option<Project> = read_project(&self.project_path, "project.json");
-                Ok(serde_json::to_string_pretty(&json!({
-                    "path": self.project_path,
-                    "project": project,
-                }))
-                .unwrap_or_else(|_| "{}".into()))
-            }
-            "list_docs" => list_dir_names(&self.project_path, "docs"),
-            "list_notes" => list_dir_names(&self.project_path, "notes"),
-            "continuity_summary" => Ok(json!({
-                "note": "read-only live ask; prefer git_status / search_context / pilot_status for facts",
-                "peerCount": list_peers(&self.project_path).map(|p| p.len()).unwrap_or(0),
-            })
-            .to_string()),
-            "list_mesh_peers" => {
-                let peers = list_peers(&self.project_path).map_err(|e| e.to_string())?;
-                Ok(serde_json::to_string_pretty(&peers).unwrap_or_else(|_| "[]".into()))
-            }
-            "pilot_status" => {
-                let pack = build_pilot_pack(&self.project_path).map_err(|e| e.to_string())?;
-                Ok(serde_json::to_string_pretty(&pack).unwrap_or_else(|_| "{}".into()))
-            }
-            "rc_status" => {
-                let pack = build_rc_pack(&self.project_path).map_err(|e| e.to_string())?;
-                Ok(serde_json::to_string_pretty(&pack).unwrap_or_else(|_| "{}".into()))
-            }
-            "git_status" => {
-                let output = Command::new("git")
-                    .args(["-C", &self.project_path, "status", "--porcelain=v1", "-b"])
-                    .output()
-                    .map_err(|e| e.to_string())?;
-                if !output.status.success() {
-                    return Err(String::from_utf8_lossy(&output.stderr).to_string());
-                }
-                Ok(String::from_utf8_lossy(&output.stdout).to_string())
-            }
-            "search_context" => {
-                let args: serde_json::Value =
-                    serde_json::from_str(arguments_json).unwrap_or(json!({}));
-                let query = args.get("query").and_then(|v| v.as_str()).unwrap_or("");
-                let hits = context_service::search_project_context(
-                    &self.project_path,
-                    query,
-                    None,
-                    Some(12),
-                )
-                .map_err(|e| e.to_string())?;
-                Ok(serde_json::to_string_pretty(&hits).unwrap_or_else(|_| "[]".into()))
-            }
-            other => Err(format!("unknown tool: {other}")),
-        }
-    }
-}
-
-fn list_dir_names(project_path: &str, folder: &str) -> Result<String, String> {
-    let dir = PathBuf::from(project_path).join(folder);
-    if !dir.is_dir() {
-        return Ok(format!("(no {folder}/ directory)"));
-    }
-    let mut names = Vec::new();
-    for entry in fs::read_dir(&dir).map_err(|e| e.to_string())? {
-        names.push(
-            entry
-                .map_err(|e| e.to_string())?
-                .file_name()
-                .to_string_lossy()
-                .to_string(),
-        );
-    }
-    names.sort();
-    Ok(serde_json::to_string_pretty(&names).unwrap_or_else(|_| "[]".into()))
-}
-
 /// Map AgentEngineError missing-key into LiveAskError when constructing providers manually.
 pub fn map_engine_missing_key(err: AgentEngineError) -> LiveAskError {
     match err {
@@ -262,6 +171,7 @@ mod tests {
     use crate::agent_engine::registry::StubToolExecutor;
     use crate::storage::init_project;
     use std::collections::BTreeMap;
+    use std::fs;
     use std::sync::atomic::{AtomicU64, Ordering};
 
     static N: AtomicU64 = AtomicU64::new(0);

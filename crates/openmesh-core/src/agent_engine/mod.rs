@@ -10,6 +10,7 @@ pub mod provider;
 pub mod registry;
 pub mod secrets;
 pub mod types;
+pub mod workspace_tools;
 
 pub use engine_loop::run_agent_turn;
 pub use extensions::{
@@ -18,9 +19,9 @@ pub use extensions::{
     ExtensionsSettings, HookDefinition, HookEvent, PluginRecord, SkillPack,
 };
 pub use live_ask::{
-    run_live_ask, run_live_ask_with_provider, LiveAskError, LiveAskRequest, WorkspaceToolExecutor,
-    LIVE_ASK_SYSTEM_PROMPT,
+    run_live_ask, run_live_ask_with_provider, LiveAskError, LiveAskRequest, LIVE_ASK_SYSTEM_PROMPT,
 };
+pub use workspace_tools::WorkspaceToolExecutor;
 pub use provider::{
     build_request_body, parse_chat_completion, probe_provider, resolve_provider_kind,
     AssistantTurn, ChatProvider, OpenAiCompatibleProvider, ProviderConfig, ProviderProbeResult,

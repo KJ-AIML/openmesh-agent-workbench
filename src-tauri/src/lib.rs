@@ -954,19 +954,19 @@ fn list_docs_tree(project_path: String) -> Vec<DocTreeNode> {
 
 #[tauri::command]
 fn read_doc(project_path: String, filename: String) -> Result<String, String> {
-    let path = get_project_dir(&project_path).join("docs").join(&filename);
+    let path = safe_child_path(&get_project_dir(&project_path).join("docs"), &filename)?;
     read_file_content(&path.to_string_lossy())
 }
 
 #[tauri::command]
 fn write_doc(project_path: String, filename: String, content: String) -> Result<(), String> {
-    let path = get_project_dir(&project_path).join("docs").join(&filename);
+    let path = safe_child_path(&get_project_dir(&project_path).join("docs"), &filename)?;
     write_file_content(&path.to_string_lossy(), &content)
 }
 
 #[tauri::command]
 fn delete_doc(project_path: String, filename: String) -> Result<(), String> {
-    let path = get_project_dir(&project_path).join("docs").join(&filename);
+    let path = safe_child_path(&get_project_dir(&project_path).join("docs"), &filename)?;
     delete_file(&path.to_string_lossy())
 }
 
@@ -1013,19 +1013,19 @@ fn list_notes(project_path: String) -> Vec<FileEntry> {
 
 #[tauri::command]
 fn read_note(project_path: String, filename: String) -> Result<String, String> {
-    let path = get_project_dir(&project_path).join("notes").join(&filename);
+    let path = safe_child_path(&get_project_dir(&project_path).join("notes"), &filename)?;
     read_file_content(&path.to_string_lossy())
 }
 
 #[tauri::command]
 fn write_note(project_path: String, filename: String, content: String) -> Result<(), String> {
-    let path = get_project_dir(&project_path).join("notes").join(&filename);
+    let path = safe_child_path(&get_project_dir(&project_path).join("notes"), &filename)?;
     write_file_content(&path.to_string_lossy(), &content)
 }
 
 #[tauri::command]
 fn delete_note(project_path: String, filename: String) -> Result<(), String> {
-    let path = get_project_dir(&project_path).join("notes").join(&filename);
+    let path = safe_child_path(&get_project_dir(&project_path).join("notes"), &filename)?;
     delete_file(&path.to_string_lossy())
 }
 
@@ -1048,10 +1048,7 @@ fn import_file(
     if folder != "docs" && folder != "notes" {
         return Err("Invalid import folder".to_string());
     }
-    if filename.contains("..") || filename.contains('/') || filename.contains('\\') {
-        return Err("Invalid filename".to_string());
-    }
-    let path = get_project_dir(&project_path).join(&folder).join(&filename);
+    let path = safe_child_path(&get_project_dir(&project_path).join(&folder), &filename)?;
     write_file_content(&path.to_string_lossy(), &content)
 }
 

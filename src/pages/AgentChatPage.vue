@@ -3,6 +3,7 @@ import {
   computed,
   nextTick,
   onBeforeUnmount,
+  onMounted,
   ref,
   shallowRef,
   triggerRef,
@@ -11,9 +12,13 @@ import {
 import { useRouter } from "vue-router";
 import {
   AlertCircle,
+  Check,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Copy,
   Eraser,
-  MessageSquare,
+  GitFork,
   Pencil,
   Plus,
   Settings,
@@ -26,18 +31,25 @@ import {
   runAgentChatTurn,
   type ChatTurnProgress,
 } from "../lib/agentChat/runner";
-import { resolveToolsForMessage } from "../lib/agentChat/tools";
+import {
+  isToolsHelpText,
+  resolveToolsForMessage,
+  summarizeToolsHelp,
+} from "../lib/agentChat/tools";
 import {
   chatModelId,
   getChatSetupChecks,
   isChatProviderReady,
 } from "../lib/agentChat/ready";
+import { getAgentSecretStatus } from "../lib/agentEngineClient";
 import {
   type ChatMessage,
   type ChatSession,
   createChatMessage,
   createChatSession,
   deriveTitleFromMessage,
+  forkSessionAt,
+  isAutoTitleWorthy,
   loadSessions,
   persistSessions,
   touchSession,
@@ -48,7 +60,10 @@ import ChatComposer from "../components/chat/ChatComposer.vue";
 import ChatThinkingBubble from "../components/chat/ChatThinkingBubble.vue";
 
 const router = useRouter();
-const { currentProjectPath, currentProject, settings } = useStore();
+const { currentProjectPath, currentProject, settings, saveSettings } = useStore();
+
+/** Real secret-store presence; null until probed (or when IPC unavailable). */
+const secretConfigured = ref<boolean | null>(null);
 
 /** Shallow — avoid deep-watching the whole session tree on every keystroke/send. */
 const sessions = shallowRef<ChatSession[]>([]);
@@ -66,6 +81,14 @@ const busyDetail = ref<string | null>(null);
 const error = ref<string | null>(null);
 const scroller = ref<HTMLElement | null>(null);
 const composer = ref<InstanceType<typeof ChatComposer> | null>(null);
+/** Expanded /tools dump message ids (collapsed by default). */
+const expandedToolsIds = ref<Set<string>>(new Set());
+/** Brief “Copied” feedback on the message action that succeeded. */
+const copiedMessageId = ref<string | null>(null);
+let copiedClearTimer: ReturnType<typeof setTimeout> | null = null;
+/** Lightweight toast for copy / fork feedback. */
+const actionToast = ref("");
+let actionToastTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** Rotating CLI-style status while waiting on the LLM (no streaming events). */
 const LLM_STATUS_LINES = [
@@ -83,9 +106,37 @@ const hasProject = computed(() => !!currentProjectPath.value);
 const projectLabel = computed(
   () => currentProject.value?.name || currentProjectPath.value || "No project",
 );
-const chatReady = computed(() => isChatProviderReady(settings.value));
-const setupChecks = computed(() => getChatSetupChecks(settings.value));
+const chatReadyOpts = computed(() =>
+  typeof secretConfigured.value === "boolean"
+    ? { secretConfigured: secretConfigured.value }
+    : undefined,
+);
+const chatReady = computed(() =>
+  isChatProviderReady(settings.value, chatReadyOpts.value),
+);
+const setupChecks = computed(() =>
+  getChatSetupChecks(settings.value, chatReadyOpts.value),
+);
 const activeModel = computed(() => chatModelId(settings.value));
+
+async function syncSecretConfigured() {
+  try {
+    const status = await getAgentSecretStatus();
+    secretConfigured.value = status.configured;
+    const flagged = !!settings.value.provider?.apiKeyConfigured;
+    if (flagged !== status.configured && settings.value.provider) {
+      await saveSettings({
+        provider: {
+          ...settings.value.provider,
+          apiKeyConfigured: status.configured,
+        },
+      });
+    }
+  } catch {
+    // Browser / mock — keep using settings JSON flag.
+    secretConfigured.value = null;
+  }
+}
 
 const activeSession = computed(
   () => sessions.value.find((s) => s.id === activeSessionId.value) ?? null,
@@ -95,9 +146,7 @@ function welcomeText(): string {
   const provider = settings.value.provider?.name?.trim() || "provider";
   return (
     `OpenMesh Agent Engine · ${projectLabel.value}\n` +
-    `Provider: ${provider} · Model: ${activeModel.value}\n\n` +
-    "Slash tools run locally. Freeform messages use the live LLM tool loop.\n\n" +
-    "Try /tools, /pilot, or ask “what’s in docs?”."
+    `Provider: ${provider} · Model: ${activeModel.value}`
   );
 }
 
@@ -165,10 +214,68 @@ watch(
   { immediate: true },
 );
 
+onMounted(() => {
+  void syncSecretConfigured();
+});
+
+watch(
+  () => settings.value.provider?.apiKeyConfigured,
+  () => {
+    void syncSecretConfigured();
+  },
+);
+
 onBeforeUnmount(() => {
   stopStatusRotate();
   persistQueue.flush();
+  if (copiedClearTimer !== null) clearTimeout(copiedClearTimer);
+  if (actionToastTimer !== null) clearTimeout(actionToastTimer);
 });
+
+function showActionToast(msg: string) {
+  actionToast.value = msg;
+  if (actionToastTimer !== null) clearTimeout(actionToastTimer);
+  actionToastTimer = setTimeout(() => {
+    actionToast.value = "";
+    actionToastTimer = null;
+  }, 1600);
+}
+
+function showMessageActions(m: ChatMessage): boolean {
+  return m.role === "user" || m.role === "assistant";
+}
+
+async function copyMessage(m: ChatMessage) {
+  const text = m.text;
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    copiedMessageId.value = m.id;
+    if (copiedClearTimer !== null) clearTimeout(copiedClearTimer);
+    copiedClearTimer = setTimeout(() => {
+      copiedMessageId.value = null;
+      copiedClearTimer = null;
+    }, 1400);
+    showActionToast("Copied");
+  } catch {
+    showActionToast("Copy failed");
+  }
+}
+
+function forkFromMessage(messageIndex: number) {
+  const session = activeSession.value;
+  if (!session) return;
+  const forked = forkSessionAt(session, messageIndex);
+  if (!forked) return;
+  sessions.value = [forked, ...sessions.value];
+  activeSessionId.value = forked.id;
+  bindActiveMessages(forked);
+  renamingId.value = null;
+  error.value = null;
+  afterSessionMutation(forked);
+  showActionToast("Forked chat");
+  scrollBottom();
+}
 
 async function scrollBottom() {
   await nextTick();
@@ -324,7 +431,7 @@ async function send(text: string) {
   // 1) Optimistic UI only — no stringify / IPC / markdown of history here.
   // Persist is explicit + idle; composer textarea stays enabled while busy.
   session.messages.push(createChatMessage("user", trimmed));
-  if (session.titleIsDefault) {
+  if (session.titleIsDefault && isAutoTitleWorthy(trimmed)) {
     session.title = deriveTitleFromMessage(trimmed);
     session.titleIsDefault = false;
   }
@@ -378,53 +485,36 @@ function insertSlash(cmd: string) {
   composer.value?.insertSlash(cmd);
 }
 
-const quick = [
-  "/tools",
-  "/pilot",
-  "/rc",
-  "/team",
-  "/search",
-  "/git",
-  "/pending",
-  "/docs",
-];
+/** Starter chips only — full catalog via “More…” → /tools (not stacked). */
+const starterChips = ["/pilot", "/rc", "/team", "/search", "/docs"] as const;
+
+function runToolsDump() {
+  void send("/tools");
+}
+
+function isToolsHelpMessage(m: ChatMessage): boolean {
+  return m.role === "assistant" && isToolsHelpText(m.text);
+}
+
+function toolsHelpSummary(text: string): string {
+  return summarizeToolsHelp(text);
+}
+
+function isToolsExpanded(id: string): boolean {
+  return expandedToolsIds.value.has(id);
+}
+
+function toggleToolsExpanded(id: string) {
+  const next = new Set(expandedToolsIds.value);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  expandedToolsIds.value = next;
+}
 </script>
 
 <template>
   <div class="chat">
-    <header class="chat__head">
-      <div class="chat__title-row">
-        <MessageSquare class="chat__icon" :size="18" />
-        <div>
-          <h1 class="chat__title">Chat</h1>
-          <p class="chat__sub">
-            Tools bound to
-            <span class="chat__path">{{ projectLabel }}</span>
-          </p>
-        </div>
-        <button
-          v-if="hasProject && chatReady && activeMessages.length > 0"
-          type="button"
-          class="chat__clear"
-          title="Clear this chat"
-          @click="clearActiveChat"
-        >
-          <Eraser :size="13" />
-          Clear
-        </button>
-      </div>
-      <div v-if="hasProject" class="chat__quick">
-        <button
-          v-for="q in quick"
-          :key="q"
-          type="button"
-          class="chat__chip"
-          @click="insertSlash(q)"
-        >
-          {{ q }}
-        </button>
-      </div>
-    </header>
+    <h1 class="chat__sr-only">Chat</h1>
 
     <div v-if="!hasProject" class="chat__viewport">
       <div class="chat__empty">
@@ -445,6 +535,7 @@ const quick = [
             <p class="chat__gate-body">
               Add a provider, mark an API key as configured, and choose a default
               model. Chat stays locked until these are saved in Settings.
+              Use a normal OpenAI-compatible endpoint — not DashScope Coding Plan.
             </p>
           </div>
         </div>
@@ -477,18 +568,18 @@ const quick = [
 
     <template v-else>
       <div class="chat__body">
-        <aside class="chat__rail">
+        <aside class="chat__rail" aria-label="Chat sessions">
           <div class="chat__rail-head">
             <span class="chat__rail-heading">Chats</span>
-            <button
-              type="button"
-              class="chat__rail-new"
-              title="New chat"
-              @click="startNewChat"
-            >
-              <Plus :size="14" />
-            </button>
           </div>
+          <button
+            type="button"
+            class="chat__rail-new"
+            @click="startNewChat"
+          >
+            <Plus :size="14" />
+            New chat
+          </button>
           <div class="chat__rail-list">
             <div
               v-for="s in sessions"
@@ -508,6 +599,7 @@ const quick = [
                   v-if="renamingId === s.id"
                   v-model="renameValue"
                   class="chat__rail-rename"
+                  aria-label="Rename chat"
                   autofocus
                   @click.stop
                   @keydown.enter.prevent="commitRename"
@@ -522,6 +614,7 @@ const quick = [
                   type="button"
                   class="chat__rail-action"
                   title="Rename chat"
+                  aria-label="Rename chat"
                   @click.stop="beginRename(s)"
                 >
                   <Pencil :size="12" />
@@ -530,6 +623,7 @@ const quick = [
                   type="button"
                   class="chat__rail-action chat__rail-action--danger"
                   title="Delete chat"
+                  aria-label="Delete chat"
                   @click.stop="removeSession(s.id)"
                 >
                   <Trash2 :size="12" />
@@ -540,13 +634,29 @@ const quick = [
         </aside>
 
         <div class="chat__main">
+          <div class="chat__thread-bar">
+            <span class="chat__thread-meta" :title="projectLabel">
+              {{ projectLabel }}
+            </span>
+            <button
+              v-if="activeMessages.length > 0"
+              type="button"
+              class="chat__clear"
+              title="Clear this chat"
+              @click="clearActiveChat"
+            >
+              <Eraser :size="13" />
+              Clear
+            </button>
+          </div>
+
           <Transition name="chat-switch" mode="out-in">
             <div :key="activeSessionId ?? 'none'" class="chat__thread-wrap">
               <div v-if="activeMessages.length === 0" class="chat__thread-empty">
                 <Sparkles :size="20" />
-                <p class="chat__thread-empty-title">This chat is empty</p>
+                <p class="chat__thread-empty-title">Start a conversation</p>
                 <p class="chat__thread-empty-body">
-                  Ask about the workspace, or try one of the tools above.
+                  Ask about the workspace, or pick a starter below.
                 </p>
               </div>
               <div v-else ref="scroller" class="chat__thread">
@@ -554,27 +664,83 @@ const quick = [
                   <!-- Plain list (no TransitionGroup) — avoids O(n) move FLIP
                        work when appending; v-memo keeps old markdown bubbles cold. -->
                   <div class="chat__thread-msgs">
-                    <article
-                      v-for="m in activeMessages"
+                    <div
+                      v-for="(m, mi) in activeMessages"
                       :key="m.id"
-                      class="bubble"
-                      :class="`bubble--${m.role}`"
-                      v-memo="[m.id, m.text, m.toolCalls]"
+                      class="msg"
+                      :class="`msg--${m.role}`"
                     >
-                      <div v-if="m.toolCalls?.length" class="bubble__tools">
-                        <div
-                          v-for="(t, i) in m.toolCalls"
-                          :key="`${m.id}-${t.toolId}-${i}`"
-                          class="tool"
-                          :class="t.ok ? 'tool--ok' : 'tool--fail'"
-                        >
-                          <Wrench :size="12" />
-                          <span>{{ t.title }}</span>
-                          <span v-if="!t.ok" class="tool__flag">fail</span>
+                      <article
+                        class="bubble"
+                        :class="`bubble--${m.role}`"
+                        v-memo="[
+                          m.id,
+                          m.text,
+                          m.toolCalls,
+                          isToolsHelpMessage(m) ? isToolsExpanded(m.id) : false,
+                        ]"
+                      >
+                        <div v-if="m.toolCalls?.length" class="bubble__tools">
+                          <div
+                            v-for="(t, i) in m.toolCalls"
+                            :key="`${m.id}-${t.toolId}-${i}`"
+                            class="tool"
+                            :class="t.ok ? 'tool--ok' : 'tool--fail'"
+                          >
+                            <Wrench :size="12" />
+                            <span>{{ t.title }}</span>
+                            <span v-if="!t.ok" class="tool__flag">fail</span>
+                          </div>
                         </div>
+                        <div v-if="isToolsHelpMessage(m)" class="tools-fold">
+                          <button
+                            type="button"
+                            class="tools-fold__toggle"
+                            :aria-expanded="isToolsExpanded(m.id)"
+                            @click="toggleToolsExpanded(m.id)"
+                          >
+                            <ChevronDown
+                              v-if="isToolsExpanded(m.id)"
+                              :size="14"
+                            />
+                            <ChevronRight v-else :size="14" />
+                            <span>{{ toolsHelpSummary(m.text) }}</span>
+                            <span class="tools-fold__action">
+                              {{ isToolsExpanded(m.id) ? "Collapse" : "Expand" }}
+                            </span>
+                          </button>
+                          <ChatMessageContent
+                            v-if="isToolsExpanded(m.id)"
+                            :text="m.text"
+                          />
+                        </div>
+                        <ChatMessageContent v-else :text="m.text" />
+                      </article>
+                      <div
+                        v-if="showMessageActions(m)"
+                        class="msg__actions"
+                      >
+                        <button
+                          type="button"
+                          class="msg__action"
+                          title="Copy message"
+                          aria-label="Copy message"
+                          @click="copyMessage(m)"
+                        >
+                          <Check v-if="copiedMessageId === m.id" :size="12" />
+                          <Copy v-else :size="12" />
+                        </button>
+                        <button
+                          type="button"
+                          class="msg__action"
+                          title="Fork chat from here"
+                          aria-label="Fork chat from here"
+                          @click="forkFromMessage(mi)"
+                        >
+                          <GitFork :size="12" />
+                        </button>
                       </div>
-                      <ChatMessageContent :text="m.text" />
-                    </article>
+                    </div>
                   </div>
                   <Transition name="think">
                     <ChatThinkingBubble
@@ -588,15 +754,45 @@ const quick = [
             </div>
           </Transition>
 
+          <div class="chat__starters" aria-label="Starter tools">
+            <button
+              v-for="q in starterChips"
+              :key="q"
+              type="button"
+              class="chat__chip"
+              :disabled="busy"
+              @click="insertSlash(q)"
+            >
+              {{ q }}
+            </button>
+            <button
+              type="button"
+              class="chat__chip chat__chip--more"
+              :disabled="busy"
+              title="List all tools"
+              @click="runToolsDump"
+            >
+              More…
+            </button>
+          </div>
+
           <ChatComposer ref="composer" :busy="busy" @send="send" />
           <p class="chat__hint">
-            Slash tools run locally. Freeform uses OpenMesh Agent Engine (live LLM + tools).
-            Needs a normal OpenAI-compatible provider — not DashScope Coding Plan.
-            <button type="button" class="chat__link" @click="insertSlash('/tools')">
-              Show tools
+            Slash = local · freeform = Agent Engine ·
+            <button type="button" class="chat__link" @click="runToolsDump">
+              Tools
             </button>
           </p>
         </div>
+      </div>
+
+      <div
+        v-if="actionToast"
+        class="chat__toast"
+        role="status"
+        aria-live="polite"
+      >
+        {{ actionToast }}
       </div>
     </template>
   </div>
@@ -614,42 +810,34 @@ const quick = [
   overflow: hidden;
 }
 
-.chat__head {
+.chat__sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.chat__thread-bar {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 0.65rem;
   flex-shrink: 0;
-  padding: 1.25rem 1.5rem 0.85rem;
+  min-height: 1.5rem;
 }
 
-.chat__title-row {
-  display: flex;
-  gap: 0.65rem;
-  align-items: flex-start;
-}
-
-.chat__icon {
-  margin-top: 0.2rem;
+.chat__thread-meta {
+  min-width: 0;
+  flex: 1;
+  font-size: 0.72rem;
   color: var(--muted-foreground);
-}
-
-.chat__title {
-  margin: 0;
-  font-size: 1.25rem;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
-}
-
-.chat__sub {
-  margin: 0.15rem 0 0;
-  font-size: 0.78rem;
-  color: var(--muted-foreground);
-}
-
-.chat__path {
-  color: var(--foreground);
-  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .chat__clear {
@@ -657,27 +845,28 @@ const quick = [
   align-items: center;
   gap: 0.35rem;
   margin-left: auto;
-  border: 1px solid var(--border);
-  background: var(--surface-2);
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--muted-foreground);
   font-size: 0.72rem;
   font-weight: 500;
-  padding: 0.35rem 0.6rem;
+  padding: 0.3rem 0.5rem;
   border-radius: 8px;
   cursor: pointer;
   transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
 
 .chat__clear:hover {
-  background: var(--surface-hover);
+  background: var(--surface-2);
+  border-color: var(--border);
   color: var(--foreground);
-  border-color: var(--border-strong);
 }
 
-.chat__quick {
+.chat__starters {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
+  flex-shrink: 0;
 }
 
 .chat__chip {
@@ -692,9 +881,19 @@ const quick = [
   transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
 
-.chat__chip:hover {
+.chat__chip:hover:not(:disabled) {
   background: var(--surface-hover);
   border-color: var(--border-strong);
+  color: var(--foreground);
+}
+
+.chat__chip:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.chat__chip--more {
+  border-style: dashed;
   color: var(--foreground);
 }
 
@@ -702,7 +901,7 @@ const quick = [
   flex: 1;
   min-height: 0;
   display: flex;
-  padding: 0 1.5rem 1.25rem;
+  padding: 1.25rem 1.5rem;
 }
 
 .chat__empty {
@@ -840,9 +1039,8 @@ const quick = [
 .chat__rail-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   flex-shrink: 0;
-  padding: 0.9rem 0.85rem 0.6rem;
+  padding: 0.9rem 0.85rem 0.45rem;
 }
 
 .chat__rail-heading {
@@ -858,19 +1056,21 @@ const quick = [
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 7px;
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  color: var(--muted-foreground);
+  gap: 0.4rem;
+  margin: 0 0.5rem 0.55rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 9px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-3);
+  color: var(--foreground);
+  font-size: 0.78rem;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+  transition: background 0.12s ease, border-color 0.12s ease;
 }
 
 .chat__rail-new:hover {
   background: var(--surface-hover);
-  color: var(--foreground);
   border-color: var(--border-strong);
 }
 
@@ -955,12 +1155,14 @@ const quick = [
   gap: 0.1rem;
   padding-right: 0.35rem;
   opacity: 0;
+  pointer-events: none;
   transition: opacity 0.12s ease;
 }
 
 .chat__rail-row:hover .chat__rail-actions,
-.chat__rail-row.is-active .chat__rail-actions {
+.chat__rail-row:focus-within .chat__rail-actions {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .chat__rail-action {
@@ -992,8 +1194,8 @@ const quick = [
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  padding: 1rem 1.5rem 1.25rem;
+  gap: 0.65rem;
+  padding: 0.75rem 1.25rem 1rem;
   overflow: hidden;
 }
 
@@ -1046,8 +1248,76 @@ const quick = [
   gap: 0.75rem;
 }
 
-.bubble {
+.msg {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
   max-width: min(820px, 100%);
+}
+
+.msg--user {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.msg--assistant,
+.msg--system {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+
+.msg__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+
+.msg:hover .msg__actions,
+.msg:focus-within .msg__actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.msg__action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.msg__action:hover {
+  background: var(--surface-hover);
+  color: var(--foreground);
+}
+
+.chat__toast {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 50;
+  padding: 0.55rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--accent-green) 30%, var(--border));
+  background: color-mix(in srgb, var(--accent-green) 12%, var(--surface-2));
+  color: var(--accent-green);
+  font-size: 0.78rem;
+  font-weight: 500;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  pointer-events: none;
+}
+
+.bubble {
+  width: 100%;
   border-radius: 12px;
   padding: 0.75rem 0.9rem;
   border: 1px solid var(--border);
@@ -1055,7 +1325,6 @@ const quick = [
 }
 
 .bubble--user {
-  align-self: flex-end;
   background: var(--surface-3);
   border-color: var(--border-strong);
   transform-origin: bottom right;
@@ -1063,7 +1332,6 @@ const quick = [
 
 .bubble--assistant,
 .bubble--system {
-  align-self: flex-start;
   transform-origin: bottom left;
 }
 
@@ -1102,11 +1370,49 @@ const quick = [
   letter-spacing: 0.04em;
 }
 
+.tools-fold {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.tools-fold__toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.15rem 0;
+  border: none;
+  background: transparent;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tools-fold__toggle:hover {
+  color: var(--foreground);
+}
+
+.tools-fold__action {
+  margin-left: auto;
+  font-size: 0.68rem;
+  font-weight: 500;
+  color: var(--muted-foreground);
+}
+
 .chat__hint {
   margin: 0;
-  font-size: 0.72rem;
+  font-size: 0.7rem;
   color: var(--muted-foreground);
   flex-shrink: 0;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .chat__hint code {
