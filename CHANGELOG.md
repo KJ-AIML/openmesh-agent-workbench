@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.26] - 2026-08-04
+
+### Added
+
+- **Developer Agent Phase 0–1**: shared `WorkspaceToolExecutor`, path confinement (`safe_child_path` + sensitive-path deny), secret readiness sync, and confined read tools (`read_file`, `grep`, `list_dir`, `git_diff`) with slash fast-paths `/read` `/grep` `/ls` `/diff`
+- **Developer Agent Phase 2**: human-approved patches — `propose_patch` (LLM), apply/reject/rollback IPC with base SHA-256 preconditions, backups, run ledger, and `PatchApprovalCard` + `/patch`
+- **Developer Agent Phase 3**: approved verify recipes (`/verify`) with streamed `agent-run-log` / cancel, CLI `/delegate`, and Agent Sessions **Resume in terminal** (Codex/Claude/OpenCode)
+- **Developer Agent Phase 4**: Continue tools — handoff draft/approve, `update_task`, `link_session`, trust-gated `mesh_query`, `/continue`
+- **Agent Chat modes**: Ask / Plan / Act / Delegate tool allowlists (empty allowlist = Ask read-only)
+- **Durable chat**: sessions persist under `<project>/.openmesh/agent/chats/` (localStorage write-through cache)
+- **Stop**: cancel in-flight Agent Engine turns and verify recipe runs
+- **UI**: collapsed sidebar hover peek without mutating pin preference
+
+### Changed
+
+- Mutating/propose tools require Plan or Act mode; source apply remains human-gated (never silent LLM write)
+- Tauri `fs` capability denies `.ssh` and agent API key paths
+
+### Fixed
+
+- Chat/tool routing coverage for new slash commands; Agent Chat page contracts for mode chrome
+
 ## [0.1.25] - 2026-08-04
 
 ### Added
