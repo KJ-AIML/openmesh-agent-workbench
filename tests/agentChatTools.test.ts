@@ -30,6 +30,18 @@ describe("agent chat tool routing", () => {
     expect(resolveToolsForMessage("/git").map((t) => t.id)).toEqual([
       "git_status",
     ]);
+    expect(resolveToolsForMessage("/read src/main.rs").map((t) => t.id)).toEqual([
+      "read_file",
+    ]);
+    expect(resolveToolsForMessage("/grep openmesh").map((t) => t.id)).toEqual([
+      "grep",
+    ]);
+    expect(resolveToolsForMessage("/diff --staged").map((t) => t.id)).toEqual([
+      "git_diff",
+    ]);
+    expect(resolveToolsForMessage("/ls src").map((t) => t.id)).toEqual([
+      "list_dir",
+    ]);
   });
 
   it("routes plain-language keywords", () => {
@@ -43,6 +55,10 @@ describe("agent chat tool routing", () => {
     const help = listToolsHelp();
     expect(help).toContain("/pilot");
     expect(help).toContain("/rc");
+    expect(help).toContain("/read");
+    expect(help).toContain("/grep");
+    expect(help).toContain("/diff");
+    expect(help).toContain("/ls");
     expect(isToolsHelpText(help)).toBe(true);
     expect(summarizeToolsHelp(help)).toMatch(/^\d+ tools ·/);
   });

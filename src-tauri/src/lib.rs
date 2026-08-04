@@ -1267,6 +1267,7 @@ pub fn run() {
             agent_engine_desktop::agent_secret_clear,
             agent_engine_desktop::agent_provider_test,
             agent_engine_desktop::agent_engine_turn,
+            agent_engine_desktop::agent_workspace_tool,
             // Skills / Hooks / Plugins (local marketplace MVP)
             extensions_desktop::extensions_list,
             extensions_desktop::extensions_catalog,

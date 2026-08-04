@@ -2,6 +2,7 @@
 import { store } from "../store";
 import { searchContext } from "../contextClient";
 import { getGitStatus } from "../adapters/gitAdapter";
+import { runAgentWorkspaceTool } from "../agentEngineClient";
 import {
   askOnlineProxy,
   getContinuityHubSummary,
@@ -136,6 +137,111 @@ export const AGENT_TOOLS: AgentTool[] = [
         summary: jsonSummary("Git", g),
         data: g,
       };
+    },
+  },
+  {
+    id: "list_dir",
+    title: "List directory",
+    description: "List files under a workspace-relative path",
+    slash: "/ls",
+    keywords: ["list dir", "list directory", "ls ", "show folder"],
+    async run(projectPath, question) {
+      const path = question
+        .replace(/^\/ls\s*/i, "")
+        .replace(/^(list dir|list directory|show folder)\s*/i, "")
+        .trim() || ".";
+      try {
+        const out = await runAgentWorkspaceTool(projectPath, "list_dir", { path });
+        return { ok: true, summary: clip(out), data: out };
+      } catch (e) {
+        return {
+          ok: false,
+          summary: e instanceof Error ? e.message : String(e),
+        };
+      }
+    },
+  },
+  {
+    id: "read_file",
+    title: "Read file",
+    description: "Read a UTF-8 source file in the workspace (bounded)",
+    slash: "/read",
+    keywords: ["read file", "show file", "open file", "cat "],
+    async run(projectPath, question) {
+      const path = question
+        .replace(/^\/read\s*/i, "")
+        .replace(/^(read file|show file|open file|cat)\s*/i, "")
+        .trim();
+      if (!path) {
+        return { ok: false, summary: "Usage: /read <relative-path>" };
+      }
+      try {
+        const out = await runAgentWorkspaceTool(projectPath, "read_file", { path });
+        return { ok: true, summary: clip(out, 8000), data: out };
+      } catch (e) {
+        return {
+          ok: false,
+          summary: e instanceof Error ? e.message : String(e),
+        };
+      }
+    },
+  },
+  {
+    id: "grep",
+    title: "Grep workspace",
+    description: "Search file contents under the workspace root",
+    slash: "/grep",
+    keywords: ["grep ", "search code", "find in code", "rg "],
+    async run(projectPath, question) {
+      const rest = question
+        .replace(/^\/grep\s*/i, "")
+        .replace(/^(grep|search code|find in code|rg)\s*/i, "")
+        .trim();
+      if (!rest) {
+        return { ok: false, summary: "Usage: /grep <pattern> [glob]" };
+      }
+      const parts = rest.split(/\s+/);
+      const pattern = parts[0] ?? "";
+      const glob = parts[1];
+      try {
+        const out = await runAgentWorkspaceTool(projectPath, "grep", {
+          pattern,
+          ...(glob ? { glob } : {}),
+        });
+        return { ok: true, summary: clip(out, 8000), data: out };
+      } catch (e) {
+        return {
+          ok: false,
+          summary: e instanceof Error ? e.message : String(e),
+        };
+      }
+    },
+  },
+  {
+    id: "git_diff",
+    title: "Git diff",
+    description: "Read-only git diff (optional path; use /diff --staged)",
+    slash: "/diff",
+    keywords: ["git diff", "show diff", "unstaged changes", "staged diff"],
+    async run(projectPath, question) {
+      const rest = question.replace(/^\/diff\s*/i, "").trim();
+      const staged = /(--staged|--cached)\b/i.test(rest);
+      const path = rest
+        .replace(/--staged|--cached/gi, "")
+        .replace(/^(git diff|show diff)\s*/i, "")
+        .trim();
+      try {
+        const out = await runAgentWorkspaceTool(projectPath, "git_diff", {
+          staged,
+          ...(path ? { path } : {}),
+        });
+        return { ok: true, summary: clip(out, 8000), data: out };
+      } catch (e) {
+        return {
+          ok: false,
+          summary: e instanceof Error ? e.message : String(e),
+        };
+      }
     },
   },
   {

@@ -16,7 +16,7 @@ pub fn builtin_tool_specs() -> Vec<ToolSpec> {
         },
         ToolSpec {
             name: "list_docs".into(),
-            description: "List documentation files under the project docs folder.".into(),
+            description: "List documentation files under <project>/.openmesh/docs.".into(),
             parameters: json!({
                 "type": "object",
                 "properties": {},
@@ -25,10 +25,76 @@ pub fn builtin_tool_specs() -> Vec<ToolSpec> {
         },
         ToolSpec {
             name: "list_notes".into(),
-            description: "List notes in the project.".into(),
+            description: "List notes under <project>/.openmesh/notes.".into(),
             parameters: json!({
                 "type": "object",
                 "properties": {},
+                "additionalProperties": false
+            }),
+        },
+        ToolSpec {
+            name: "list_dir".into(),
+            description: "List entries in a directory under the active workspace root (relative path).".into(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Relative directory path (empty or \".\" for workspace root)"
+                    }
+                },
+                "additionalProperties": false
+            }),
+        },
+        ToolSpec {
+            name: "read_file".into(),
+            description: "Read a UTF-8 text file under the active workspace root (relative path). Bounded size.".into(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Relative file path from the workspace root"
+                    }
+                },
+                "required": ["path"],
+                "additionalProperties": false
+            }),
+        },
+        ToolSpec {
+            name: "grep".into(),
+            description: "Search file contents under the active workspace (ripgrep when available).".into(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "pattern": {
+                        "type": "string",
+                        "description": "Search pattern (literal/regex as accepted by rg)"
+                    },
+                    "glob": {
+                        "type": "string",
+                        "description": "Optional glob filter, e.g. \"*.rs\" or \"src/**/*.ts\""
+                    }
+                },
+                "required": ["pattern"],
+                "additionalProperties": false
+            }),
+        },
+        ToolSpec {
+            name: "git_diff".into(),
+            description: "Read-only git diff for the workspace (optional path filter).".into(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Optional relative path to limit the diff"
+                    },
+                    "staged": {
+                        "type": "boolean",
+                        "description": "If true, show staged (--cached) diff"
+                    }
+                },
                 "additionalProperties": false
             }),
         },

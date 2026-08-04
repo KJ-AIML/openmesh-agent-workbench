@@ -86,3 +86,22 @@ export async function runAgentEngineTurn(
     },
   });
 }
+
+/** Read-mostly workspace tool for slash/keyword fast paths (no LLM). */
+export async function runAgentWorkspaceTool(
+  projectPath: string,
+  toolName: string,
+  argumentsJson: Record<string, unknown> | string = {},
+): Promise<string> {
+  const payload =
+    typeof argumentsJson === "string"
+      ? argumentsJson
+      : JSON.stringify(argumentsJson ?? {});
+  return invoke("agent_workspace_tool", {
+    projectPath,
+    request: {
+      toolName,
+      argumentsJson: payload,
+    },
+  });
+}

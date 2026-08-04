@@ -3,7 +3,7 @@
 use openmesh_core::agent_engine::{
     enrich_system_prompt, load_inventory, probe_provider, resolve_provider_kind, run_agent_turn,
     AgentDefinition, AgentSecretStore, AgentSession, CascadingSecretStore, ChatMessage, ChatRole,
-    EngineTurnResult, OpenAiCompatibleProvider, ProviderConfig, ProviderProbeResult,
+    EngineTurnResult, OpenAiCompatibleProvider, ProviderConfig, ProviderProbeResult, ToolExecutor,
     WorkspaceToolExecutor,
 };
 use openmesh_core::storage::{default_settings, read_global, Settings};
@@ -201,4 +201,48 @@ pub async fn agent_engine_turn(
     })
     .await
     .map_err(|e| format!("agent engine turn failed to join: {e}"))?
+}
+
+/// Direct read-tool invoke for Agent Chat slash/keyword fast paths.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentWorkspaceToolRequest {
+    pub tool_name: String,
+    #[serde(default)]
+    pub arguments_json: String,
+}
+
+#[tauri::command]
+pub async fn agent_workspace_tool(
+    project_path: String,
+    request: AgentWorkspaceToolRequest,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let allowed = [
+            "list_dir",
+            "read_file",
+            "grep",
+            "git_diff",
+            "git_status",
+            "list_docs",
+            "list_notes",
+            "project_info",
+            "search_context",
+        ];
+        if !allowed.iter().any(|n| *n == request.tool_name) {
+            return Err(format!(
+                "tool not allowed via slash IPC: {}",
+                request.tool_name
+            ));
+        }
+        let args = if request.arguments_json.trim().is_empty() {
+            "{}".to_string()
+        } else {
+            request.arguments_json
+        };
+        let executor = WorkspaceToolExecutor { project_path };
+        executor.execute(&request.tool_name, &args)
+    })
+    .await
+    .map_err(|e| format!("workspace tool failed to join: {e}"))?
 }
