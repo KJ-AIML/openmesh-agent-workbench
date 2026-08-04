@@ -7,6 +7,7 @@ import Titlebar from "./components/Titlebar.vue";
 import CommandPalette from "./components/CommandPalette.vue";
 import { useStore } from "./lib/useStore";
 import { useSidebarVisibility } from "./lib/useSidebarVisibility";
+import { useSidebarPeek } from "./lib/useSidebarPeek";
 import { getCommands, type Command } from "./lib/commands";
 import * as gitAdapter from "./lib/adapters/gitAdapter";
 import { scanConfiguredSessions } from "./lib/scanConfiguredSessions";
@@ -36,7 +37,22 @@ const {
   addRecentItem,
   store,
 } = useStore();
-const { sidebarVisible, toggleSidebar } = useSidebarVisibility();
+/** Persisted pin preference — hover peek must not write this. */
+const { sidebarVisible: sidebarPinned, toggleSidebar } = useSidebarVisibility();
+const { sidebarPeek, onPeekEnter, onPeekLeave, closePeek } = useSidebarPeek();
+const sidebarShown = computed(() => sidebarPinned.value || sidebarPeek.value);
+
+watch(sidebarPinned, (pinned) => {
+  if (pinned) closePeek();
+});
+
+function onSidebarSlotEnter() {
+  if (!sidebarPinned.value) onPeekEnter();
+}
+
+function onSidebarSlotLeave() {
+  if (!sidebarPinned.value) onPeekLeave();
+}
 
 const splashMinimumElapsed = ref(false);
 const showSplash = computed(() => isLoading.value || !splashMinimumElapsed.value);
@@ -310,11 +326,6 @@ const breadcrumb = computed(() => {
   return [currentProject.value.name, page];
 });
 
-/** Collapsed macOS: crumb toggle/breadcrumbs share the ooo clearance band with title tabs. */
-const showCrumbTrafficClearance = computed(
-  () => macOS.value && !sidebarVisible.value,
-);
-
 // Expose palette toggle for sidebar
 defineExpose({ openPalette });
 </script>
@@ -328,7 +339,8 @@ defineExpose({ openPalette });
     class="shell"
     :class="{
       'shell--mac': macOS,
-      'shell--sidebar-collapsed': !sidebarVisible,
+      'shell--sidebar-collapsed': !sidebarPinned,
+      'shell--sidebar-peeking': !sidebarPinned && sidebarPeek,
     }"
     style="color: var(--foreground)"
   >
@@ -344,11 +356,28 @@ defineExpose({ openPalette });
     <Titlebar v-if="!macOS" />
 
     <div class="shell__body">
+      <!--
+        Collapsed only: thin left-edge hover strip.
+        macOS: starts below chrome-top so traffic lights stay clickable.
+      -->
+      <div
+        v-if="!sidebarPinned"
+        class="shell__peek-zone"
+        aria-hidden="true"
+        @mouseenter="onPeekEnter"
+        @mouseleave="onPeekLeave"
+      />
+
       <div
         class="shell__sidebar-slot"
-        :class="{ 'is-collapsed': !sidebarVisible }"
-        :aria-hidden="!sidebarVisible"
-        :inert="!sidebarVisible || undefined"
+        :class="{
+          'is-collapsed': !sidebarShown,
+          'is-peeking': !sidebarPinned && sidebarPeek,
+        }"
+        :aria-hidden="!sidebarShown"
+        :inert="!sidebarShown || undefined"
+        @mouseenter="onSidebarSlotEnter"
+        @mouseleave="onSidebarSlotLeave"
       >
         <Sidebar @open-palette="openPalette" />
       </div>
@@ -356,31 +385,19 @@ defineExpose({ openPalette });
       <div class="shell__main">
         <Titlebar
           v-if="macOS"
-          :clearance-for-traffic-lights="!sidebarVisible"
+          :clearance-for-traffic-lights="!sidebarPinned"
         />
 
-        <header
-          class="shell__crumb"
-          :class="{ 'shell__crumb--traffic-clearance': showCrumbTrafficClearance }"
-        >
-          <!--
-            Same structural inset as Titlebar tabs: padding-left alone was lost /
-            looked flush under ooo; spacer owns the toggle's left edge (~96px).
-          -->
-          <div
-            v-if="showCrumbTrafficClearance"
-            class="shell__crumb-traffic-clearance"
-            aria-hidden="true"
-          />
+        <header class="shell__crumb">
           <button
             type="button"
             class="shell__sidebar-toggle"
-            :aria-pressed="sidebarVisible"
-            :aria-label="sidebarVisible ? 'Hide sidebar' : 'Show sidebar'"
-            :title="sidebarVisible ? 'Hide sidebar (⌘\\)' : 'Show sidebar (⌘\\)'"
+            :aria-pressed="sidebarPinned"
+            :aria-label="sidebarPinned ? 'Hide sidebar' : 'Show sidebar'"
+            :title="sidebarPinned ? 'Hide sidebar (⌘\\)' : 'Show sidebar (⌘\\)'"
             @click="toggleSidebar"
           >
-            <PanelLeftClose v-if="sidebarVisible" class="h-3.5 w-3.5" />
+            <PanelLeftClose v-if="sidebarPinned" class="h-3.5 w-3.5" />
             <PanelLeft v-else class="h-3.5 w-3.5" />
           </button>
           <nav class="flex items-center gap-1.5 text-[12px] min-w-0">
@@ -432,10 +449,31 @@ defineExpose({ openPalette });
 }
 
 .shell__body {
+  position: relative;
   display: flex;
   flex: 1;
   min-height: 0;
   background: var(--sidebar);
+}
+
+/*
+  Invisible left-edge hit target when the rail is unpinned.
+  macOS: inset below chrome-top so ooo traffic lights stay clickable.
+*/
+.shell__peek-zone {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  /* Below peeked rail so nav clicks aren't stolen on the left strip */
+  z-index: 35;
+  /* Subtle affordance on hover without a permanent stripe */
+  background: transparent;
+}
+
+.shell--mac .shell__peek-zone {
+  top: var(--chrome-top, 44px);
 }
 
 /* Clip rail width; keep inner Sidebar at 260px so collapse doesn't reflow nav. */
@@ -450,7 +488,8 @@ defineExpose({ openPalette });
   opacity: 1;
   transition:
     width 200ms ease,
-    opacity 180ms ease;
+    opacity 180ms ease,
+    box-shadow 200ms ease;
 }
 
 .shell__sidebar-slot.is-collapsed {
@@ -461,6 +500,27 @@ defineExpose({ openPalette });
   pointer-events: none;
 }
 
+/*
+  Unpinned rail is always overlay (out of flex flow) so peek open/close
+  never resizes the main column.
+*/
+.shell--sidebar-collapsed .shell__sidebar-slot {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  flex-basis: 0;
+  z-index: 40;
+}
+
+.shell__sidebar-slot.is-peeking {
+  width: 260px;
+  max-width: 260px;
+  opacity: 1;
+  pointer-events: auto;
+  box-shadow: 8px 0 28px rgba(0, 0, 0, 0.22);
+}
+
 .shell__sidebar-slot :deep(.app-sidebar) {
   width: 260px;
   min-width: 260px;
@@ -469,6 +529,10 @@ defineExpose({ openPalette });
 
 .shell__sidebar-slot.is-collapsed :deep(.app-sidebar) {
   min-width: 0;
+}
+
+.shell__sidebar-slot.is-peeking :deep(.app-sidebar) {
+  min-width: 260px;
 }
 
 .shell__main {
@@ -497,20 +561,7 @@ defineExpose({ openPalette });
   flex-shrink: 0;
 }
 
-/* Collapsed macOS: spacer owns left inset — zero pad so widths don't stack. */
-.shell__crumb--traffic-clearance {
-  padding-left: 0;
-}
-
-.shell__crumb-traffic-clearance {
-  flex: 0 0 var(--mac-traffic-lights-inset, 96px);
-  width: var(--mac-traffic-lights-inset, 96px);
-  min-width: var(--mac-traffic-lights-inset, 96px);
-  align-self: stretch;
-  pointer-events: none;
-}
-
-/* Belt-and-suspenders: shell state keeps tab row spacer at the shared inset. */
+/* Collapsed macOS: titlebar tabs keep ooo spacer; crumb stays at normal main inset. */
 .shell--mac.shell--sidebar-collapsed .shell__main :deep(.tb.tb--mac) {
   padding-left: 0;
 }
@@ -556,6 +607,10 @@ defineExpose({ openPalette });
 @media (prefers-reduced-motion: reduce) {
   .shell__sidebar-slot {
     transition: none;
+  }
+
+  .shell__sidebar-slot.is-peeking {
+    box-shadow: 4px 0 12px rgba(0, 0, 0, 0.18);
   }
 }
 

@@ -132,6 +132,17 @@ test.describe("OpenMesh workbench shell smoke", () => {
     await expect(page.getByRole("button", { name: "Show sidebar" })).toHaveCount(1);
     await expect(page.getByRole("button", { name: "Show sidebar" })).toBeVisible();
     await expect(page.locator(".shell__edge-toggle")).toHaveCount(0);
+    // Hover-to-peek hit zone (ephemeral; pin state stays collapsed).
+    await expect(page.locator(".shell__peek-zone")).toHaveCount(1);
+    await page.locator(".shell__peek-zone").hover();
+    await expect(page.locator(".shell__sidebar-slot.is-peeking")).toBeAttached();
+    await expect(page.getByRole("complementary")).toBeVisible();
+    await expect(page.locator(".shell--sidebar-collapsed")).toHaveCount(1);
+    // Leave peek: move to main content, overlay collapses; pin stays off.
+    await page.locator(".shell__main").hover({ position: { x: 200, y: 200 } });
+    await expect(page.locator(".shell__sidebar-slot.is-peeking")).toHaveCount(0);
+    await expect(page.getByRole("complementary")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Show sidebar" })).toHaveCount(1);
 
     await expect
       .poll(async () => main.evaluate((el) => el.getBoundingClientRect().width))
@@ -142,7 +153,7 @@ test.describe("OpenMesh workbench shell smoke", () => {
     await expect(page.getByRole("button", { name: "New chat" })).toBeVisible();
     await expect(page.locator(".shell--sidebar-collapsed")).toHaveCount(1);
 
-    // macOS overlay titlebar: BOTH tab cluster and crumb/toggle must clear ooo when rail is gone.
+    // macOS overlay titlebar: tabs clear ooo when rail is gone; crumb stays at normal main inset.
     if ((await page.locator(".shell--mac").count()) > 0) {
       const clearance = page.locator(".tb--mac-traffic-clearance");
       await expect(clearance).toHaveCount(1);
@@ -159,13 +170,13 @@ test.describe("OpenMesh workbench shell smoke", () => {
         .evaluate((el) => el.getBoundingClientRect().left);
       expect(chatLeft).toBeGreaterThanOrEqual(90);
 
-      // Crumb row (circled in dogfood): structural spacer + toggle clears ooo (~96px).
-      await expect(page.locator(".shell__crumb--traffic-clearance")).toHaveCount(1);
-      await expect(page.locator(".shell__crumb-traffic-clearance")).toHaveCount(1);
+      // Crumb row: no ooo spacer — toggle sits near left of main (normal ~1.25rem pad).
+      await expect(page.locator(".shell__crumb--traffic-clearance")).toHaveCount(0);
+      await expect(page.locator(".shell__crumb-traffic-clearance")).toHaveCount(0);
       const toggleLeft = await page
         .getByRole("button", { name: "Show sidebar" })
         .evaluate((el) => el.getBoundingClientRect().left);
-      expect(toggleLeft).toBeGreaterThanOrEqual(90);
+      expect(toggleLeft).toBeLessThan(40);
     }
 
     await page.getByRole("button", { name: "Show sidebar" }).click();

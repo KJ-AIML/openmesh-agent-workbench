@@ -90,7 +90,7 @@ function mountApp() {
   });
 }
 
-describe("shell crumb macOS traffic-light clearance", () => {
+describe("shell crumb layout (no traffic-light spacer)", () => {
   beforeEach(() => {
     Object.defineProperty(globalThis, "localStorage", {
       configurable: true,
@@ -107,12 +107,13 @@ describe("shell crumb macOS traffic-light clearance", () => {
     __resetSidebarVisibilityForTests(true);
   });
 
-  it("inserts crumb flex spacer only when sidebar is collapsed on macOS", async () => {
+  it("keeps crumb at normal main inset when sidebar collapses on macOS", async () => {
     const wrapper = mountApp();
     await flushPromises();
     await nextTick();
 
     expect(wrapper.find(".shell--mac").exists()).toBe(true);
+    expect(wrapper.find(".shell__peek-zone").exists()).toBe(false);
     expect(wrapper.find(".shell__crumb--traffic-clearance").exists()).toBe(false);
     expect(wrapper.find(".shell__crumb-traffic-clearance").exists()).toBe(false);
     expect(wrapper.findAll(".shell__sidebar-toggle")).toHaveLength(1);
@@ -121,18 +122,17 @@ describe("shell crumb macOS traffic-light clearance", () => {
     await nextTick();
 
     expect(wrapper.find(".shell--sidebar-collapsed").exists()).toBe(true);
-    expect(wrapper.find(".shell__crumb--traffic-clearance").exists()).toBe(true);
-    const spacer = wrapper.find(".shell__crumb-traffic-clearance");
-    expect(spacer.exists()).toBe(true);
+    expect(wrapper.find(".shell__peek-zone").exists()).toBe(true);
+    // Crumb must NOT inherit the titlebar ooo spacer — toggle stays at normal pad.
+    expect(wrapper.find(".shell__crumb--traffic-clearance").exists()).toBe(false);
+    expect(wrapper.find(".shell__crumb-traffic-clearance").exists()).toBe(false);
 
     const crumb = wrapper.find("header.shell__crumb");
     const toggle = wrapper.find(".shell__sidebar-toggle");
     const children = Array.from(crumb.element.children);
-    expect(children.indexOf(spacer.element)).toBeLessThan(
-      children.indexOf(toggle.element),
-    );
+    // First child is the toggle (no leading spacer).
+    expect(children[0]).toBe(toggle.element);
 
-    // Single toggle still — spacer is not a button.
     expect(wrapper.findAll(".shell__sidebar-toggle")).toHaveLength(1);
     expect(wrapper.get(".shell__sidebar-toggle").attributes("aria-label")).toBe(
       "Show sidebar",
@@ -145,7 +145,7 @@ describe("shell crumb macOS traffic-light clearance", () => {
     wrapper.unmount();
   });
 
-  it("hydrates collapsed preference with crumb clearance already on", async () => {
+  it("hydrates collapsed preference without crumb clearance spacer", async () => {
     localStorage.setItem(SIDEBAR_VISIBLE_STORAGE_KEY, "0");
     __resetSidebarVisibilityForTests(true);
 
@@ -154,8 +154,9 @@ describe("shell crumb macOS traffic-light clearance", () => {
     await nextTick();
 
     expect(wrapper.find(".shell--sidebar-collapsed").exists()).toBe(true);
-    expect(wrapper.find(".shell__crumb--traffic-clearance").exists()).toBe(true);
-    expect(wrapper.find(".shell__crumb-traffic-clearance").exists()).toBe(true);
+    expect(wrapper.find(".shell__peek-zone").exists()).toBe(true);
+    expect(wrapper.find(".shell__crumb--traffic-clearance").exists()).toBe(false);
+    expect(wrapper.find(".shell__crumb-traffic-clearance").exists()).toBe(false);
     wrapper.unmount();
   });
 });

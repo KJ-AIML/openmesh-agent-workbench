@@ -23,6 +23,15 @@
     "fs:allow-remove",
     "fs:allow-exists",
     "fs:scope-home",
-    "fs:scope-home-recursive"
+    "fs:scope-home-recursive",
+    {
+      "identifier": "fs:scope",
+      "deny": [
+        "$HOME/.ssh",
+        "$HOME/.ssh/**",
+        "$CONFIG/openmesh/agent-api-key",
+        "$HOME/.config/openmesh/agent-api-key"
+      ]
+    }
   ]
 }
