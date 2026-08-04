@@ -1,9 +1,16 @@
-//! Shared read-mostly workspace tool executor for Desktop, CLI, and live ask.
+//! Shared workspace tool executor for Desktop, CLI, and live ask.
 //!
-//! Docs/notes tools list under `<project>/.openmesh/{docs,notes}` — the same
-//! paths the Tauri storage APIs use. Source tools (`read_file`, `grep`,
-//! `list_dir`, `git_diff`) are confined to the canonical workspace root.
+//! Docs/notes tools list under `<project>/.openmesh/{docs,notes}`.
+//! Source tools are confined to the canonical workspace root.
+//! `propose_patch` stages changes for human approval (does not apply).
 
+use super::continue_ops;
+use super::path_safety::{
+    deny_sensitive_path, normalize_rel, resolve_dir_in_workspace, resolve_file_in_workspace,
+    workspace_root,
+};
+use super::patch::propose_patch_from_args;
+use super::recipes;
 use super::registry::ToolExecutor;
 use crate::context_service;
 use crate::continuity::{
@@ -18,7 +25,7 @@ use crate::storage::{get_project_dir, read_project, safe_child_path, Project};
 use serde_json::json;
 use std::fs;
 use std::io::{BufRead, BufReader};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 const MAX_READ_BYTES: usize = 64 * 1024;
@@ -26,7 +33,7 @@ const MAX_GREP_MATCHES: usize = 40;
 const MAX_LIST_ENTRIES: usize = 200;
 const MAX_DIFF_CHARS: usize = 24_000;
 
-/// Read-mostly workspace tools (no file writes).
+/// Workspace tools (reads + propose_patch + Continuity helpers; no silent apply).
 pub struct WorkspaceToolExecutor {
     pub project_path: String,
 }
@@ -73,6 +80,19 @@ impl ToolExecutor for WorkspaceToolExecutor {
                     .unwrap_or(false);
                 git_diff_text(&self.project_path, path, staged)
             }
+            "propose_patch" => propose_patch_from_args(&self.project_path, arguments_json),
+            "list_recipes" => {
+                let list = recipes::list_recipes(&self.project_path)?;
+                Ok(serde_json::to_string_pretty(&list).unwrap_or_else(|_| "[]".into()))
+            }
+            "pending_questions" => continue_ops::pending_questions_json(&self.project_path),
+            "create_handoff_draft" => {
+                continue_ops::create_handoff_draft(&self.project_path, arguments_json)
+            }
+            "approve_handoff" => continue_ops::approve_handoff(&self.project_path, arguments_json),
+            "update_task" => continue_ops::update_task(&self.project_path, arguments_json),
+            "link_session" => continue_ops::link_session(&self.project_path, arguments_json),
+            "mesh_query" => continue_ops::mesh_query(&self.project_path, arguments_json),
             "continuity_summary" => continuity_summary_json(&self.project_path),
             "list_mesh_peers" => {
                 let peers = list_peers(&self.project_path).map_err(|e| e.to_string())?;
@@ -101,94 +121,6 @@ impl ToolExecutor for WorkspaceToolExecutor {
             other => Err(format!("unknown tool: {other}")),
         }
     }
-}
-
-fn workspace_root(project_path: &str) -> Result<PathBuf, String> {
-    fs::canonicalize(project_path).map_err(|e| format!("workspace root unavailable: {e}"))
-}
-
-fn normalize_rel(relative: &str) -> Result<String, String> {
-    let rel = relative.trim().trim_start_matches("./");
-    if rel.is_empty() {
-        return Err("path is required".into());
-    }
-    if Path::new(rel).is_absolute() {
-        return Err("absolute paths are not allowed".into());
-    }
-    Ok(rel.to_string())
-}
-
-fn deny_sensitive_path(path: &Path) -> Result<(), String> {
-    let lowered = path.to_string_lossy().to_lowercase();
-    let file_name = path
-        .file_name()
-        .map(|s| s.to_string_lossy().to_lowercase())
-        .unwrap_or_default();
-
-    let blocked_name = matches!(
-        file_name.as_str(),
-        ".env"
-            | ".env.local"
-            | ".env.production"
-            | ".env.development"
-            | "credentials.json"
-            | "secrets.json"
-            | "agent-api-key"
-            | "id_rsa"
-            | "id_ed25519"
-            | "id_ecdsa"
-            | "id_dsa"
-    ) || file_name.starts_with(".env.")
-        || file_name.ends_with(".pem")
-        || file_name.ends_with(".key")
-        || file_name.ends_with(".p12")
-        || file_name.ends_with(".pfx");
-
-    if blocked_name {
-        return Err(format!("refusing to read sensitive path: {file_name}"));
-    }
-
-    // Block anything under .git/ (objects, config, hooks).
-    if lowered.contains("/.git/") || lowered.ends_with("/.git") {
-        return Err("refusing to read .git paths".into());
-    }
-    Ok(())
-}
-
-fn resolve_file_in_workspace(project_path: &str, relative: &str) -> Result<PathBuf, String> {
-    let root = workspace_root(project_path)?;
-    let rel = normalize_rel(relative)?;
-    let joined = safe_child_path(&root, &rel)?;
-    let canon = fs::canonicalize(&joined).map_err(|_| format!("not found: {rel}"))?;
-    if !canon.starts_with(&root) {
-        return Err("path escapes workspace root".into());
-    }
-    if !canon.is_file() {
-        return Err(format!("not a file: {rel}"));
-    }
-    deny_sensitive_path(&canon)?;
-    Ok(canon)
-}
-
-fn resolve_dir_in_workspace(project_path: &str, relative: &str) -> Result<PathBuf, String> {
-    let root = workspace_root(project_path)?;
-    let trimmed = relative.trim().trim_start_matches("./");
-    if trimmed.is_empty() || trimmed == "." {
-        return Ok(root);
-    }
-    if Path::new(trimmed).is_absolute() {
-        return Err("absolute paths are not allowed".into());
-    }
-    let joined = safe_child_path(&root, trimmed)?;
-    let canon = fs::canonicalize(&joined).map_err(|_| format!("not found: {trimmed}"))?;
-    if !canon.starts_with(&root) {
-        return Err("path escapes workspace root".into());
-    }
-    if !canon.is_dir() {
-        return Err(format!("not a directory: {trimmed}"));
-    }
-    deny_sensitive_path(&canon)?;
-    Ok(canon)
 }
 
 fn read_workspace_file(project_path: &str, relative: &str) -> Result<String, String> {

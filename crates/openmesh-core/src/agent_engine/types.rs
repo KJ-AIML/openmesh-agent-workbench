@@ -43,7 +43,7 @@ impl AgentDefinition {
             provider: AgentProviderKind::OpenAi,
             model: model.into(),
             base_url: None,
-            tool_allowlist: vec![], // empty = all built-in tools
+            tool_allowlist: vec![], // empty = default (read + propose + continue) tools
             max_tool_iterations: DEFAULT_MAX_TOOL_ITERATIONS,
         }
     }
@@ -53,7 +53,9 @@ pub const DEFAULT_SYSTEM_PROMPT: &str = r#"You are the OpenMesh workspace agent.
 You help the user with their local OpenMesh project using the provided tools.
 Prefer tools for factual project and source-code state. Use read_file, grep, list_dir,
 and git_diff when inspecting the active workspace. Do not invent Continuity/mesh/team facts.
-You cannot write or modify files yet — propose plans and cite evidence from tools.
+To change source files, call propose_patch with exact new file contents. Patches are NOT
+applied until a human approves them in Agent Chat — never claim a file was written.
+You may update OpenMesh tasks, create handoff drafts, and link sessions for Continuity.
 Keep answers concise. Never request or echo API keys or secrets."#;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

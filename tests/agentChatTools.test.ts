@@ -42,6 +42,18 @@ describe("agent chat tool routing", () => {
     expect(resolveToolsForMessage("/ls src").map((t) => t.id)).toEqual([
       "list_dir",
     ]);
+    expect(resolveToolsForMessage("/patch show x").map((t) => t.id)).toEqual([
+      "patch",
+    ]);
+    expect(resolveToolsForMessage("/verify list").map((t) => t.id)).toEqual([
+      "verify",
+    ]);
+    expect(resolveToolsForMessage("/delegate codex").map((t) => t.id)).toEqual([
+      "delegate",
+    ]);
+    expect(resolveToolsForMessage("/continue pending").map((t) => t.id)).toEqual([
+      "continue",
+    ]);
   });
 
   it("routes plain-language keywords", () => {
@@ -59,6 +71,10 @@ describe("agent chat tool routing", () => {
     expect(help).toContain("/grep");
     expect(help).toContain("/diff");
     expect(help).toContain("/ls");
+    expect(help).toContain("/patch");
+    expect(help).toContain("/verify");
+    expect(help).toContain("/delegate");
+    expect(help).toContain("/continue");
     expect(isToolsHelpText(help)).toBe(true);
     expect(summarizeToolsHelp(help)).toMatch(/^\d+ tools ·/);
   });

@@ -383,7 +383,13 @@ struct AgentCliLaunchResult {
 }
 
 #[tauri::command]
-fn open_agent_cli(tool: String, cwd: String, cli_path: Option<String>) -> AgentCliLaunchResult {
+fn open_agent_cli(
+    tool: String,
+    cwd: String,
+    cli_path: Option<String>,
+    resume_session_id: Option<String>,
+    extra_args: Option<Vec<String>>,
+) -> AgentCliLaunchResult {
     let cwd_path = PathBuf::from(&cwd);
 
     // Validate cwd exists and is a directory
@@ -419,7 +425,43 @@ fn open_agent_cli(tool: String, cwd: String, cli_path: Option<String>) -> AgentC
     };
 
     // Determine command to run: prefer configured path, else the canonical tool name
-    let command = cli_path.unwrap_or_else(|| canonical_tool.to_string());
+    let mut command = cli_path.unwrap_or_else(|| canonical_tool.to_string());
+    // Append resume / extra args (no shell expansion — space-joined literals only).
+    if let Some(sid) = resume_session_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        if sid.chars().any(|c| c.is_whitespace() || c == ';' || c == '|' || c == '&' || c == '`' || c == '$') {
+            return AgentCliLaunchResult {
+                success: false,
+                error: Some("invalid resume session id".into()),
+            };
+        }
+        let resume_flag = match canonical_tool {
+            "codex" => format!(" resume {sid}"),
+            "claude" => format!(" --resume {sid}"),
+            "opencode" => format!(" --session {sid}"),
+            _ => format!(" --resume {sid}"),
+        };
+        command.push_str(&resume_flag);
+    }
+    if let Some(args) = extra_args {
+        for a in args {
+            let a = a.trim();
+            if a.is_empty() {
+                continue;
+            }
+            if a.chars().any(|c| c == ';' || c == '|' || c == '&' || c == '`' || c == '$' || c == '\n') {
+                return AgentCliLaunchResult {
+                    success: false,
+                    error: Some("invalid extra arg".into()),
+                };
+            }
+            command.push(' ');
+            command.push_str(a);
+        }
+    }
 
     #[cfg(target_os = "windows")]
     {
@@ -1268,6 +1310,18 @@ pub fn run() {
             agent_engine_desktop::agent_provider_test,
             agent_engine_desktop::agent_engine_turn,
             agent_engine_desktop::agent_workspace_tool,
+            agent_engine_desktop::agent_patch_get,
+            agent_engine_desktop::agent_patch_apply,
+            agent_engine_desktop::agent_patch_reject,
+            agent_engine_desktop::agent_patch_rollback,
+            agent_engine_desktop::agent_patch_summary,
+            agent_engine_desktop::agent_recipe_list,
+            agent_engine_desktop::agent_recipe_run,
+            agent_engine_desktop::agent_recipe_cancel,
+            agent_engine_desktop::agent_recipe_get,
+            agent_engine_desktop::agent_delegate_brief,
+            agent_engine_desktop::agent_runs_recent,
+            agent_engine_desktop::agent_handoff_approve,
             // Skills / Hooks / Plugins (local marketplace MVP)
             extensions_desktop::extensions_list,
             extensions_desktop::extensions_catalog,

@@ -1,7 +1,38 @@
-//! Built-in OpenMesh tool specs (read-mostly allowlist).
+//! Built-in OpenMesh tool specs. Empty allowlist = default (read + propose + continue) tools only.
 
 use super::types::ToolSpec;
 use serde_json::json;
+
+/// Tools available when `tool_allowlist` is empty (Ask / default workspace agent).
+pub fn default_tool_names() -> &'static [&'static str] {
+    &[
+        "project_info",
+        "list_docs",
+        "list_notes",
+        "list_dir",
+        "read_file",
+        "grep",
+        "git_diff",
+        "git_status",
+        "search_context",
+        "continuity_summary",
+        "list_mesh_peers",
+        "pilot_status",
+        "rc_status",
+        "propose_patch",
+        "pending_questions",
+        "create_handoff_draft",
+        "update_task",
+        "link_session",
+        "mesh_query",
+        "list_recipes",
+    ]
+}
+
+/// Explicitly human-gated / not model-callable by default.
+pub fn human_only_tool_names() -> &'static [&'static str] {
+    &["approve_handoff"]
+}
 
 pub fn builtin_tool_specs() -> Vec<ToolSpec> {
     vec![
@@ -99,11 +130,120 @@ pub fn builtin_tool_specs() -> Vec<ToolSpec> {
             }),
         },
         ToolSpec {
+            name: "propose_patch".into(),
+            description: "Propose a workspace file change for human approval. Does NOT apply. Provide files[].path and files[].newContent.".into(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "summary": { "type": "string", "description": "Short description of the change" },
+                    "files": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "path": { "type": "string" },
+                                "newContent": { "type": "string" }
+                            },
+                            "required": ["path", "newContent"]
+                        }
+                    }
+                },
+                "required": ["files"],
+                "additionalProperties": false
+            }),
+        },
+        ToolSpec {
+            name: "list_recipes".into(),
+            description: "List approved verify recipes (cargo/npm checks).".into(),
+            parameters: json!({
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+            }),
+        },
+        ToolSpec {
             name: "continuity_summary".into(),
             description: "Continuity hub summary (pending, peers, envelopes, proxy).".into(),
             parameters: json!({
                 "type": "object",
                 "properties": {},
+                "additionalProperties": false
+            }),
+        },
+        ToolSpec {
+            name: "pending_questions".into(),
+            description: "List pending questions that need a person.".into(),
+            parameters: json!({
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+            }),
+        },
+        ToolSpec {
+            name: "create_handoff_draft".into(),
+            description: "Create a Continuity handoff draft for a recipient.".into(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "recipient": { "type": "string" },
+                    "role": { "type": "string" }
+                },
+                "additionalProperties": false
+            }),
+        },
+        ToolSpec {
+            name: "approve_handoff".into(),
+            description: "Approve a draft handoff note (human-gated; usually via slash/IPC).".into(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "handoffId": { "type": "string" }
+                },
+                "required": ["handoffId"],
+                "additionalProperties": false
+            }),
+        },
+        ToolSpec {
+            name: "update_task".into(),
+            description: "Update a sprint task (status, notes, nextAction).".into(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "taskId": { "type": "string" },
+                    "status": { "type": "string" },
+                    "title": { "type": "string" },
+                    "notes": { "type": "string" },
+                    "nextAction": { "type": "string" }
+                },
+                "required": ["taskId"],
+                "additionalProperties": false
+            }),
+        },
+        ToolSpec {
+            name: "link_session".into(),
+            description: "Link an OpenMesh chat session to a foreign agent session id.".into(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "chatSessionId": { "type": "string" },
+                    "foreignTool": { "type": "string" },
+                    "foreignSessionId": { "type": "string" },
+                    "foreignSessionPath": { "type": "string" }
+                },
+                "required": ["chatSessionId", "foreignSessionId"],
+                "additionalProperties": false
+            }),
+        },
+        ToolSpec {
+            name: "mesh_query".into(),
+            description: "Read-only mesh peer query (trust-policy gated, fail-closed).".into(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "peer": { "type": "string" },
+                    "question": { "type": "string" }
+                },
+                "required": ["peer", "question"],
                 "additionalProperties": false
             }),
         },
@@ -158,10 +298,15 @@ pub fn builtin_tool_specs() -> Vec<ToolSpec> {
     ]
 }
 
+/// Empty allowlist means default tools only (not every built-in).
 pub fn filter_tools(allowlist: &[String]) -> Vec<ToolSpec> {
     let all = builtin_tool_specs();
     if allowlist.is_empty() {
-        return all;
+        let defaults = default_tool_names();
+        return all
+            .into_iter()
+            .filter(|t| defaults.iter().any(|n| *n == t.name))
+            .collect();
     }
     all.into_iter()
         .filter(|t| allowlist.iter().any(|a| a == &t.name))
@@ -184,5 +329,18 @@ impl ToolExecutor for StubToolExecutor {
             .get(tool_name)
             .cloned()
             .ok_or_else(|| format!("unknown tool: {tool_name}"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_allowlist_excludes_human_only() {
+        let tools = filter_tools(&[]);
+        assert!(tools.iter().any(|t| t.name == "propose_patch"));
+        assert!(tools.iter().any(|t| t.name == "read_file"));
+        assert!(!tools.iter().any(|t| t.name == "approve_handoff"));
     }
 }

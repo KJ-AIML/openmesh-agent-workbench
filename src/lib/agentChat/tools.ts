@@ -2,7 +2,18 @@
 import { store } from "../store";
 import { searchContext } from "../contextClient";
 import { getGitStatus } from "../adapters/gitAdapter";
-import { runAgentWorkspaceTool } from "../agentEngineClient";
+import {
+  applyAgentPatch,
+  approveAgentHandoff,
+  cancelAgentRecipe,
+  listAgentRecipes,
+  rejectAgentPatch,
+  runAgentRecipe,
+  runAgentWorkspaceTool,
+  summarizeAgentPatch,
+  writeDelegateBrief,
+} from "../agentEngineClient";
+import { openAgentCli } from "../adapters/terminalAdapter";
 import {
   askOnlineProxy,
   getContinuityHubSummary,
@@ -236,6 +247,219 @@ export const AGENT_TOOLS: AgentTool[] = [
           ...(path ? { path } : {}),
         });
         return { ok: true, summary: clip(out, 8000), data: out };
+      } catch (e) {
+        return {
+          ok: false,
+          summary: e instanceof Error ? e.message : String(e),
+        };
+      }
+    },
+  },
+  {
+    id: "patch",
+    title: "Patch approve",
+    description: "Show / apply / reject a proposed patch by id",
+    slash: "/patch",
+    keywords: ["apply patch", "reject patch", "show patch"],
+    async run(projectPath, question) {
+      const rest = question.replace(/^\/patch\s*/i, "").trim();
+      const [actionRaw, id] = rest.split(/\s+/);
+      const action = (actionRaw || "show").toLowerCase();
+      if (!id && action !== "help") {
+        return {
+          ok: false,
+          summary: "Usage: /patch show|apply|reject <patch-id>",
+        };
+      }
+      try {
+        if (action === "show" || action === "summary") {
+          const out = await summarizeAgentPatch(projectPath, id);
+          return { ok: true, summary: clip(out, 8000), data: out };
+        }
+        if (action === "apply") {
+          const p = await applyAgentPatch(projectPath, id);
+          return {
+            ok: true,
+            summary: `Applied patch ${p.id} (${p.status}).`,
+            data: p,
+          };
+        }
+        if (action === "reject") {
+          const p = await rejectAgentPatch(projectPath, id);
+          return {
+            ok: true,
+            summary: `Rejected patch ${p.id}.`,
+            data: p,
+          };
+        }
+        return { ok: false, summary: "Usage: /patch show|apply|reject <patch-id>" };
+      } catch (e) {
+        return {
+          ok: false,
+          summary: e instanceof Error ? e.message : String(e),
+        };
+      }
+    },
+  },
+  {
+    id: "verify",
+    title: "Verify recipe",
+    description: "Run an approved check recipe (list or run by id)",
+    slash: "/verify",
+    keywords: ["verify", "run tests", "typecheck", "recipe"],
+    async run(projectPath, question) {
+      const rest = question
+        .replace(/^\/verify\s*/i, "")
+        .replace(/^(verify|run tests)\s*/i, "")
+        .trim();
+      try {
+        if (!rest || rest === "list") {
+          const recipes = await listAgentRecipes(projectPath);
+          return {
+            ok: true,
+            summary: recipes.length
+              ? recipes
+                  .map((r) => `- ${r.id}: ${r.title} (\`${r.argv.join(" ")}\`)`)
+                  .join("\n")
+              : "No recipes.",
+            data: recipes,
+          };
+        }
+        if (rest.startsWith("cancel ")) {
+          const key = rest.slice("cancel ".length).trim();
+          const ok = await cancelAgentRecipe(key);
+          return {
+            ok,
+            summary: ok ? `Cancel signalled for ${key}` : `No active run ${key}`,
+          };
+        }
+        const runKey = `${projectPath}:${rest}`;
+        const result = await runAgentRecipe(projectPath, rest, runKey);
+        return {
+          ok: result.ok,
+          summary: clip(
+            `Recipe ${result.recipeId} ok=${result.ok} exit=${result.exitCode ?? "n/a"} ` +
+              `duration=${result.durationMs}ms` +
+              (result.timedOut ? " timed_out" : "") +
+              (result.cancelled ? " cancelled" : "") +
+              `\n\n${result.stdout}\n${result.stderr}`,
+            8000,
+          ),
+          data: result,
+        };
+      } catch (e) {
+        return {
+          ok: false,
+          summary: e instanceof Error ? e.message : String(e),
+        };
+      }
+    },
+  },
+  {
+    id: "delegate",
+    title: "Delegate to CLI",
+    description: "Launch Codex/Claude/OpenCode (optional resume session id)",
+    slash: "/delegate",
+    keywords: ["delegate", "launch codex", "launch claude", "resume session"],
+    async run(projectPath, question) {
+      const rest = question.replace(/^\/delegate\s*/i, "").trim();
+      const parts = rest.split(/\s+/).filter(Boolean);
+      const tool = (parts[0] || "codex").toLowerCase();
+      if (!["codex", "claude", "opencode"].includes(tool)) {
+        return {
+          ok: false,
+          summary: "Usage: /delegate <codex|claude|opencode> [sessionId]",
+        };
+      }
+      const sessionId = parts[1];
+      try {
+        const brief = await writeDelegateBrief(
+          projectPath,
+          tool,
+          `Delegated from Agent Chat${sessionId ? ` (resume ${sessionId})` : ""}.`,
+        );
+        const launch = await openAgentCli(tool, projectPath, undefined, {
+          resumeSessionId: sessionId,
+        });
+        if (!launch.success) {
+          return {
+            ok: false,
+            summary: launch.error || "Failed to launch agent CLI",
+          };
+        }
+        return {
+          ok: true,
+          summary: `Launched ${tool}${sessionId ? ` (resume ${sessionId})` : ""}. Brief written to ${brief}`,
+          data: { tool, sessionId, brief },
+        };
+      } catch (e) {
+        return {
+          ok: false,
+          summary: e instanceof Error ? e.message : String(e),
+        };
+      }
+    },
+  },
+  {
+    id: "continue",
+    title: "Continue",
+    description: "Continuity helpers: pending, handoff draft, link session",
+    slash: "/continue",
+    keywords: ["continue", "handoff", "create handoff", "catch up"],
+    async run(projectPath, question) {
+      const rest = question.replace(/^\/continue\s*/i, "").trim();
+      const [action, ...tail] = rest.split(/\s+/).filter(Boolean);
+      try {
+        if (!action || action === "help") {
+          return {
+            ok: true,
+            summary:
+              "Usage:\n" +
+              "- /continue pending\n" +
+              "- /continue handoff [recipient]\n" +
+              "- /continue approve-handoff <id>\n" +
+              "- /continue link <chatSessionId> <tool> <foreignSessionId>",
+          };
+        }
+        if (action === "pending") {
+          const out = await runAgentWorkspaceTool(projectPath, "pending_questions", {});
+          return { ok: true, summary: clip(out, 8000), data: out };
+        }
+        if (action === "handoff") {
+          const recipient = tail[0] || "teammate";
+          const out = await runAgentWorkspaceTool(projectPath, "create_handoff_draft", {
+            recipient,
+          });
+          return { ok: true, summary: clip(out, 4000), data: out };
+        }
+        if (action === "approve-handoff") {
+          const id = tail[0];
+          if (!id) {
+            return { ok: false, summary: "Usage: /continue approve-handoff <id>" };
+          }
+          const out = await approveAgentHandoff(projectPath, id);
+          return { ok: true, summary: clip(out, 2000), data: out };
+        }
+        if (action === "link") {
+          const [chatSessionId, foreignTool, foreignSessionId] = tail;
+          if (!chatSessionId || !foreignSessionId) {
+            return {
+              ok: false,
+              summary:
+                "Usage: /continue link <chatSessionId> <tool> <foreignSessionId>",
+            };
+          }
+          const out = await runAgentWorkspaceTool(projectPath, "link_session", {
+            chatSessionId,
+            foreignTool: foreignTool || "unknown",
+            foreignSessionId,
+          });
+          return { ok: true, summary: clip(out, 2000), data: out };
+        }
+        return {
+          ok: false,
+          summary: "Unknown /continue action. Try /continue help",
+        };
       } catch (e) {
         return {
           ok: false,

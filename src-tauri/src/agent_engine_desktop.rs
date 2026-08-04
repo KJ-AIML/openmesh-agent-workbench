@@ -1,13 +1,18 @@
 //! Dev Track 0.1.23 — OpenMesh Agent Engine Desktop IPC.
 
 use openmesh_core::agent_engine::{
-    enrich_system_prompt, load_inventory, probe_provider, resolve_provider_kind, run_agent_turn,
+    apply_patch, cancel_recipe_run, enrich_system_prompt, format_patch_summary, get_recipe,
+    list_recipes, list_recent_runs, load_inventory, probe_provider, read_patch, reject_patch,
+    resolve_provider_kind, rollback_patch, run_agent_turn, run_recipe, write_delegate_brief,
     AgentDefinition, AgentSecretStore, AgentSession, CascadingSecretStore, ChatMessage, ChatRole,
-    EngineTurnResult, OpenAiCompatibleProvider, ProviderConfig, ProviderProbeResult, ToolExecutor,
-    WorkspaceToolExecutor,
+    EngineTurnResult, LogCallback, OpenAiCompatibleProvider, PatchRecord, ProviderConfig,
+    ProviderProbeResult, Recipe, RecipeRunResult, ToolExecutor, WorkspaceToolExecutor,
 };
 use openmesh_core::storage::{default_settings, read_global, Settings};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
+use std::sync::Arc;
+use tauri::Emitter;
 
 fn secrets() -> CascadingSecretStore {
     CascadingSecretStore::default()
@@ -228,6 +233,16 @@ pub async fn agent_workspace_tool(
             "list_notes",
             "project_info",
             "search_context",
+            "propose_patch",
+            "list_recipes",
+            "pending_questions",
+            "create_handoff_draft",
+            "update_task",
+            "link_session",
+            "mesh_query",
+            "continuity_summary",
+            "list_mesh_peers",
+            // approve_handoff stays human-slash via dedicated IPC, not free slash tool exec
         ];
         if !allowed.iter().any(|n| *n == request.tool_name) {
             return Err(format!(
@@ -245,4 +260,159 @@ pub async fn agent_workspace_tool(
     })
     .await
     .map_err(|e| format!("workspace tool failed to join: {e}"))?
+}
+
+#[tauri::command]
+pub async fn agent_patch_get(project_path: String, patch_id: String) -> Result<PatchRecord, String> {
+    tauri::async_runtime::spawn_blocking(move || read_patch(&project_path, &patch_id))
+        .await
+        .map_err(|e| format!("patch get failed to join: {e}"))?
+}
+
+#[tauri::command]
+pub async fn agent_patch_apply(project_path: String, patch_id: String) -> Result<PatchRecord, String> {
+    tauri::async_runtime::spawn_blocking(move || apply_patch(&project_path, &patch_id))
+        .await
+        .map_err(|e| format!("patch apply failed to join: {e}"))?
+}
+
+#[tauri::command]
+pub async fn agent_patch_reject(
+    project_path: String,
+    patch_id: String,
+) -> Result<PatchRecord, String> {
+    tauri::async_runtime::spawn_blocking(move || reject_patch(&project_path, &patch_id))
+        .await
+        .map_err(|e| format!("patch reject failed to join: {e}"))?
+}
+
+#[tauri::command]
+pub async fn agent_patch_rollback(
+    project_path: String,
+    patch_id: String,
+) -> Result<PatchRecord, String> {
+    tauri::async_runtime::spawn_blocking(move || rollback_patch(&project_path, &patch_id))
+        .await
+        .map_err(|e| format!("patch rollback failed to join: {e}"))?
+}
+
+#[tauri::command]
+pub async fn agent_patch_summary(
+    project_path: String,
+    patch_id: String,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let patch = read_patch(&project_path, &patch_id)?;
+        Ok(format_patch_summary(&patch))
+    })
+    .await
+    .map_err(|e| format!("patch summary failed to join: {e}"))?
+}
+
+#[tauri::command]
+pub async fn agent_recipe_list(project_path: String) -> Result<Vec<Recipe>, String> {
+    tauri::async_runtime::spawn_blocking(move || list_recipes(&project_path))
+        .await
+        .map_err(|e| format!("recipe list failed to join: {e}"))?
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentRecipeRunRequest {
+    pub recipe_id: String,
+    #[serde(default)]
+    pub run_key: Option<String>,
+}
+
+#[tauri::command]
+pub async fn agent_recipe_run(
+    app: tauri::AppHandle,
+    project_path: String,
+    request: AgentRecipeRunRequest,
+) -> Result<RecipeRunResult, String> {
+    let run_key = request
+        .run_key
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| format!("{}:{}", project_path, request.recipe_id));
+    let recipe_id = request.recipe_id;
+    tauri::async_runtime::spawn_blocking(move || {
+        let app_log = app.clone();
+        let key_for_events = run_key.clone();
+        let on_log: LogCallback = Arc::new(move |line| {
+            let _ = app_log.emit(
+                "agent-run-log",
+                json!({ "runKey": key_for_events, "line": line }),
+            );
+        });
+        let result = run_recipe(&project_path, &recipe_id, &run_key, Some(on_log))?;
+        let _ = app.emit(
+            "agent-run-done",
+            json!({
+                "runKey": run_key,
+                "ok": result.ok,
+                "recipeId": result.recipe_id,
+                "exitCode": result.exit_code,
+            }),
+        );
+        Ok(result)
+    })
+    .await
+    .map_err(|e| format!("recipe run failed to join: {e}"))?
+}
+
+#[tauri::command]
+pub fn agent_recipe_cancel(run_key: String) -> Result<bool, String> {
+    Ok(cancel_recipe_run(&run_key))
+}
+
+#[tauri::command]
+pub async fn agent_recipe_get(project_path: String, recipe_id: String) -> Result<Recipe, String> {
+    tauri::async_runtime::spawn_blocking(move || get_recipe(&project_path, &recipe_id))
+        .await
+        .map_err(|e| format!("recipe get failed to join: {e}"))?
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentDelegateBriefRequest {
+    pub tool: String,
+    pub summary: String,
+}
+
+#[tauri::command]
+pub async fn agent_delegate_brief(
+    project_path: String,
+    request: AgentDelegateBriefRequest,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let path = write_delegate_brief(&project_path, &request.tool, &request.summary)?;
+        Ok(path.to_string_lossy().to_string())
+    })
+    .await
+    .map_err(|e| format!("delegate brief failed to join: {e}"))?
+}
+
+#[tauri::command]
+pub async fn agent_runs_recent(
+    project_path: String,
+    limit: Option<usize>,
+) -> Result<Vec<openmesh_core::agent_engine::AgentRunRecord>, String> {
+    tauri::async_runtime::spawn_blocking(move || list_recent_runs(&project_path, limit.unwrap_or(10)))
+        .await
+        .map_err(|e| format!("runs list failed to join: {e}"))?
+}
+
+#[tauri::command]
+pub async fn agent_handoff_approve(
+    project_path: String,
+    handoff_id: String,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        openmesh_core::agent_engine::approve_handoff(
+            &project_path,
+            &json!({ "handoffId": handoff_id }).to_string(),
+        )
+    })
+    .await
+    .map_err(|e| format!("handoff approve failed to join: {e}"))?
 }

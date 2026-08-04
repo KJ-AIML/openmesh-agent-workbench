@@ -3,10 +3,14 @@
 //! Parallel to Work Proxy draft (`proxy_runtime_axga`), which remains tool-free.
 //! Inspired by coding-agent architecture concepts; OpenMesh-branded reimplementation.
 
+pub mod continue_ops;
 pub mod engine_loop;
 pub mod extensions;
 pub mod live_ask;
+pub mod patch;
+pub mod path_safety;
 pub mod provider;
+pub mod recipes;
 pub mod registry;
 pub mod secrets;
 pub mod types;
@@ -21,13 +25,27 @@ pub use extensions::{
 pub use live_ask::{
     run_live_ask, run_live_ask_with_provider, LiveAskError, LiveAskRequest, LIVE_ASK_SYSTEM_PROMPT,
 };
+pub use patch::{
+    apply_patch, format_patch_summary, list_recent_runs, propose_patch_from_args, read_patch,
+    reject_patch, rollback_patch, AgentRunRecord, PatchRecord, PatchStatus,
+};
+pub use recipes::{
+    cancel_recipe_run, ensure_default_recipes, get_recipe, list_recipes, run_recipe, LogCallback,
+    Recipe, RecipeRunResult,
+};
+pub use continue_ops::{
+    approve_handoff, create_handoff_draft, link_session, list_session_links, mesh_query,
+    pending_questions_json, update_task, write_delegate_brief, SessionLink,
+};
 pub use workspace_tools::WorkspaceToolExecutor;
 pub use provider::{
     build_request_body, parse_chat_completion, probe_provider, resolve_provider_kind,
     AssistantTurn, ChatProvider, OpenAiCompatibleProvider, ProviderConfig, ProviderProbeResult,
     ScriptedProvider,
 };
-pub use registry::{builtin_tool_specs, filter_tools, StubToolExecutor, ToolExecutor};
+pub use registry::{
+    builtin_tool_specs, default_tool_names, filter_tools, StubToolExecutor, ToolExecutor,
+};
 pub use secrets::{
     AgentSecretStore, CascadingSecretStore, EnvSecretStore, FileSecretStore, MemorySecretStore,
 };

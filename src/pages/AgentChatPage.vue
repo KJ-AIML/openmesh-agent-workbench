@@ -41,7 +41,10 @@ import {
   getChatSetupChecks,
   isChatProviderReady,
 } from "../lib/agentChat/ready";
-import { getAgentSecretStatus } from "../lib/agentEngineClient";
+import {
+  extractPatchIds,
+  getAgentSecretStatus,
+} from "../lib/agentEngineClient";
 import {
   type ChatMessage,
   type ChatSession,
@@ -58,6 +61,7 @@ import { createPersistQueue } from "../lib/agentChat/persistQueue";
 import ChatMessageContent from "../components/chat/ChatMessageContent.vue";
 import ChatComposer from "../components/chat/ChatComposer.vue";
 import ChatThinkingBubble from "../components/chat/ChatThinkingBubble.vue";
+import PatchApprovalCard from "../components/chat/PatchApprovalCard.vue";
 
 const router = useRouter();
 const { currentProjectPath, currentProject, settings, saveSettings } = useStore();
@@ -486,10 +490,18 @@ function insertSlash(cmd: string) {
 }
 
 /** Starter chips only — full catalog via “More…” → /tools (not stacked). */
-const starterChips = ["/pilot", "/rc", "/team", "/search", "/docs"] as const;
+const starterChips = ["/pilot", "/read", "/diff", "/verify", "/continue"] as const;
 
 function runToolsDump() {
   void send("/tools");
+}
+
+function patchIdsForMessage(m: ChatMessage): string[] {
+  const fromText = extractPatchIds(m.text);
+  const fromTools = (m.toolCalls ?? [])
+    .filter((t) => t.toolId === "propose_patch" || /patch-/i.test(t.summary))
+    .flatMap((t) => extractPatchIds(t.summary));
+  return [...new Set([...fromText, ...fromTools])];
 }
 
 function isToolsHelpMessage(m: ChatMessage): boolean {
@@ -715,6 +727,20 @@ function toggleToolsExpanded(id: string) {
                           />
                         </div>
                         <ChatMessageContent v-else :text="m.text" />
+                        <template
+                          v-if="
+                            m.role === 'assistant' &&
+                            currentProjectPath &&
+                            patchIdsForMessage(m).length
+                          "
+                        >
+                          <PatchApprovalCard
+                            v-for="pid in patchIdsForMessage(m)"
+                            :key="`${m.id}-${pid}`"
+                            :project-path="currentProjectPath"
+                            :patch-id="pid"
+                          />
+                        </template>
                       </article>
                       <div
                         v-if="showMessageActions(m)"

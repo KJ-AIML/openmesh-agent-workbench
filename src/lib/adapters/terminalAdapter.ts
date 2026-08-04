@@ -68,6 +68,10 @@ export async function openAgentCli(
 	tool: string,
 	cwd: string,
 	cliPath?: string,
+	opts?: {
+		resumeSessionId?: string;
+		extraArgs?: string[];
+	},
 ): Promise<AdapterResult<void>> {
 	const runtime = getRuntimeKind();
 
@@ -77,6 +81,8 @@ export async function openAgentCli(
 				tool,
 				cwd,
 				cliPath: cliPath || null,
+				resumeSessionId: opts?.resumeSessionId || null,
+				extraArgs: opts?.extraArgs || null,
 			});
 
 			if (result.success) {
@@ -101,7 +107,10 @@ export async function openAgentCli(
 	}
 
 	// Web mock: show alert
-	alert(`Mock: would launch ${tool} at ${cwd}`);
+	alert(
+		`Mock: would launch ${tool} at ${cwd}` +
+			(opts?.resumeSessionId ? ` (resume ${opts.resumeSessionId})` : ""),
+	);
 	return {
 		success: true,
 		isMock: true,

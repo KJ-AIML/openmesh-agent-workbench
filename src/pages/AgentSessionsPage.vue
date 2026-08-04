@@ -3,12 +3,13 @@ import { ref, computed, watch } from "vue";
 import { useStore } from "../lib/useStore";
 import type { ScannedSession } from "../lib/adapters/types";
 import { scanConfiguredSessions } from "../lib/scanConfiguredSessions";
-import { Bot, Scan, Star, Trash2, FolderOpen } from "lucide-vue-next";
+import { Bot, Scan, Star, Trash2, FolderOpen, Play } from "lucide-vue-next";
 import AgentToolIcon from "../components/AgentToolIcon.vue";
 import {
   AGENT_TOOL_FILTERS,
   agentToolLabel,
 } from "../lib/agentToolIcons";
+import { openAgentCli } from "../lib/adapters/terminalAdapter";
 
 const {
   currentProject,
@@ -19,6 +20,9 @@ const {
   addRecentItem,
   settings,
 } = useStore();
+
+const resumeError = ref<string | null>(null);
+const resumeBusy = ref(false);
 
 const selectedSessionId = ref<string | null>(null);
 const toolFilter = ref<string>("all");
@@ -174,6 +178,50 @@ function toggleStarredScan(id: string) {
 
 function attachSessionToTask(sessionId: string, taskId: string) {
   updateAgentSession(sessionId, { linkedTaskId: taskId });
+}
+
+function resumeToolName(toolName: string): string | null {
+  const t = toolName.toLowerCase();
+  if (t.includes("codex")) return "codex";
+  if (t.includes("claude")) return "claude";
+  if (t.includes("opencode")) return "opencode";
+  return null;
+}
+
+/** Prefer filename stem as CLI resume id (Codex/Claude session files). */
+function resumeSessionIdFor(session: ScannedSession): string {
+  const stem = session.fileName.replace(/\.(jsonl?|json)$/i, "");
+  return stem || session.id;
+}
+
+async function resumeScannedInTerminal(session: ScannedSession) {
+  resumeError.value = null;
+  const tool = resumeToolName(session.toolName);
+  const cwd = currentProject.value?.folderPath;
+  if (!tool || !cwd) {
+    resumeError.value =
+      "Resume is available for Codex, Claude, and OpenCode when a project is open.";
+    return;
+  }
+  resumeBusy.value = true;
+  try {
+    const cliPath =
+      tool === "codex"
+        ? settings.value?.agentClis?.codexPath
+        : tool === "claude"
+          ? settings.value?.agentClis?.claudeCodePath
+          : settings.value?.agentClis?.opencodePath;
+    const result = await openAgentCli(tool, cwd, cliPath || undefined, {
+      resumeSessionId: resumeSessionIdFor(session),
+    });
+    if (!result.success) {
+      resumeError.value = result.error || "Failed to launch terminal";
+    }
+  } catch (e) {
+    resumeError.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    resumeBusy.value = false;
+  }
 }
 
 function timeAgo(dateStr: string): string {
@@ -454,7 +502,20 @@ function formatBytes(bytes: number): string {
             >{{ selectedScannedSession.summaryPreview }}</p
           >
         </div>
+        <p v-if="resumeError" class="text-[12px]" style="color: #ef4444">
+          {{ resumeError }}
+        </p>
         <div class="flex gap-2 flex-wrap pt-1">
+          <button
+            v-if="resumeToolName(selectedScannedSession.toolName)"
+            type="button"
+            class="btn-primary text-[12px] inline-flex items-center gap-1.5"
+            :disabled="resumeBusy"
+            @click="resumeScannedInTerminal(selectedScannedSession)"
+          >
+            <Play class="h-3.5 w-3.5" />
+            {{ resumeBusy ? "Launching…" : "Resume in terminal" }}
+          </button>
           <button
             @click="toggleStarredScan(selectedScannedSession.id)"
             class="btn-secondary text-[12px]"
