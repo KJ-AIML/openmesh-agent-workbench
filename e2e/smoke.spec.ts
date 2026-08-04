@@ -44,7 +44,9 @@ test.describe("OpenMesh workbench shell smoke", () => {
 
     await nav.getByRole("link", { name: "Chat" }).click();
     await expect(page).toHaveURL(/\/agent-chat/);
-    await expect(page.getByRole("heading", { name: "Chat" })).toBeVisible();
+    // Landmark heading may be visually hidden; thread + rail are the chrome.
+    await expect(page.getByRole("heading", { name: "Chat" })).toBeAttached();
+    await expect(page.getByRole("button", { name: "New chat" })).toBeVisible();
 
     await nav.getByRole("link", { name: "Sprint" }).click();
     await expect(page).toHaveURL(/\/sprint/);
@@ -108,4 +110,71 @@ test.describe("OpenMesh workbench shell smoke", () => {
     await waitForShell(page);
     await expect(page.getByText(/Chat|provider|project/i).first()).toBeVisible();
   });
+
+  test("sidebar toggle collapses rail and expands content", async ({ page }) => {
+    await page.goto("/agent-chat");
+    await waitForShell(page);
+
+    const nav = page.getByRole("complementary");
+    await expect(nav).toBeVisible();
+    await expect(nav.getByRole("link", { name: "Chat" })).toBeVisible();
+
+    const main = page.locator(".shell__main");
+    const expandedWidth = await main.evaluate((el) => el.getBoundingClientRect().width);
+
+    // Single crumb toggle when expanded (no footer/edge duplicates).
+    await expect(page.getByRole("button", { name: "Hide sidebar" })).toHaveCount(1);
+    await page.getByRole("button", { name: "Hide sidebar" }).click();
+    // aria-hidden + inert remove the rail from the a11y tree when collapsed.
+    await expect(page.getByRole("complementary")).toHaveCount(0);
+    await expect(page.locator(".shell__sidebar-slot.is-collapsed")).toBeAttached();
+    // Collapsed: exactly one show control (crumb), no edge reopen tab.
+    await expect(page.getByRole("button", { name: "Show sidebar" })).toHaveCount(1);
+    await expect(page.getByRole("button", { name: "Show sidebar" })).toBeVisible();
+    await expect(page.locator(".shell__edge-toggle")).toHaveCount(0);
+
+    await expect
+      .poll(async () => main.evaluate((el) => el.getBoundingClientRect().width))
+      .toBeGreaterThan(expandedWidth);
+
+    // Chat surface still mounts and uses the wider main column.
+    await expect(page.getByRole("heading", { name: "Chat" })).toBeAttached();
+    await expect(page.getByRole("button", { name: "New chat" })).toBeVisible();
+    await expect(page.locator(".shell--sidebar-collapsed")).toHaveCount(1);
+
+    // macOS overlay titlebar: BOTH tab cluster and crumb/toggle must clear ooo when rail is gone.
+    if ((await page.locator(".shell--mac").count()) > 0) {
+      const clearance = page.locator(".tb--mac-traffic-clearance");
+      await expect(clearance).toHaveCount(1);
+      const spacer = page.locator(".tb__traffic-clearance");
+      await expect(spacer).toHaveCount(1);
+      const inset = await spacer.evaluate((el) => {
+        const style = getComputedStyle(el);
+        return parseFloat(style.flexBasis || style.width || "0");
+      });
+      expect(inset).toBeGreaterThanOrEqual(90);
+      // Chat tab's left edge must sit at/after the spacer (not under ooo).
+      const chatLeft = await page
+        .locator(".tb__nav a", { hasText: "Chat" })
+        .evaluate((el) => el.getBoundingClientRect().left);
+      expect(chatLeft).toBeGreaterThanOrEqual(90);
+
+      // Crumb row (circled in dogfood): structural spacer + toggle clears ooo (~96px).
+      await expect(page.locator(".shell__crumb--traffic-clearance")).toHaveCount(1);
+      await expect(page.locator(".shell__crumb-traffic-clearance")).toHaveCount(1);
+      const toggleLeft = await page
+        .getByRole("button", { name: "Show sidebar" })
+        .evaluate((el) => el.getBoundingClientRect().left);
+      expect(toggleLeft).toBeGreaterThanOrEqual(90);
+    }
+
+    await page.getByRole("button", { name: "Show sidebar" }).click();
+    await expect(page.getByRole("complementary")).toBeVisible();
+    await expect(page.locator(".shell--sidebar-collapsed")).toHaveCount(0);
+    await expect(page.locator(".tb--mac-traffic-clearance")).toHaveCount(0);
+    await expect(page.locator(".shell__crumb--traffic-clearance")).toHaveCount(0);
+    await expect(page.locator(".shell__crumb-traffic-clearance")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Hide sidebar" })).toHaveCount(1);
+  });
 });
+

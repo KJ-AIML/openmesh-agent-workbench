@@ -135,11 +135,6 @@ async function handleDeleteProject(projectPath: string) {
   <aside
     class="app-sidebar hidden md:flex flex-col h-full"
     :class="{ 'app-sidebar--mac': macOS }"
-    style="
-      width: 260px;
-      background: var(--sidebar);
-      border-right: 1px solid var(--border);
-    "
   >
     <!--
       macOS: empty lights clearance only — project name lives in the main nav bar.
@@ -346,6 +341,12 @@ async function handleDeleteProject(projectPath: string) {
 </template>
 
 <style scoped>
+.app-sidebar {
+  width: 260px;
+  background: var(--sidebar);
+  border-right: 1px solid var(--border);
+}
+
 /*
   Same height as main titlebar (--chrome-top).
   Content starts after traffic-light cluster — fills the dead gap.

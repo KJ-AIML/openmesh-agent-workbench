@@ -74,6 +74,22 @@ describe("CommandPalette", () => {
     expect(searchContext?.icon).toBe("search");
   });
 
+  it("includes Toggle Sidebar when shell provides toggleSidebar", async () => {
+    const toggleSidebar = vi.fn();
+    const commands = getCommands({ ...baseCtx, toggleSidebar });
+    const cmd = commands.find((c) => c.id === "system-toggle-sidebar");
+    expect(cmd).toBeDefined();
+    expect(cmd?.group).toBe("System");
+    expect(cmd?.shortcut).toBe("⌘\\");
+    await cmd!.run();
+    expect(toggleSidebar).toHaveBeenCalledOnce();
+  });
+
+  it("omits Toggle Sidebar when toggleSidebar is not provided", () => {
+    const commands = getCommands(baseCtx);
+    expect(commands.find((c) => c.id === "system-toggle-sidebar")).toBeUndefined();
+  });
+
   it("Search Context is placed before Settings in the Workspace group", () => {
     const commands = getCommands(baseCtx);
     const workspaceCommands = commands.filter((c) => c.group === "Workspace");

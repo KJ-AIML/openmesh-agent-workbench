@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { PanelLeft, PanelLeftClose } from "lucide-vue-next";
 import Sidebar from "./components/Sidebar.vue";
 import Titlebar from "./components/Titlebar.vue";
 import CommandPalette from "./components/CommandPalette.vue";
 import { useStore } from "./lib/useStore";
+import { useSidebarVisibility } from "./lib/useSidebarVisibility";
 import { getCommands, type Command } from "./lib/commands";
 import * as gitAdapter from "./lib/adapters/gitAdapter";
 import { scanConfiguredSessions } from "./lib/scanConfiguredSessions";
@@ -34,6 +36,7 @@ const {
   addRecentItem,
   store,
 } = useStore();
+const { sidebarVisible, toggleSidebar } = useSidebarVisibility();
 
 const splashMinimumElapsed = ref(false);
 const showSplash = computed(() => isLoading.value || !splashMinimumElapsed.value);
@@ -84,13 +87,19 @@ function togglePalette() {
   }
 }
 
-// Global keyboard shortcut: Ctrl+K / Cmd+K
+// Global keyboard shortcuts: Ctrl/Cmd+K palette, Ctrl/Cmd+\ sidebar
 function handleGlobalKeydown(e: KeyboardEvent) {
   const isCmd = e.metaKey || e.ctrlKey;
   if (isCmd && e.key === "k") {
     e.preventDefault();
     e.stopPropagation();
     togglePalette();
+    return;
+  }
+  if (isCmd && e.key === "\\") {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleSidebar();
   }
 }
 
@@ -188,6 +197,7 @@ const commands = computed(() =>
         alert("Failed to copy to clipboard. Please copy manually:\n\n" + prompt);
       }
     },
+    toggleSidebar,
     async launchAgentWithContext(tool: string, label: string) {
       if (!currentProject.value) return;
       const cwd = currentProject.value.terminalDir || currentProject.value.folderPath;
@@ -300,6 +310,11 @@ const breadcrumb = computed(() => {
   return [currentProject.value.name, page];
 });
 
+/** Collapsed macOS: crumb toggle/breadcrumbs share the ooo clearance band with title tabs. */
+const showCrumbTrafficClearance = computed(
+  () => macOS.value && !sidebarVisible.value,
+);
+
 // Expose palette toggle for sidebar
 defineExpose({ openPalette });
 </script>
@@ -311,7 +326,10 @@ defineExpose({ openPalette });
   -->
   <div
     class="shell"
-    :class="{ 'shell--mac': macOS }"
+    :class="{
+      'shell--mac': macOS,
+      'shell--sidebar-collapsed': !sidebarVisible,
+    }"
     style="color: var(--foreground)"
   >
     <Transition name="startup-splash">
@@ -326,13 +344,46 @@ defineExpose({ openPalette });
     <Titlebar v-if="!macOS" />
 
     <div class="shell__body">
-      <Sidebar @open-palette="openPalette" />
+      <div
+        class="shell__sidebar-slot"
+        :class="{ 'is-collapsed': !sidebarVisible }"
+        :aria-hidden="!sidebarVisible"
+        :inert="!sidebarVisible || undefined"
+      >
+        <Sidebar @open-palette="openPalette" />
+      </div>
 
       <div class="shell__main">
-        <Titlebar v-if="macOS" />
+        <Titlebar
+          v-if="macOS"
+          :clearance-for-traffic-lights="!sidebarVisible"
+        />
 
-        <header class="shell__crumb">
-          <nav class="flex items-center gap-1.5 text-[12px]">
+        <header
+          class="shell__crumb"
+          :class="{ 'shell__crumb--traffic-clearance': showCrumbTrafficClearance }"
+        >
+          <!--
+            Same structural inset as Titlebar tabs: padding-left alone was lost /
+            looked flush under ooo; spacer owns the toggle's left edge (~96px).
+          -->
+          <div
+            v-if="showCrumbTrafficClearance"
+            class="shell__crumb-traffic-clearance"
+            aria-hidden="true"
+          />
+          <button
+            type="button"
+            class="shell__sidebar-toggle"
+            :aria-pressed="sidebarVisible"
+            :aria-label="sidebarVisible ? 'Hide sidebar' : 'Show sidebar'"
+            :title="sidebarVisible ? 'Hide sidebar (⌘\\)' : 'Show sidebar (⌘\\)'"
+            @click="toggleSidebar"
+          >
+            <PanelLeftClose v-if="sidebarVisible" class="h-3.5 w-3.5" />
+            <PanelLeft v-else class="h-3.5 w-3.5" />
+          </button>
+          <nav class="flex items-center gap-1.5 text-[12px] min-w-0">
             <template v-for="(crumb, idx) in breadcrumb" :key="idx">
               <span
                 v-if="idx > 0"
@@ -387,6 +438,39 @@ defineExpose({ openPalette });
   background: var(--sidebar);
 }
 
+/* Clip rail width; keep inner Sidebar at 260px so collapse doesn't reflow nav. */
+.shell__sidebar-slot {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 260px;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  opacity: 1;
+  transition:
+    width 200ms ease,
+    opacity 180ms ease;
+}
+
+.shell__sidebar-slot.is-collapsed {
+  width: 0;
+  max-width: 0;
+  flex-basis: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.shell__sidebar-slot :deep(.app-sidebar) {
+  width: 260px;
+  min-width: 260px;
+  flex-shrink: 0;
+}
+
+.shell__sidebar-slot.is-collapsed :deep(.app-sidebar) {
+  min-width: 0;
+}
+
 .shell__main {
   display: flex;
   flex-direction: column;
@@ -398,18 +482,67 @@ defineExpose({ openPalette });
   border-left: 1px solid var(--border);
 }
 
-.shell--mac .shell__main {
-  /* titlebar paints --sidebar so top strip matches left rail */
+.shell--sidebar-collapsed .shell__main {
+  border-left: none;
 }
 
 .shell__crumb {
   display: flex;
   align-items: center;
+  gap: 0.65rem;
   height: 44px;
   padding: 0 1.25rem;
   border-bottom: 1px solid var(--border);
   background: var(--background);
   flex-shrink: 0;
+}
+
+/* Collapsed macOS: spacer owns left inset — zero pad so widths don't stack. */
+.shell__crumb--traffic-clearance {
+  padding-left: 0;
+}
+
+.shell__crumb-traffic-clearance {
+  flex: 0 0 var(--mac-traffic-lights-inset, 96px);
+  width: var(--mac-traffic-lights-inset, 96px);
+  min-width: var(--mac-traffic-lights-inset, 96px);
+  align-self: stretch;
+  pointer-events: none;
+}
+
+/* Belt-and-suspenders: shell state keeps tab row spacer at the shared inset. */
+.shell--mac.shell--sidebar-collapsed .shell__main :deep(.tb.tb--mac) {
+  padding-left: 0;
+}
+
+.shell--mac.shell--sidebar-collapsed .shell__main :deep(.tb__traffic-clearance) {
+  flex-basis: var(--mac-traffic-lights-inset, 96px);
+  width: var(--mac-traffic-lights-inset, 96px);
+  min-width: var(--mac-traffic-lights-inset, 96px);
+}
+
+.shell__sidebar-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.shell__sidebar-toggle:hover {
+  background: var(--surface-3);
+  color: var(--foreground);
+  border-color: var(--border-strong, var(--border));
 }
 
 .shell__content {
@@ -418,6 +551,12 @@ defineExpose({ openPalette });
   overflow-y: auto;
   padding: 1.25rem;
   background: var(--background);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shell__sidebar-slot {
+    transition: none;
+  }
 }
 
 /* macOS: sidebar is full window height; lights sit in its top-left */

@@ -57,6 +57,9 @@
 
   /* Shared chrome height: sidebar top row + main titlebar (must match) */
   --chrome-top: 44px;
+  /* Overlay titlebar traffic-light cluster clearance (collapsed sidebar).
+     Tabs share the traffic-light vertical band — 78px still reads flush; 96px clears. */
+  --mac-traffic-lights-inset: 96px;
 }
 
 /* Force continuous left rail under traffic lights */

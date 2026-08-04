@@ -414,12 +414,31 @@ export const AGENT_TOOLS: AgentTool[] = [
   },
 ];
 
+export const TOOLS_HELP_PREFIX = "Workspace Agent tools";
+
 export function listToolsHelp(): string {
   return (
-    "Workspace Agent tools (scoped to the active project path):\n\n" +
+    `${TOOLS_HELP_PREFIX} (scoped to the active project path):\n\n` +
     AGENT_TOOLS.map((t) => `- ${t.slash} — ${t.title}: ${t.description}`).join("\n") +
     "\n\nTip: type a slash command, or ask in plain language (e.g. “check pilot”, “show team”, “rc status”)."
   );
+}
+
+/** Detect the long `/tools` dump so the thread can collapse it. */
+export function isToolsHelpText(text: string): boolean {
+  return text.trimStart().startsWith(TOOLS_HELP_PREFIX);
+}
+
+/** One-line summary for a collapsed tools-help reply. */
+export function summarizeToolsHelp(text: string): string {
+  const names = text
+    .split("\n")
+    .map((line) => line.trim().match(/^- (\/[a-z-]+)\b/i)?.[1])
+    .filter((n): n is string => !!n);
+  if (names.length === 0) return "Workspace tools list";
+  const preview = names.slice(0, 4).join(", ");
+  const more = names.length > 4 ? ` · +${names.length - 4} more` : "";
+  return `${names.length} tools · ${preview}${more}`;
 }
 
 export function resolveToolsForMessage(message: string): AgentTool[] {

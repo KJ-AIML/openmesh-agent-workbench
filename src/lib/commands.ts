@@ -45,6 +45,8 @@ export interface CommandContext {
   createSnapshot: () => Promise<void>;
   copyAgentContext: () => Promise<void>;
   launchAgentWithContext: (tool: string, label: string) => Promise<void>;
+  /** Optional — toggles the main app sidebar when provided by the shell. */
+  toggleSidebar?: () => void;
 }
 
 export function getCommands(ctx: CommandContext): Command[] {
@@ -443,6 +445,21 @@ export function getCommands(ctx: CommandContext): Command[] {
       ctx.openFolder("/settings");
     },
   });
+
+  if (ctx.toggleSidebar) {
+    commands.push({
+      id: "system-toggle-sidebar",
+      group: "System",
+      title: "Toggle Sidebar",
+      description: "Show or hide the main navigation rail",
+      icon: "layout",
+      shortcut: "⌘\\",
+      available: true,
+      async run() {
+        ctx.toggleSidebar?.();
+      },
+    });
+  }
 
   return commands;
 }

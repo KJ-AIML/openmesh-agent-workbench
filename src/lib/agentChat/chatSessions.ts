@@ -155,13 +155,125 @@ export function createChatMessage(
   };
 }
 
-/** Turns a user's first message into a short, app-like chat title. */
-export function deriveTitleFromMessage(text: string): string {
-  const cleaned = text.replace(/\s+/g, " ").trim();
+/** Deep-enough clone for forked history (new ids; tool call records copied). */
+export function cloneChatMessage(message: ChatMessage): ChatMessage {
+  return {
+    id: uid("msg"),
+    role: message.role,
+    text: message.text,
+    toolCalls: message.toolCalls?.map((t) => ({ ...t })),
+    at: message.at,
+  };
+}
+
+function truncateTitle(title: string): string {
+  const cleaned = title.replace(/\s+/g, " ").trim();
   if (!cleaned) return DEFAULT_CHAT_TITLE;
   return cleaned.length > TITLE_MAX_LEN
     ? `${cleaned.slice(0, TITLE_MAX_LEN - 1).trimEnd()}…`
     : cleaned;
+}
+
+/** Title for a forked chat — prefers "Fork of …", else first user message. */
+export function deriveForkTitle(
+  source: ChatSession,
+  forkedMessages: ChatMessage[],
+): string {
+  if (!source.titleIsDefault && source.title.trim()) {
+    return truncateTitle(`Fork of ${source.title.trim()}`);
+  }
+  const firstUser = forkedMessages.find((m) => m.role === "user");
+  if (firstUser && isAutoTitleWorthy(firstUser.text)) {
+    return truncateTitle(`Fork of ${deriveTitleFromMessage(firstUser.text)}`);
+  }
+  return truncateTitle(`Fork of ${DEFAULT_CHAT_TITLE}`);
+}
+
+/**
+ * New session cloning history up to and including `messageIndex`.
+ * Returns null when the index is out of range.
+ */
+export function forkSessionAt(
+  session: ChatSession,
+  messageIndex: number,
+): ChatSession | null {
+  if (
+    !Number.isInteger(messageIndex) ||
+    messageIndex < 0 ||
+    messageIndex >= session.messages.length
+  ) {
+    return null;
+  }
+  const now = Date.now();
+  const messages = session.messages
+    .slice(0, messageIndex + 1)
+    .map(cloneChatMessage);
+  return {
+    id: uid("chat"),
+    title: deriveForkTitle(session, messages),
+    titleIsDefault: false,
+    messages,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+/** Slash commands that should never become a raw "/tools"-style title. */
+const SLASH_TITLES: Record<string, string> = {
+  tools: "Tools list",
+  help: "Help",
+  pilot: "Pilot status",
+  rc: "RC status",
+  team: "Team workspace",
+  search: "Search",
+  git: "Git status",
+  pending: "Pending questions",
+  docs: "Docs",
+  project: "Project info",
+  notes: "Notes",
+  sprint: "Sprint",
+  continuity: "Continuity",
+  digest: "Return digest",
+  trust: "Trust policy",
+  connectors: "Connectors",
+  org: "Org graph",
+  peers: "Mesh peers",
+  ask: "Proxy ask",
+};
+
+/** Short / low-signal messages that should not rename the chat. */
+const LOW_SIGNAL =
+  /^(ok|okay|k|yes|y|no|n|thanks|thank you|thx|ty|hi|hey|hello|yo|sup|cool|sure|np|hmm+|lol|yep|nope)\.?$/i;
+
+/**
+ * Turns a user's first message into a short, app-like chat title.
+ * Returns {@link DEFAULT_CHAT_TITLE} for empty/low-signal input — callers
+ * should keep `titleIsDefault` so a later message can still title the chat.
+ */
+export function deriveTitleFromMessage(text: string): string {
+  const cleaned = text.replace(/\s+/g, " ").trim();
+  if (!cleaned || LOW_SIGNAL.test(cleaned)) return DEFAULT_CHAT_TITLE;
+
+  const slash = cleaned.match(/^\/([a-z-]+)\b/i);
+  if (slash) {
+    const cmd = slash[1].toLowerCase();
+    const label = SLASH_TITLES[cmd] ?? `/${cmd}`;
+    const rest = cleaned.slice(slash[0].length).trim();
+    if (!rest) return label;
+    const combined = `${label}: ${rest}`;
+    return combined.length > TITLE_MAX_LEN
+      ? `${combined.slice(0, TITLE_MAX_LEN - 1).trimEnd()}…`
+      : combined;
+  }
+
+  return cleaned.length > TITLE_MAX_LEN
+    ? `${cleaned.slice(0, TITLE_MAX_LEN - 1).trimEnd()}…`
+    : cleaned;
+}
+
+/** True when deriveTitleFromMessage produced a real title (not the default placeholder). */
+export function isAutoTitleWorthy(text: string): boolean {
+  return deriveTitleFromMessage(text) !== DEFAULT_CHAT_TITLE;
 }
 
 export function touchSession(session: ChatSession): void {

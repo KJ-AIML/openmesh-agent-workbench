@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { resolveToolsForMessage, listToolsHelp } from "../src/lib/agentChat/tools";
+import {
+  resolveToolsForMessage,
+  listToolsHelp,
+  isToolsHelpText,
+  summarizeToolsHelp,
+} from "../src/lib/agentChat/tools";
 import { __test_resolve, __test_toolIds } from "../src/lib/agentChat/runner";
 
 describe("agent chat tool routing", () => {
@@ -38,5 +43,7 @@ describe("agent chat tool routing", () => {
     const help = listToolsHelp();
     expect(help).toContain("/pilot");
     expect(help).toContain("/rc");
+    expect(isToolsHelpText(help)).toBe(true);
+    expect(summarizeToolsHelp(help)).toMatch(/^\d+ tools ·/);
   });
 });

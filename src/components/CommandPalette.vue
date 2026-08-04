@@ -17,6 +17,7 @@ import {
   Search,
   ArrowRight,
   Lock,
+  PanelLeft,
 } from "lucide-vue-next";
 import type { Command, CommandGroup } from "../lib/commands";
 import { GROUP_ORDER } from "../lib/commands";
@@ -49,6 +50,7 @@ const iconMap: Record<string, any> = {
   "list-todo": ListTodo,
   settings: Settings,
   plus: Plus,
+  layout: PanelLeft,
 };
 
 // Filter commands by search query

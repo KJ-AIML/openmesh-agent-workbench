@@ -11,6 +11,14 @@ import {
 import { isMacOS, isTauriRuntime, resolveIsMacOS } from "../lib/adapters/environment";
 import { useStore } from "../lib/useStore";
 
+const props = withDefaults(
+  defineProps<{
+    /** When sidebar is collapsed on macOS, clear native traffic lights. */
+    clearanceForTrafficLights?: boolean;
+  }>(),
+  { clearanceForTrafficLights: false },
+);
+
 const { currentProject } = useStore();
 
 const macOS = ref(
@@ -18,6 +26,16 @@ const macOS = ref(
     isMacOS(),
 );
 const maximized = ref(false);
+
+/** Tabs share the ooo vertical band — spacer before nav, not just header padding. */
+const showTrafficClearance = computed(
+  () => macOS.value && props.clearanceForTrafficLights,
+);
+
+const titlebarClass = computed(() => [
+  macOS.value ? "tb--mac" : "tb--win",
+  showTrafficClearance.value ? "tb--mac-traffic-clearance" : null,
+]);
 
 const showCustomWindowControls = computed(
   () => isTauriRuntime() && !macOS.value,
@@ -78,10 +96,22 @@ async function handleDrag(e: MouseEvent) {
   -->
   <header
     class="tb"
-    :class="macOS ? 'tb--mac' : 'tb--win'"
+    :class="titlebarClass"
     data-tauri-drag-region
     @mousedown="handleDrag"
   >
+    <!--
+      Structural inset for Chat/Work/Docs/Sprint when the rail is gone.
+      Padding alone on .tb lost to .tb--mac shorthand / felt flush at 78px;
+      this flex spacer owns the tab cluster's left edge.
+    -->
+    <div
+      v-if="showTrafficClearance"
+      class="tb__traffic-clearance"
+      aria-hidden="true"
+      data-tauri-drag-region
+    />
+
     <div v-if="!macOS" class="tb__brand" data-no-drag>
       <span class="tb__mark" aria-hidden="true">O</span>
       <span class="tb__name">OpenMesh</span>
@@ -181,6 +211,19 @@ async function handleDrag(e: MouseEvent) {
   padding: 0 14px 0 12px;
   background: var(--sidebar);
   border-bottom: 1px solid var(--border);
+}
+
+/* Sidebar collapsed: spacer owns left inset — zero header pad so widths don't stack. */
+.tb--mac.tb--mac-traffic-clearance {
+  padding-left: 0;
+}
+
+.tb__traffic-clearance {
+  flex: 0 0 var(--mac-traffic-lights-inset, 96px);
+  width: var(--mac-traffic-lights-inset, 96px);
+  min-width: var(--mac-traffic-lights-inset, 96px);
+  align-self: stretch;
+  pointer-events: none;
 }
 
 .tb__brand {

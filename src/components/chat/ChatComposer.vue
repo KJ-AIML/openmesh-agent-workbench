@@ -34,7 +34,7 @@ defineExpose({ insertSlash });
       v-model="input"
       class="chat-composer__input"
       rows="2"
-      placeholder="Ask the workspace… (/tools for commands)"
+      placeholder="Ask the workspace…"
       @keydown.enter.exact.prevent="submit"
     />
     <button
