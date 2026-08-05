@@ -1,6 +1,9 @@
 mod continuity_desktop;
 mod agent_engine_desktop;
+mod canvas_desktop;
 mod extensions_desktop;
+mod voice;
+mod voice_desktop;
 
 use openmesh_core::context_service;
 use openmesh_core::session_readers;
@@ -389,6 +392,7 @@ fn open_agent_cli(
     cli_path: Option<String>,
     resume_session_id: Option<String>,
     extra_args: Option<Vec<String>>,
+    brief_path: Option<String>,
 ) -> AgentCliLaunchResult {
     let cwd_path = PathBuf::from(&cwd);
 
@@ -460,6 +464,37 @@ fn open_agent_cli(
             }
             command.push(' ');
             command.push_str(a);
+        }
+    }
+    // Surface OpenMesh brief path in the terminal before the agent CLI starts.
+    if let Some(bp) = brief_path
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        if bp.chars().any(|c| {
+            c == ';'
+                || c == '|'
+                || c == '&'
+                || c == '`'
+                || c == '$'
+                || c == '\n'
+                || c == '\r'
+                || c == '"'
+                || c == '\''
+        }) {
+            return AgentCliLaunchResult {
+                success: false,
+                error: Some("invalid brief path".into()),
+            };
+        }
+        #[cfg(target_os = "windows")]
+        {
+            command = format!("echo OpenMesh brief: {} && {}", bp, command);
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            command = format!("echo 'OpenMesh brief: {}' && {}", bp, command);
         }
     }
 
@@ -1320,9 +1355,11 @@ pub fn run() {
             agent_engine_desktop::agent_patch_summary,
             agent_engine_desktop::agent_recipe_list,
             agent_engine_desktop::agent_recipe_run,
+            agent_engine_desktop::agent_recipe_suggest,
             agent_engine_desktop::agent_recipe_cancel,
             agent_engine_desktop::agent_recipe_get,
             agent_engine_desktop::agent_delegate_brief,
+            agent_engine_desktop::agent_delegate_record_launch,
             agent_engine_desktop::agent_runs_recent,
             agent_engine_desktop::agent_handoff_approve,
             // Skills / Hooks / Plugins (local marketplace MVP)
@@ -1330,6 +1367,31 @@ pub fn run() {
             extensions_desktop::extensions_catalog,
             extensions_desktop::extensions_set_enabled,
             extensions_desktop::extensions_install,
+            // Voice (MVP B + P5/P6)
+            voice_desktop::voice_speak,
+            voice_desktop::voice_speak_stop,
+            voice_desktop::voice_transcribe,
+            voice_desktop::voice_model_catalog,
+            voice_desktop::voice_model_status,
+            // Canvas (P8)
+            canvas_desktop::canvas_list,
+            canvas_desktop::canvas_create,
+            canvas_desktop::canvas_load,
+            canvas_desktop::canvas_add_node,
+            canvas_desktop::canvas_connect,
+            canvas_desktop::canvas_delete_node,
+            canvas_desktop::canvas_auto_ui_list,
+            canvas_desktop::canvas_auto_ui_load,
+            canvas_desktop::canvas_auto_ui_upsert,
+            canvas_desktop::canvas_auto_ui_delete,
+            canvas_desktop::canvas_board_list,
+            canvas_desktop::canvas_board_create,
+            canvas_desktop::canvas_board_load,
+            canvas_desktop::canvas_board_upsert,
+            canvas_desktop::canvas_board_save_scene,
+            canvas_desktop::canvas_board_delete,
+            canvas_desktop::canvas_board_add_sticky,
+            canvas_desktop::canvas_board_connect,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

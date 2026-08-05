@@ -212,6 +212,18 @@ pub fn builtin_skills() -> Vec<SkillPack> {
             plugin_id: None,
             path: None,
         },
+        SkillPack {
+            id: "openmesh-canvas".into(),
+            name: "OpenMesh Canvas".into(),
+            description:
+                "Create Auto UI canvases (schema openmesh.canvas/1) for dashboards and status boards."
+                    .into(),
+            body: BUILTIN_CANVAS.into(),
+            enabled: true,
+            source: ExtensionSource::Builtin,
+            plugin_id: None,
+            path: None,
+        },
     ]
 }
 
@@ -248,6 +260,44 @@ Before answering about project progress, blockers, or "where we left off":
 1. Prefer Continuity / Current State / pending tools when available.
 2. Cite what the tools returned; do not fabricate sprint or mesh facts.
 3. If Continuity data is missing, say so and suggest rebuilding Current State."#;
+
+const BUILTIN_CANVAS: &str = r#"# OpenMesh Canvas (Auto UI)
+
+OpenMesh Canvas is **not** Cursor `.canvas.tsx`. Do not import `cursor/canvas`.
+Agents create safe JSON UI documents with schema `openmesh.canvas/1`.
+
+## When to use
+- Status boards, sprint pulses, comparison tables, checklists, architecture notes as structured UI
+- Prefer a canvas over dumping huge markdown tables into chat
+
+## How
+Call tool `canvas_upsert_auto_ui` with:
+```json
+{
+  "document": {
+    "schema": "openmesh.canvas/1",
+    "id": "sprint-pulse",
+    "title": "Sprint pulse",
+    "summary": "optional one-liner",
+    "blocks": [
+      { "type": "h1", "text": "Sprint pulse" },
+      { "type": "stats", "items": [
+        { "label": "Done", "value": "3/8" },
+        { "label": "Blocked", "value": "1" }
+      ]},
+      { "type": "callout", "text": "Ship LAN ask next", "tone": "warn" },
+      { "type": "table", "columns": ["Task", "Status"], "rows": [["Docs", "done"]] },
+      { "type": "todo", "items": [{ "text": "Dogfood Auto UI", "done": false }] }
+    ]
+  }
+}
+```
+
+Allowed block types only: `h1`, `h2`, `text`, `callout`, `stat`, `stats`, `table`, `pills`, `todo`, `code`, `divider`.
+No HTML, no scripts, no arbitrary imports.
+
+## After creating
+Tell the user to open the sidebar **Canvas** page, then the **Auto UI** tab (not Network — Network is the machine graph). You may also show a ```canvas fence with the same JSON in chat (it renders inline)."#;
 
 /// Parse `SKILL.md` with optional `---` frontmatter (`name`, `description`).
 pub fn parse_skill_markdown(id: &str, raw: &str) -> Result<SkillPack, ExtensionError> {

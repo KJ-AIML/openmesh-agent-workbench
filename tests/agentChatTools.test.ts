@@ -63,6 +63,18 @@ describe("agent chat tool routing", () => {
     expect(__test_resolve("show org graph")).toContain("org_graph");
   });
 
+  it("prefers /continue for handoff continuity keywords", () => {
+    expect(resolveToolsForMessage("create handoff for teammate").map((t) => t.id)[0]).toBe(
+      "continue",
+    );
+    expect(resolveToolsForMessage("please continue from pending work").map((t) => t.id)).toContain(
+      "continue",
+    );
+    expect(__test_resolve("create handoff")).toEqual(
+      expect.arrayContaining(["continue"]),
+    );
+  });
+
   it("help text lists slash commands", () => {
     const help = listToolsHelp();
     expect(help).toContain("/pilot");

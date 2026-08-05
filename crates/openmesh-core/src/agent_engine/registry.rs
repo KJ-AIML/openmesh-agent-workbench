@@ -4,6 +4,7 @@ use super::types::ToolSpec;
 use serde_json::json;
 
 /// Ask mode — inspect only (no propose / metadata writes).
+/// Kept lean so models don't thrash status/mesh tools on every chat turn.
 pub fn ask_tool_names() -> &'static [&'static str] {
     &[
         "project_info",
@@ -16,11 +17,11 @@ pub fn ask_tool_names() -> &'static [&'static str] {
         "git_status",
         "search_context",
         "continuity_summary",
-        "list_mesh_peers",
-        "pilot_status",
-        "rc_status",
         "pending_questions",
-        "list_recipes",
+        "ui_navigate",
+        "app_get_context",
+        "app_propose_action",
+        // Ask: no canvas_upsert_auto_ui — writes belong in Plan/Act
     ]
 }
 
@@ -42,6 +43,10 @@ pub fn plan_tool_names() -> &'static [&'static str] {
         "rc_status",
         "pending_questions",
         "list_recipes",
+        "ui_navigate",
+        "app_get_context",
+        "app_propose_action",
+        "canvas_upsert_auto_ui",
         "propose_patch",
         "create_handoff_draft",
     ]
@@ -66,6 +71,10 @@ pub fn act_tool_names() -> &'static [&'static str] {
         "rc_status",
         "pending_questions",
         "list_recipes",
+        "ui_navigate",
+        "app_get_context",
+        "app_propose_action",
+        "canvas_upsert_auto_ui",
         "propose_patch",
         "create_handoff_draft",
         "update_task",
@@ -224,6 +233,60 @@ pub fn builtin_tool_specs() -> Vec<ToolSpec> {
             parameters: json!({
                 "type": "object",
                 "properties": {},
+                "additionalProperties": false
+            }),
+        },
+        ToolSpec {
+            name: "ui_navigate".into(),
+            description: "Open an in-app page for the user (Work, Chat, Docs, Sprint, Notes, Settings, Continuity, Agent Sessions, Context). Does not click arbitrary UI.".into(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "route": {
+                        "type": "string",
+                        "description": "App route or alias, e.g. \"/docs\", \"chat\", \"work\", \"sprint\", \"settings\""
+                    }
+                },
+                "required": ["route"],
+                "additionalProperties": false
+            }),
+        },
+        ToolSpec {
+            name: "app_get_context".into(),
+            description: "Read lightweight UI context: current project path, allowed navigate routes, and chat mode hints. Use before navigating when unsure where the user is.".into(),
+            parameters: json!({
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+            }),
+        },
+        ToolSpec {
+            name: "app_propose_action".into(),
+            description: "Propose a typed in-app AppAction (createNote, createSprint, runRecipe, openCanvas, canvasAddNode, canvasConnect, etc.). Write/external/destructive actions require user confirmation — never silent.".into(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "object",
+                        "description": "Tagged AppAction JSON, e.g. {\"type\":\"createNote\",\"title\":\"Ideas\"} or {\"type\":\"canvasAddNode\",\"label\":\"Machine A\",\"kind\":\"machine\"}"
+                    }
+                },
+                "required": ["action"],
+                "additionalProperties": false
+            }),
+        },
+        ToolSpec {
+            name: "canvas_upsert_auto_ui".into(),
+            description: "Create or update an OpenMesh Auto UI canvas artifact (safe JSON UI, schema openmesh.canvas/1). Persists under .openmesh/canvases/auto-ui/ and shows on Canvas → Auto UI. Prefer this over dumping long markdown tables.".into(),
+            parameters: json!({
+                "type": "object",
+                "properties": {
+                    "document": {
+                        "type": "object",
+                        "description": "Auto UI document: { schema:\"openmesh.canvas/1\", id, title, summary?, blocks:[{type, ...}] }. Block types: h1, h2, text, callout, stat, stats, table, pills, todo, code, divider."
+                    }
+                },
+                "required": ["document"],
                 "additionalProperties": false
             }),
         },
@@ -406,9 +469,14 @@ mod tests {
     fn empty_allowlist_is_ask_read_only() {
         let tools = filter_tools(&[]);
         assert!(tools.iter().any(|t| t.name == "read_file"));
+        assert!(tools.iter().any(|t| t.name == "ui_navigate"));
         assert!(!tools.iter().any(|t| t.name == "propose_patch"));
         assert!(!tools.iter().any(|t| t.name == "approve_handoff"));
         assert!(!tools.iter().any(|t| t.name == "update_task"));
+        assert!(
+            !tools.iter().any(|t| t.name == "canvas_upsert_auto_ui"),
+            "Ask must not persist Auto UI writes"
+        );
     }
 
     #[test]

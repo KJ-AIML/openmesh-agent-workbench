@@ -10,6 +10,7 @@ import AgentChatPage from "./pages/AgentChatPage.vue";
 import NotesPage from "./pages/NotesPage.vue";
 import ContextPage from "./pages/ContextPage.vue";
 import ContinuityPage from "./pages/ContinuityPage.vue";
+import CanvasPage from "./pages/CanvasPage.vue";
 
 const router = createRouter({
 	history: createWebHistory(),
@@ -44,6 +45,11 @@ const router = createRouter({
 			path: "/notes",
 			name: "notes",
 			component: NotesPage,
+		},
+		{
+			path: "/canvas",
+			name: "canvas",
+			component: CanvasPage,
 		},
 		// Legacy routes → Settings sections
 		{ path: "/models", redirect: { path: "/settings", query: { section: "provider" } } },

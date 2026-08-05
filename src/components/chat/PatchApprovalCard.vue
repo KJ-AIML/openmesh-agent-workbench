@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { onMounted, ref, watch } from "vue";
 import {
   applyAgentPatch,
   getAgentPatch,
+  listAgentRecipes,
   rejectAgentPatch,
   rollbackAgentPatch,
   runAgentWorkspaceTool,
+  suggestAgentRecipe,
+  type AgentRecipe,
   type PatchRecord,
 } from "../../lib/agentEngineClient";
 
@@ -17,17 +20,23 @@ const props = defineProps<{
 const emit = defineEmits<{
   done: [result: { action: string; patch: PatchRecord }];
   handoff: [summary: string];
+  verify: [payload: { recipeId: string; patchId: string }];
 }>();
 
 const patch = ref<PatchRecord | null>(null);
 const error = ref<string | null>(null);
 const busy = ref(false);
 const handoffNote = ref<string | null>(null);
+const recipes = ref<AgentRecipe[]>([]);
+const selectedRecipe = ref("npm-typecheck");
 
 async function load() {
   error.value = null;
   try {
     patch.value = await getAgentPatch(props.projectPath, props.patchId);
+    recipes.value = await listAgentRecipes(props.projectPath);
+    const paths = (patch.value?.files ?? []).map((f) => f.path);
+    selectedRecipe.value = await suggestAgentRecipe(props.projectPath, paths);
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
   }
@@ -45,6 +54,15 @@ async function run(action: "apply" | "reject" | "rollback") {
           : rollbackAgentPatch;
     const next = await fn(props.projectPath, props.patchId);
     patch.value = next;
+    if (action === "apply" && next.status === "applied") {
+      const paths = next.files.map((f) => f.path);
+      try {
+        selectedRecipe.value = await suggestAgentRecipe(props.projectPath, paths);
+        recipes.value = await listAgentRecipes(props.projectPath);
+      } catch {
+        /* keep prior suggestion */
+      }
+    }
     emit("done", { action, patch: next });
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
@@ -53,14 +71,29 @@ async function run(action: "apply" | "reject" | "rollback") {
   }
 }
 
+function startVerify() {
+  if (!selectedRecipe.value) return;
+  emit("verify", { recipeId: selectedRecipe.value, patchId: props.patchId });
+}
+
 async function createHandoff() {
   busy.value = true;
   error.value = null;
   handoffNote.value = null;
   try {
+    const files = (patch.value?.files ?? []).map((f) => f.path).join(", ");
+    const context = [
+      `Patch ${props.patchId} (${patch.value?.status ?? "?"})`,
+      patch.value?.summary ? `Summary: ${patch.value.summary}` : "",
+      files ? `Files: ${files}` : "",
+      `Suggested verify: ${selectedRecipe.value}`,
+    ]
+      .filter(Boolean)
+      .join("\n");
     const out = await runAgentWorkspaceTool(props.projectPath, "create_handoff_draft", {
       recipient: "teammate",
       role: "engineer",
+      context,
     });
     handoffNote.value = out;
     emit("handoff", out);
@@ -72,6 +105,12 @@ async function createHandoff() {
 }
 
 onMounted(load);
+watch(
+  () => props.patchId,
+  () => {
+    void load();
+  },
+);
 </script>
 
 <template>
@@ -125,6 +164,25 @@ onMounted(load);
           Create handoff
         </button>
       </div>
+
+      <div v-if="patch.status === 'applied'" class="patch-card__verify">
+        <label class="patch-card__verify-label">
+          Next: verify
+          <select v-model="selectedRecipe" class="patch-card__select" :disabled="busy">
+            <option v-for="r in recipes" :key="r.id" :value="r.id">
+              {{ r.title || r.id }}
+            </option>
+          </select>
+        </label>
+        <button
+          type="button"
+          class="patch-card__btn patch-card__btn--apply"
+          :disabled="busy || !selectedRecipe"
+          @click="startVerify"
+        >
+          Verify
+        </button>
+      </div>
       <pre v-if="handoffNote" class="patch-card__handoff">{{ handoffNote }}</pre>
     </template>
     <p v-else class="patch-card__meta">Loading…</p>
@@ -162,10 +220,34 @@ onMounted(load);
   margin: 0.35rem 0 0.55rem;
   padding-left: 1.1rem;
 }
-.patch-card__actions {
+.patch-card__actions,
+.patch-card__verify {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
+  align-items: center;
+}
+.patch-card__verify {
+  margin-top: 0.55rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid color-mix(in srgb, var(--border, #333) 70%, transparent);
+}
+.patch-card__verify-label {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  font-size: 0.8rem;
+  opacity: 0.9;
+}
+.patch-card__select {
+  min-width: 10rem;
+  border: 1px solid color-mix(in srgb, var(--border, #444) 90%, transparent);
+  background: color-mix(in srgb, #000 25%, transparent);
+  color: inherit;
+  border-radius: 6px;
+  padding: 0.25rem 0.4rem;
+  font-size: 0.78rem;
 }
 .patch-card__btn {
   border: 1px solid color-mix(in srgb, var(--border, #444) 90%, transparent);

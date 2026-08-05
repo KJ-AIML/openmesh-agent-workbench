@@ -90,6 +90,67 @@ pub fn ensure_default_recipes(project_path: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn project_has_cargo(project_path: &str) -> bool {
+    let root = PathBuf::from(project_path);
+    root.join("Cargo.toml").is_file() || root.join("crates").is_dir()
+}
+
+fn project_has_npm(project_path: &str) -> bool {
+    PathBuf::from(project_path).join("package.json").is_file()
+}
+
+/// Prefer recipes that match the open project (cargo vs npm).
+fn sort_recipes_for_project(project_path: &str, recipes: &mut [Recipe]) {
+    let has_cargo = project_has_cargo(project_path);
+    let has_npm = project_has_npm(project_path);
+    recipes.sort_by(|a, b| {
+        let score = |r: &Recipe| -> u8 {
+            match r.id.as_str() {
+                "cargo-test-core" if has_cargo => 0,
+                "npm-typecheck" if has_npm => 1,
+                "npm-test" if has_npm => 2,
+                "cargo-test-core" => 8,
+                "npm-typecheck" | "npm-test" => 9,
+                _ => 5,
+            }
+        };
+        score(a).cmp(&score(b)).then_with(|| a.id.cmp(&b.id))
+    });
+}
+
+/// Pick a default verify recipe from project markers + changed paths.
+pub fn suggest_verify_recipe(project_path: &str, changed_paths: &[String]) -> Result<String, String> {
+    let recipes = list_recipes(project_path)?;
+    if recipes.is_empty() {
+        return Err("no recipes available".into());
+    }
+    let rust_touch = changed_paths.iter().any(|p| {
+        let p = p.replace('\\', "/");
+        p.contains("crates/") || p.ends_with(".rs") || p.contains("src-tauri/")
+    });
+    let fe_touch = changed_paths.iter().any(|p| {
+        let p = p.replace('\\', "/");
+        p.starts_with("src/")
+            || p.ends_with(".vue")
+            || p.ends_with(".ts")
+            || p.ends_with(".tsx")
+            || p.ends_with(".css")
+    });
+    let ids: Vec<&str> = recipes.iter().map(|r| r.id.as_str()).collect();
+    let pick = if rust_touch && !fe_touch && ids.contains(&"cargo-test-core") {
+        "cargo-test-core"
+    } else if fe_touch && !rust_touch && ids.contains(&"npm-typecheck") {
+        "npm-typecheck"
+    } else if project_has_cargo(project_path) && ids.contains(&"cargo-test-core") {
+        "cargo-test-core"
+    } else if project_has_npm(project_path) && ids.contains(&"npm-typecheck") {
+        "npm-typecheck"
+    } else {
+        recipes[0].id.as_str()
+    };
+    Ok(pick.to_string())
+}
+
 pub fn list_recipes(project_path: &str) -> Result<Vec<Recipe>, String> {
     ensure_default_recipes(project_path)?;
     let dir = recipes_dir(project_path);
@@ -105,7 +166,7 @@ pub fn list_recipes(project_path: &str) -> Result<Vec<Recipe>, String> {
             out.push(r);
         }
     }
-    out.sort_by(|a, b| a.id.cmp(&b.id));
+    sort_recipes_for_project(project_path, &mut out);
     Ok(out)
 }
 
@@ -179,6 +240,16 @@ pub fn run_recipe(
     recipe_id: &str,
     run_key: &str,
     on_log: Option<LogCallback>,
+) -> Result<RecipeRunResult, String> {
+    run_recipe_with_patch(project_path, recipe_id, run_key, on_log, None)
+}
+
+pub fn run_recipe_with_patch(
+    project_path: &str,
+    recipe_id: &str,
+    run_key: &str,
+    on_log: Option<LogCallback>,
+    patch_id: Option<&str>,
 ) -> Result<RecipeRunResult, String> {
     let recipe = get_recipe(project_path, recipe_id)?;
     validate_argv(&recipe.argv)?;
@@ -268,6 +339,14 @@ pub fn run_recipe(
     let duration_ms = started.elapsed().as_millis() as u64;
     let ok = !timed_out && !cancelled && exit_code == Some(0);
 
+    let mut detail = json!({
+        "recipeId": recipe_id,
+        "exitCode": exit_code,
+        "durationMs": duration_ms,
+    });
+    if let Some(pid) = patch_id.filter(|s| !s.trim().is_empty()) {
+        detail["patchId"] = json!(pid);
+    }
     let run = append_run(
         project_path,
         "verify_recipe",
@@ -280,11 +359,7 @@ pub fn run_recipe(
         } else {
             "failed"
         },
-        json!({
-            "recipeId": recipe_id,
-            "exitCode": exit_code,
-            "durationMs": duration_ms,
-        }),
+        detail,
     )?;
 
     // Clip stored logs in ledger detail already small; full text returned to caller.
@@ -342,6 +417,28 @@ mod tests {
     }
 
     #[test]
+    fn suggest_prefers_cargo_for_rust_paths() {
+        let project = temp_project();
+        fs::write(PathBuf::from(&project).join("Cargo.toml"), "[package]\nname=\"t\"\n").unwrap();
+        let id = suggest_verify_recipe(
+            &project,
+            &["crates/openmesh-core/src/lib.rs".into()],
+        )
+        .unwrap();
+        assert_eq!(id, "cargo-test-core");
+        let _ = fs::remove_dir_all(&project);
+    }
+
+    #[test]
+    fn suggest_prefers_typecheck_for_fe_paths() {
+        let project = temp_project();
+        fs::write(PathBuf::from(&project).join("package.json"), "{\"name\":\"t\"}\n").unwrap();
+        let id = suggest_verify_recipe(&project, &["src/pages/Foo.vue".into()]).unwrap();
+        assert_eq!(id, "npm-typecheck");
+        let _ = fs::remove_dir_all(&project);
+    }
+
+    #[test]
     fn runs_echo_recipe() {
         let project = temp_project();
         let dir = recipes_dir(&project);
@@ -361,6 +458,81 @@ mod tests {
         let result = run_recipe(&project, "echo-hi", "test-run-1", None).unwrap();
         assert!(result.ok, "{result:?}");
         assert!(result.stdout.contains("hello-openmesh"), "{:?}", result.stdout);
+        let _ = fs::remove_dir_all(&project);
+    }
+
+    #[test]
+    fn blocks_forbidden_argv() {
+        let project = temp_project();
+        let dir = recipes_dir(&project);
+        fs::create_dir_all(&dir).unwrap();
+        let recipe = Recipe {
+            id: "bad-push".into(),
+            title: "blocked".into(),
+            argv: vec!["git".into(), "push".into(), "origin".into(), "main".into()],
+            cwd_rel: String::new(),
+            timeout_ms: 5_000,
+        };
+        atomic_write(
+            &dir.join("bad-push.json"),
+            &serde_json::to_string_pretty(&recipe).unwrap(),
+        )
+        .unwrap();
+        let err = run_recipe(&project, "bad-push", "test-blocked", None).unwrap_err();
+        assert!(err.contains("blocked"), "{err}");
+        let _ = fs::remove_dir_all(&project);
+    }
+
+    #[test]
+    fn times_out_long_recipe() {
+        let project = temp_project();
+        let dir = recipes_dir(&project);
+        fs::create_dir_all(&dir).unwrap();
+        let recipe = Recipe {
+            id: "sleep-long".into(),
+            title: "sleep".into(),
+            argv: vec!["sleep".into(), "30".into()],
+            cwd_rel: String::new(),
+            // Runner clamps timeout to at least 1000ms.
+            timeout_ms: 1_000,
+        };
+        atomic_write(
+            &dir.join("sleep-long.json"),
+            &serde_json::to_string_pretty(&recipe).unwrap(),
+        )
+        .unwrap();
+        let result = run_recipe(&project, "sleep-long", "test-timeout", None).unwrap();
+        assert!(result.timed_out, "{result:?}");
+        assert!(!result.ok);
+        let _ = fs::remove_dir_all(&project);
+    }
+
+    #[test]
+    fn cancels_running_recipe() {
+        let project = temp_project();
+        let dir = recipes_dir(&project);
+        fs::create_dir_all(&dir).unwrap();
+        let recipe = Recipe {
+            id: "sleep-cancel".into(),
+            title: "sleep".into(),
+            argv: vec!["sleep".into(), "30".into()],
+            cwd_rel: String::new(),
+            timeout_ms: 60_000,
+        };
+        atomic_write(
+            &dir.join("sleep-cancel.json"),
+            &serde_json::to_string_pretty(&recipe).unwrap(),
+        )
+        .unwrap();
+        let project2 = project.clone();
+        let handle = thread::spawn(move || {
+            thread::sleep(Duration::from_millis(200));
+            assert!(cancel_recipe_run("test-cancel"));
+        });
+        let result = run_recipe(&project2, "sleep-cancel", "test-cancel", None).unwrap();
+        handle.join().unwrap();
+        assert!(result.cancelled, "{result:?}");
+        assert!(!result.ok);
         let _ = fs::remove_dir_all(&project);
     }
 }

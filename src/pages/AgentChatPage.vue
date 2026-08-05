@@ -45,7 +45,18 @@ import {
   cancelAgentEngineTurn,
   extractPatchIds,
   getAgentSecretStatus,
+  type AgentToolStep,
 } from "../lib/agentEngineClient";
+import {
+  applyVoiceUiActions,
+  parseUiActionsFromToolSteps,
+} from "../lib/voice/uiActions";
+import {
+  clearAppActionHandlers,
+  registerAppActionHandlers,
+} from "../lib/appActions/dispatcher";
+import { setAppContext } from "../lib/appActions/context";
+import { registerVoiceChatLink } from "../lib/agentChat/voiceBridge";
 import {
   type ChatMessage,
   type ChatSession,
@@ -231,6 +242,49 @@ watch(
 
 onMounted(() => {
   void syncSecretConfigured();
+  registerAppActionHandlers({
+    setComposer: (text) => composer.value?.setText(text),
+    focusComposer: () => composer.value?.focus(),
+    setMode: (mode) => {
+      if (mode === "ask" || mode === "plan" || mode === "act" || mode === "delegate") {
+        chatMode.value = mode;
+      }
+    },
+    selectSession: (sessionId) => switchToSession(sessionId),
+  });
+  registerVoiceChatLink({
+    getHistory: () => {
+      const session = activeSession.value;
+      if (!session) return [];
+      return session.messages
+        .filter((m) => m.role === "user" || m.role === "assistant")
+        .slice(-12)
+        .map((m) => ({ role: m.role, content: m.text }));
+    },
+    getMode: () => chatMode.value,
+    getSettings: () => settings.value,
+    appendExchange: (userText, result) => {
+      const session = activeSession.value;
+      if (!session) return;
+      session.messages.push(createChatMessage("user", userText));
+      if (session.titleIsDefault && isAutoTitleWorthy(userText)) {
+        session.title = deriveTitleFromMessage(userText);
+        session.titleIsDefault = false;
+      }
+      session.messages.push(
+        createChatMessage("assistant", result.assistantText, result.toolCalls),
+      );
+      touchSession(session);
+      afterSessionMutation(session);
+      void scrollBottom();
+    },
+  });
+  setAppContext({
+    route: router.currentRoute.value.path,
+    chatMode: chatMode.value,
+    activeSessionId: activeSessionId.value ?? undefined,
+    projectPath: currentProjectPath.value ?? undefined,
+  });
 });
 
 watch(
@@ -240,11 +294,25 @@ watch(
   },
 );
 
+watch(
+  [chatMode, activeSessionId, currentProjectPath, () => router.currentRoute.value.path],
+  () => {
+    setAppContext({
+      route: router.currentRoute.value.path,
+      chatMode: chatMode.value,
+      activeSessionId: activeSessionId.value ?? undefined,
+      projectPath: currentProjectPath.value ?? undefined,
+    });
+  },
+);
+
 onBeforeUnmount(() => {
   stopStatusRotate();
   persistQueue.flush();
   if (copiedClearTimer !== null) clearTimeout(copiedClearTimer);
   if (actionToastTimer !== null) clearTimeout(actionToastTimer);
+  registerVoiceChatLink(null);
+  clearAppActionHandlers();
 });
 
 function showActionToast(msg: string) {
@@ -489,6 +557,14 @@ async function send(text: string) {
       mode: chatMode.value,
       turnId,
     });
+    // Apply allowlisted in-app navigation from ui_navigate tool steps.
+    const navSteps: AgentToolStep[] = (result.toolCalls ?? []).map((t) => ({
+      toolName: t.toolId,
+      toolCallId: t.toolId,
+      ok: t.ok,
+      summary: t.summary,
+    }));
+    await applyVoiceUiActions(router, parseUiActionsFromToolSteps(navSteps));
     session.messages.push(
       createChatMessage("assistant", result.assistantText, result.toolCalls),
     );
@@ -504,6 +580,33 @@ async function send(text: string) {
     if (!verifyRunKey.value) verifyRunKey.value = null;
     touchSession(session);
     afterSessionMutation(session);
+    await scrollBottom();
+  }
+}
+
+/** Post-apply CTA from PatchApprovalCard — run linked verify recipe. */
+async function verifyFromPatch(payload: { recipeId: string; patchId: string }) {
+  const projectPath = currentProjectPath.value;
+  if (!projectPath || busy.value) return;
+  const runKey = `${projectPath}:${payload.recipeId}`;
+  verifyRunKey.value = runKey;
+  busyLabel.value = `Verifying ${payload.recipeId}…`;
+  busyDetail.value = `patch ${payload.patchId}`;
+  busy.value = true;
+  error.value = null;
+  try {
+    const { runAgentRecipe } = await import("../lib/agentEngineClient");
+    await runAgentRecipe(
+      projectPath,
+      payload.recipeId,
+      runKey,
+      payload.patchId,
+    );
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    busy.value = false;
+    busyDetail.value = null;
     await scrollBottom();
   }
 }
@@ -782,6 +885,7 @@ function toggleToolsExpanded(id: string) {
                             :key="`${m.id}-${pid}`"
                             :project-path="currentProjectPath"
                             :patch-id="pid"
+                            @verify="verifyFromPatch"
                           />
                         </template>
                       </article>
@@ -822,6 +926,7 @@ function toggleToolsExpanded(id: string) {
                     v-if="verifyRunKey"
                     :run-key="verifyRunKey"
                     :active="busy"
+                    :project-path="currentProjectPath || undefined"
                   />
                 </div>
               </div>

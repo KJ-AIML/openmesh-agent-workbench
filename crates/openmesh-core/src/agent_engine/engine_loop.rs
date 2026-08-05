@@ -5,7 +5,7 @@ use super::registry::{filter_tools, ToolExecutor};
 use super::turn_cancel;
 use super::types::{
     AgentDefinition, AgentEngineError, AgentSession, ChatMessage, ChatRole, EngineTurnResult,
-    ToolStep, DEFAULT_TOOL_RESULT_MAX_CHARS,
+    ToolStep, DEFAULT_MAX_TOOLS_PER_ITERATION, DEFAULT_TOOL_RESULT_MAX_CHARS,
 };
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -40,6 +40,7 @@ pub fn run_agent_turn_cancellable(
 
     let mut tool_steps = Vec::new();
     let mut iterations = 0u32;
+    let mut total_tools: usize = 0;
 
     loop {
         if cancel
@@ -60,7 +61,19 @@ pub fn run_agent_turn_cancellable(
 
         iterations += 1;
         if iterations > def.max_tool_iterations {
-            return Err(AgentEngineError::MaxIterations(def.max_tool_iterations));
+            // Soft stop: return what we have instead of failing the whole turn.
+            return Ok(EngineTurnResult {
+                assistant_text: format!(
+                    "Stopped after {iterations} model rounds (tool budget). \
+                     Ask a more specific question, or switch to Plan/Act for deeper work."
+                ),
+                tool_steps,
+                iterations,
+                model: def.model.clone(),
+                provider: format!("{:?}", def.provider),
+                refused: false,
+                error: Some(format!("max_iterations:{}", def.max_tool_iterations)),
+            });
         }
 
         let turn = provider.complete(&session.messages, &tools)?;
@@ -89,15 +102,23 @@ pub fn run_agent_turn_cancellable(
             });
         }
 
+        // Cap parallel tool storms from a single model message.
+        let (accepted, skipped) = if turn.tool_calls.len() > DEFAULT_MAX_TOOLS_PER_ITERATION {
+            let (head, tail) = turn.tool_calls.split_at(DEFAULT_MAX_TOOLS_PER_ITERATION);
+            (head.to_vec(), tail.to_vec())
+        } else {
+            (turn.tool_calls.clone(), Vec::new())
+        };
+
         session.messages.push(ChatMessage {
             role: ChatRole::Assistant,
             content: turn.content.clone(),
             tool_call_id: None,
             name: None,
-            tool_calls: turn.tool_calls.clone(),
+            tool_calls: accepted.clone(),
         });
 
-        for call in &turn.tool_calls {
+        for call in &accepted {
             if cancel
                 .as_ref()
                 .map(|f| turn_cancel::is_cancelled(f))
@@ -122,6 +143,7 @@ pub fn run_agent_turn_cancellable(
                     Err(e) => (false, clip(&e, DEFAULT_TOOL_RESULT_MAX_CHARS)),
                 }
             };
+            total_tools += 1;
             tool_steps.push(ToolStep {
                 tool_name: call.name.clone(),
                 tool_call_id: call.id.clone(),
@@ -134,6 +156,42 @@ pub fn run_agent_turn_cancellable(
                 tool_call_id: Some(call.id.clone()),
                 name: Some(call.name.clone()),
                 tool_calls: vec![],
+            });
+        }
+
+        if !skipped.is_empty() {
+            let names: Vec<_> = skipped.iter().map(|c| c.name.as_str()).collect();
+            let notice = format!(
+                "\n\n[tool budget] skipped {} extra call(s) this round ({}). \
+                 Answer now or ask the user — do not continue exhaustive search.",
+                skipped.len(),
+                names.join(", ")
+            );
+            // Append to the last real tool result (keeps OpenAI tool_call_id pairing valid).
+            if let Some(last) = session.messages.last_mut() {
+                if last.role == ChatRole::Tool {
+                    last.content.push_str(&notice);
+                }
+            }
+            if let Some(step) = tool_steps.last_mut() {
+                step.summary.push_str(&notice);
+            }
+        }
+
+        // Absolute ceiling across the whole turn (iterations × per-iter cap).
+        let hard_cap = def.max_tool_iterations as usize * DEFAULT_MAX_TOOLS_PER_ITERATION;
+        if total_tools >= hard_cap {
+            return Ok(EngineTurnResult {
+                assistant_text: format!(
+                    "Stopped after {total_tools} tool calls (budget). \
+                     Rephrase more specifically, or use Plan/Act for deeper work."
+                ),
+                tool_steps,
+                iterations,
+                model: def.model.clone(),
+                provider: format!("{:?}", def.provider),
+                refused: false,
+                error: Some(format!("max_tools:{hard_cap}")),
             });
         }
     }
@@ -251,5 +309,44 @@ mod tests {
         .unwrap();
         assert_eq!(result.error.as_deref(), Some("cancelled"));
         assert!(flag.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn caps_tools_per_iteration() {
+        let many: Vec<_> = (0..6)
+            .map(|i| ToolCallRequest {
+                id: format!("c{i}"),
+                name: "project_info".into(),
+                arguments: "{}".into(),
+            })
+            .collect();
+        let provider = ScriptedProvider::new(vec![
+            AssistantTurn {
+                content: String::new(),
+                tool_calls: many,
+            },
+            AssistantTurn {
+                content: "Done with budget.".into(),
+                tool_calls: vec![],
+            },
+        ]);
+        let mut responses = BTreeMap::new();
+        responses.insert("project_info".into(), "{}".into());
+        let executor = StubToolExecutor { responses };
+        let def = AgentDefinition::default_workspace_agent("m");
+        let mut session = AgentSession::default();
+        let result = run_agent_turn(&def, &mut session, "x", &provider, &executor).unwrap();
+        let executed = result
+            .tool_steps
+            .iter()
+            .filter(|t| t.tool_name == "project_info")
+            .count();
+        assert_eq!(executed, DEFAULT_MAX_TOOLS_PER_ITERATION);
+        assert!(result
+            .tool_steps
+            .last()
+            .map(|t| t.summary.contains("[tool budget]"))
+            .unwrap_or(false));
+        assert_eq!(result.assistant_text, "Done with budget.");
     }
 }

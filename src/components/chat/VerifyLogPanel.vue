@@ -1,15 +1,27 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { cancelAgentRecipe } from "../../lib/agentEngineClient";
+import {
+  cancelAgentRecipe,
+  runAgentWorkspaceTool,
+} from "../../lib/agentEngineClient";
 
 const props = defineProps<{
   runKey: string;
   active: boolean;
+  /** Workspace root for Continuity handoff draft after verify completes. */
+  projectPath?: string;
+}>();
+
+const emit = defineEmits<{
+  handoff: [summary: string];
 }>();
 
 const lines = ref<string[]>([]);
 const done = ref(false);
+const busy = ref(false);
+const handoffNote = ref<string | null>(null);
+const handoffError = ref<string | null>(null);
 let unlistenLog: UnlistenFn | null = null;
 let unlistenDone: UnlistenFn | null = null;
 
@@ -43,6 +55,26 @@ async function cancel() {
     /* ignore */
   }
 }
+
+async function createHandoff() {
+  if (!props.projectPath) return;
+  busy.value = true;
+  handoffError.value = null;
+  handoffNote.value = null;
+  try {
+    const out = await runAgentWorkspaceTool(props.projectPath, "create_handoff_draft", {
+      recipient: "teammate",
+      role: "engineer",
+      context: `Verify run ${props.runKey}\nLog lines: ${lines.value.length}\nDone: ${done.value}`,
+    });
+    handoffNote.value = out;
+    emit("handoff", out);
+  } catch (e) {
+    handoffError.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    busy.value = false;
+  }
+}
 </script>
 
 <template>
@@ -58,8 +90,19 @@ async function cancel() {
       >
         Cancel
       </button>
+      <button
+        v-if="done && projectPath"
+        type="button"
+        class="verify-log__handoff"
+        :disabled="busy"
+        @click="createHandoff"
+      >
+        Create handoff
+      </button>
     </header>
     <pre class="verify-log__body">{{ lines.join("\n") || "(waiting for output…)" }}</pre>
+    <p v-if="handoffError" class="verify-log__err">{{ handoffError }}</p>
+    <pre v-if="handoffNote" class="verify-log__handoff-out">{{ handoffNote }}</pre>
   </div>
 </template>
 
@@ -87,7 +130,8 @@ async function cancel() {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.verify-log__cancel {
+.verify-log__cancel,
+.verify-log__handoff {
   border: 1px solid var(--border, #555);
   background: transparent;
   color: inherit;
@@ -96,6 +140,10 @@ async function cancel() {
   cursor: pointer;
   font-size: 0.75rem;
 }
+.verify-log__handoff:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 .verify-log__body {
   margin: 0;
   padding: 0.55rem 0.7rem;
@@ -103,5 +151,21 @@ async function cancel() {
   overflow: auto;
   white-space: pre-wrap;
   background: color-mix(in srgb, #000 35%, transparent);
+}
+.verify-log__err {
+  margin: 0;
+  padding: 0.35rem 0.7rem;
+  color: #e07070;
+  font-size: 0.75rem;
+}
+.verify-log__handoff-out {
+  margin: 0;
+  padding: 0.45rem 0.7rem;
+  max-height: 120px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-size: 0.72rem;
+  border-top: 1px solid var(--border, #333);
+  background: color-mix(in srgb, #000 25%, transparent);
 }
 </style>

@@ -118,6 +118,47 @@ impl ToolExecutor for WorkspaceToolExecutor {
                 .map_err(|e| e.to_string())?;
                 Ok(serde_json::to_string_pretty(&hits).unwrap_or_else(|_| "[]".into()))
             }
+            "ui_navigate" => {
+                let route = args
+                    .get("route")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| "ui_navigate requires route".to_string())?;
+                crate::app_actions::ui_navigate_json(route)
+            }
+            "app_get_context" => {
+                let routes: Vec<&str> = crate::app_actions::ALLOWED_UI_ROUTES.to_vec();
+                Ok(serde_json::to_string_pretty(&json!({
+                    "ok": true,
+                    "projectPath": self.project_path,
+                    "allowedRoutes": routes,
+                    "note": "Live route/mode come from the Desktop UI; use ui_navigate with an allowed route.",
+                }))
+                .unwrap_or_else(|_| "{}".into()))
+            }
+            "app_propose_action" => {
+                let action_val = args
+                    .get("action")
+                    .cloned()
+                    .ok_or_else(|| "app_propose_action requires action object".to_string())?;
+                let action: crate::app_actions::AppAction = serde_json::from_value(action_val)
+                    .map_err(|e| format!("invalid AppAction: {e}"))?;
+                let needs = !matches!(
+                    action.confirmation_policy(),
+                    crate::app_actions::ConfirmationPolicy::None
+                );
+                Ok(serde_json::to_string_pretty(&json!({
+                    "ok": true,
+                    "kind": "app_propose_action",
+                    "needsConfirmation": needs,
+                    "risk": format!("{:?}", action.risk_class()).to_ascii_lowercase(),
+                    "label": action.label(),
+                    "appAction": action,
+                }))
+                .unwrap_or_else(|_| "{}".into()))
+            }
+            "canvas_upsert_auto_ui" => {
+                crate::canvas::upsert_auto_ui_from_tool(&self.project_path, arguments_json)
+            }
             other => Err(format!("unknown tool: {other}")),
         }
     }
@@ -533,6 +574,24 @@ mod tests {
             .execute("grep", r#"{"pattern":"openmesh_marker"}"#)
             .unwrap();
         assert!(grep.contains("openmesh_marker"), "grep={grep}");
+        let _ = fs::remove_dir_all(&project);
+    }
+
+    #[test]
+    fn ui_navigate_allowlists_routes() {
+        let project = temp_project();
+        let exec = WorkspaceToolExecutor {
+            project_path: project.clone(),
+        };
+        let out = exec
+            .execute("ui_navigate", r#"{"route":"docs"}"#)
+            .unwrap();
+        assert!(out.contains("\"/docs\""), "out={out}");
+        assert!(out.contains("ui_navigate"), "out={out}");
+        let err = exec
+            .execute("ui_navigate", r#"{"route":"/evil"}"#)
+            .unwrap_err();
+        assert!(err.contains("unsupported"), "err={err}");
         let _ = fs::remove_dir_all(&project);
     }
 }

@@ -213,6 +213,16 @@ export type Settings = {
 		hooks: Record<string, boolean>;
 		plugins: Record<string, boolean>;
 	};
+	/**
+	 * Voice STT prefs — separate from chat LLM (`provider.defaultModel`).
+	 * Cloud transcription uses OpenRouter/OpenAI audio APIs.
+	 */
+	voice?: {
+		/** e.g. openai/whisper-large-v3, openai/whisper-1 */
+		sttModel?: string;
+		/** ISO-639-1 hint: en, th, … Empty = auto */
+		sttLanguage?: string;
+	};
 };
 
 export type AppState = {

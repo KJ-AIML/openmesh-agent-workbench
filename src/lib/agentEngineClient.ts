@@ -217,10 +217,21 @@ export async function runAgentRecipe(
   projectPath: string,
   recipeId: string,
   runKey?: string,
+  patchId?: string,
 ): Promise<RecipeRunResult> {
   return invoke("agent_recipe_run", {
     projectPath,
-    request: { recipeId, runKey },
+    request: { recipeId, runKey, patchId: patchId ?? null },
+  });
+}
+
+export async function suggestAgentRecipe(
+  projectPath: string,
+  changedPaths?: string[],
+): Promise<string> {
+  return invoke("agent_recipe_suggest", {
+    projectPath,
+    changedPaths: changedPaths ?? null,
   });
 }
 
@@ -236,6 +247,21 @@ export async function writeDelegateBrief(
   return invoke("agent_delegate_brief", {
     projectPath,
     request: { tool, summary },
+  });
+}
+
+export async function recordDelegateLaunch(
+  projectPath: string,
+  tool: string,
+  opts?: { briefPath?: string; resumeSessionId?: string },
+): Promise<string> {
+  return invoke("agent_delegate_record_launch", {
+    projectPath,
+    request: {
+      tool,
+      briefPath: opts?.briefPath ?? null,
+      resumeSessionId: opts?.resumeSessionId ?? null,
+    },
   });
 }
 

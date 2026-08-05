@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Canvas Auto UI** — agents create safe JSON UI documents (`schema: openmesh.canvas/1`) via `canvas_upsert_auto_ui`; rendered on **Canvas → Auto UI** and inline in Chat ` ```canvas ` fences. Builtin skill `openmesh-canvas`. Not Cursor `.canvas.tsx` (that SDK only runs inside Cursor).
+- Network graph remains under **Canvas → Network** with Continuity-aligned chrome.
+
 ## [0.1.26] - 2026-08-04
 
 ### Added

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from "vue";
-import { Minus, Square, X, LayoutGrid, MessageSquare } from "lucide-vue-next";
+import { useRouter } from "vue-router";
+import { Minus, Square, X, LayoutGrid, MessageSquare, Mic, MicOff } from "lucide-vue-next";
 import {
   minimizeWindow,
   toggleMaximizeWindow,
@@ -10,6 +11,12 @@ import {
 } from "../lib/adapters/windowAdapter";
 import { isMacOS, isTauriRuntime, resolveIsMacOS } from "../lib/adapters/environment";
 import { useStore } from "../lib/useStore";
+import { useVoiceStore } from "../lib/voice/voiceStore";
+import {
+  toggleVoice,
+  voicePttEnd,
+  voicePttStart,
+} from "../lib/voice/voiceSession";
 
 const props = withDefaults(
   defineProps<{
@@ -20,6 +27,18 @@ const props = withDefaults(
 );
 
 const { currentProject } = useStore();
+const router = useRouter();
+const {
+  enabled: voiceEnabled,
+  phase: voicePhase,
+  statusLabel: voiceStatusLabel,
+  lastError: voiceLastError,
+  listenMode: voiceListenMode,
+} = useVoiceStore();
+const voiceBusy = ref(false);
+const pttHeld = ref(false);
+/** Suppress the click that follows a PTT hold so we don't immediately toggle off. */
+let suppressNextVoiceClick = false;
 
 const macOS = ref(
   (window as unknown as { __OPENMESH_IS_MACOS__?: boolean }).__OPENMESH_IS_MACOS__ ??
@@ -79,6 +98,61 @@ async function handleClose(e: MouseEvent) {
   e.preventDefault();
   await closeWindow();
 }
+
+async function handleVoiceClick(e: MouseEvent) {
+  e.stopPropagation();
+  e.preventDefault();
+  if (suppressNextVoiceClick) {
+    suppressNextVoiceClick = false;
+    return;
+  }
+  if (voiceBusy.value) return;
+  voiceBusy.value = true;
+  try {
+    await toggleVoice(router);
+  } catch (err) {
+    voicePhase.value = "error";
+    voiceLastError.value =
+      err instanceof Error ? err.message : "Could not start voice.";
+    voiceEnabled.value = false;
+  } finally {
+    voiceBusy.value = false;
+  }
+}
+
+async function handleVoicePointerDown(e: PointerEvent) {
+  e.stopPropagation();
+  if (voiceListenMode.value !== "ptt") return;
+  suppressNextVoiceClick = true;
+  if (!voiceEnabled.value) {
+    voiceBusy.value = true;
+    try {
+      await toggleVoice(router);
+    } finally {
+      voiceBusy.value = false;
+    }
+  }
+  if (!voiceEnabled.value) return;
+  pttHeld.value = true;
+  (e.currentTarget as HTMLElement | null)?.setPointerCapture?.(e.pointerId);
+  await voicePttStart();
+}
+
+async function handleVoicePointerUp(e: PointerEvent) {
+  e.stopPropagation();
+  if (!pttHeld.value) return;
+  pttHeld.value = false;
+  await voicePttEnd(router);
+}
+
+const voiceTitle = computed(() => {
+  if (!voiceEnabled.value) {
+    return voiceListenMode.value === "ptt"
+      ? "Hold mic to talk (push-to-talk)"
+      : "Turn on Voice — speak freely, click again to stop";
+  }
+  return `Voice on — ${voiceStatusLabel.value}. Click mic to turn off.`;
+});
 
 async function handleDrag(e: MouseEvent) {
   if (e.button !== 0) return;
@@ -149,6 +223,25 @@ async function handleDrag(e: MouseEvent) {
     <div class="tb__spacer" data-tauri-drag-region />
 
     <div class="tb__end" data-no-drag>
+      <button
+        type="button"
+        class="tb__voice"
+        :class="{
+          'is-on': voiceEnabled,
+          'is-listening': voicePhase === 'listening' || pttHeld,
+          'is-busy': voicePhase === 'thinking' || voicePhase === 'speaking',
+        }"
+        :title="voiceTitle"
+        :aria-pressed="voiceEnabled"
+        aria-label="OpenMesh Voice"
+        @click="handleVoiceClick"
+        @pointerdown="handleVoicePointerDown"
+        @pointerup="handleVoicePointerUp"
+        @pointercancel="handleVoicePointerUp"
+      >
+        <MicOff v-if="!voiceEnabled" class="h-3.5 w-3.5" />
+        <Mic v-else class="h-3.5 w-3.5" />
+      </button>
       <!-- Active project name on the right of the nav (replaces generic Projects tab) -->
       <router-link
         v-if="projectLabel"
@@ -307,6 +400,49 @@ async function handleDrag(e: MouseEvent) {
   gap: 8px;
   flex-shrink: 0;
   min-width: 0;
+}
+
+.tb__voice {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.tb__voice:hover {
+  color: var(--foreground);
+  background: var(--surface-3);
+}
+
+.tb__voice.is-on {
+  color: var(--foreground);
+  border-color: color-mix(in oklab, #3d9a6a 45%, var(--border));
+  background: color-mix(in oklab, #3d9a6a 18%, var(--surface-2));
+}
+
+.tb__voice.is-listening {
+  animation: tb-voice-pulse 1.2s ease-in-out infinite;
+}
+
+.tb__voice.is-busy {
+  border-color: color-mix(in oklab, #c9a227 40%, var(--border));
+}
+
+@keyframes tb-voice-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, #3d9a6a 0%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in oklab, #3d9a6a 22%, transparent);
+  }
 }
 
 .tb__project {

@@ -71,6 +71,8 @@ export async function openAgentCli(
 	opts?: {
 		resumeSessionId?: string;
 		extraArgs?: string[];
+		/** OpenMesh brief file path echoed into the terminal before the CLI starts. */
+		briefPath?: string;
 	},
 ): Promise<AdapterResult<void>> {
 	const runtime = getRuntimeKind();
@@ -83,6 +85,7 @@ export async function openAgentCli(
 				cliPath: cliPath || null,
 				resumeSessionId: opts?.resumeSessionId || null,
 				extraArgs: opts?.extraArgs || null,
+				briefPath: opts?.briefPath || null,
 			});
 
 			if (result.success) {

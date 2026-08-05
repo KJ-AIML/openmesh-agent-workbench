@@ -20,3 +20,7 @@ open = "5"
 git2 = { version = "0.19", features = ["vendored-openssl"] }
 chrono = { version = "0.4", features = ["serde"] }
 tempfile = "3"
+base64 = "0.22"
+dirs = "5"
+tokio = { version = "1", features = ["rt", "macros"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "multipart", "json", "rustls-tls"] }

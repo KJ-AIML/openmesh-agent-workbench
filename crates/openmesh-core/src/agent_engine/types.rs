@@ -3,7 +3,10 @@
 use serde::{Deserialize, Serialize};
 
 pub const AGENT_ENGINE_PROTOCOL: &str = "openmesh-agent/0.1";
-pub const DEFAULT_MAX_TOOL_ITERATIONS: u32 = 8;
+/// Provider round-trips that may include tool calls (keep low — each hop is slow).
+pub const DEFAULT_MAX_TOOL_ITERATIONS: u32 = 4;
+/// Hard cap on tool executions in a single model message (prevents tool storms).
+pub const DEFAULT_MAX_TOOLS_PER_ITERATION: usize = 3;
 pub const DEFAULT_TOOL_RESULT_MAX_CHARS: usize = 4000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -50,12 +53,27 @@ impl AgentDefinition {
 }
 
 pub const DEFAULT_SYSTEM_PROMPT: &str = r#"You are the OpenMesh workspace agent.
-You help the user with their local OpenMesh project using the provided tools.
-Prefer tools for factual project and source-code state. Use read_file, grep, list_dir,
-and git_diff when inspecting the active workspace. Do not invent Continuity/mesh/team facts.
-When propose_patch is available, propose exact new file contents — patches are NOT applied
-until a human approves them. Never claim a file was written without approval.
-Keep answers concise. Never request or echo API keys or secrets."#;
+Help with the active local project. Be decisive and concise.
+
+Tool budget (critical — each tool call is slow):
+- Prefer answering from context. Use at most 1–3 tool calls total unless the user
+  explicitly asks for a deep investigation.
+- Call at most 2 tools in parallel. Never spray list_dir/grep/search_context repeatedly.
+- If a term is unknown after one quick search (or none), ask a clarifying question
+  instead of exhaustive searching.
+- Do not invent Continuity/mesh/team facts.
+
+UI navigation:
+- Use ui_navigate to open in-app pages (work/chat/docs/sprint/notes/settings/…).
+- Do not invent mouse clicks or OS automation.
+
+Writes:
+- Ask mode cannot write files or notes. Tell the user to switch to Plan/Act, or use
+  Notes/Docs UI / slash tools when appropriate.
+- When propose_patch is available, propose exact newContent — patches apply only after
+  human approval. Never claim a file was written without approval.
+
+Never request or echo API keys or secrets."#;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]

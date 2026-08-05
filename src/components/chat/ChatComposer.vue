@@ -14,6 +14,7 @@ const emit = defineEmits<{
 }>();
 
 const input = ref("");
+const textareaEl = ref<HTMLTextAreaElement | null>(null);
 
 function submit() {
   const text = input.value.trim();
@@ -26,12 +27,21 @@ function insertSlash(cmd: string) {
   input.value = cmd === "/tools" ? "/tools" : `${cmd} `;
 }
 
-defineExpose({ insertSlash });
+function setText(text: string) {
+  input.value = text;
+}
+
+function focus() {
+  textareaEl.value?.focus();
+}
+
+defineExpose({ insertSlash, setText, focus });
 </script>
 
 <template>
   <footer class="chat-composer">
     <textarea
+      ref="textareaEl"
       v-model="input"
       class="chat-composer__input"
       rows="2"

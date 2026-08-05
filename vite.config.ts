@@ -15,6 +15,8 @@ export default defineConfig({
   // unrelated HTML files elsewhere in the repo (e.g. skills/, examples/).
   optimizeDeps: {
     entries: ["index.html"],
+    // React island for freeform Board (@excalidraw/excalidraw).
+    include: ["react", "react-dom", "react/jsx-runtime", "@excalidraw/excalidraw"],
   },
   // Restrict file serving to project root + node_modules only.
   server: {

@@ -179,16 +179,34 @@ pub fn create_handoff_draft(project_path: &str, arguments_json: &str) -> Result<
     write_handoff_note(project_path, &note).map_err(|e| e.to_string())?;
 
     // Attach recent agent runs as a brief note under agent/briefs.
-    let runs = list_recent_runs(project_path, 5).unwrap_or_default();
+    let runs = list_recent_runs(project_path, 8).unwrap_or_default();
     let brief_dir = get_project_dir(project_path).join("agent").join("briefs");
     fs::create_dir_all(&brief_dir).map_err(|e| e.to_string())?;
     let brief_path = brief_dir.join(format!("{}.md", note.handoff_id));
     let mut brief = format!(
-        "# Handoff brief {}\n\nRecipient: {}\n\n## Recent agent runs\n",
+        "# Handoff brief {}\n\nRecipient: {}\n\n",
         note.handoff_id, recipient_label
     );
+    if let Some(ctx) = args
+        .get("context")
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        brief.push_str("## Context\n\n");
+        brief.push_str(ctx);
+        brief.push_str("\n\n");
+    }
+    brief.push_str("## Recent agent runs\n");
     for r in runs {
-        brief.push_str(&format!("- {} [{}] {}\n", r.id, r.kind, r.status));
+        brief.push_str(&format!("- {} [{}] {}", r.id, r.kind, r.status));
+        if let Some(pid) = r.detail.get("patchId").and_then(|v| v.as_str()) {
+            brief.push_str(&format!(" patch={pid}"));
+        }
+        if let Some(rid) = r.detail.get("recipeId").and_then(|v| v.as_str()) {
+            brief.push_str(&format!(" recipe={rid}"));
+        }
+        brief.push('\n');
     }
     atomic_write(&brief_path, &brief)?;
 
@@ -196,7 +214,10 @@ pub fn create_handoff_draft(project_path: &str, arguments_json: &str) -> Result<
         project_path,
         "create_handoff_draft",
         "ok",
-        json!({ "handoffId": note.handoff_id }),
+        json!({
+            "handoffId": note.handoff_id,
+            "hasContext": args.get("context").and_then(|v| v.as_str()).is_some(),
+        }),
     );
     Ok(serde_json::to_string_pretty(&json!({
         "handoffId": note.handoff_id,
@@ -294,4 +315,207 @@ pub fn write_delegate_brief(
         json!({ "tool": tool, "path": path.to_string_lossy() }),
     );
     Ok(path)
+}
+
+/// Record a CLI delegate/resume launch in the agent run ledger.
+pub fn record_delegate_launch(
+    project_path: &str,
+    tool: &str,
+    brief_path: Option<&str>,
+    resume_session_id: Option<&str>,
+) -> Result<String, String> {
+    let tool = tool.trim();
+    if tool.is_empty() {
+        return Err("tool is required".into());
+    }
+    let run = append_run(
+        project_path,
+        "delegate_launch",
+        "ok",
+        json!({
+            "tool": tool,
+            "briefPath": brief_path.unwrap_or(""),
+            "resumeSessionId": resume_session_id.unwrap_or(""),
+        }),
+    )?;
+    Ok(run.id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::storage::{init_project, write_project, Task};
+    use std::path::Path;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static COUNTER: AtomicU64 = AtomicU64::new(0);
+
+    fn temp_project() -> String {
+        let n = COUNTER.fetch_add(1, Ordering::SeqCst);
+        let dir = std::env::temp_dir().join(format!(
+            "openmesh-continue-{}-{}",
+            std::process::id(),
+            n
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.to_string_lossy().to_string();
+        init_project(&path).unwrap();
+        path
+    }
+
+    #[test]
+    fn link_session_persists_under_agent_session_links() {
+        let project = temp_project();
+        let out = link_session(
+            &project,
+            r#"{"chatSessionId":"chat-1","foreignTool":"codex","foreignSessionId":"sess-9","foreignSessionPath":"/tmp/x"}"#,
+        )
+        .unwrap();
+        assert!(out.contains("chat-1"), "{out}");
+        assert!(out.contains("sess-9"), "{out}");
+
+        let path = Path::new(&project)
+            .join(".openmesh")
+            .join("agent")
+            .join("session-links.json");
+        assert!(path.exists(), "expected {}", path.display());
+        let links = list_session_links(&project).unwrap();
+        assert_eq!(links.len(), 1);
+        assert_eq!(links[0].chat_session_id, "chat-1");
+        assert_eq!(links[0].foreign_tool, "codex");
+        assert_eq!(links[0].foreign_session_id, "sess-9");
+        assert_eq!(
+            links[0].foreign_session_path.as_deref(),
+            Some("/tmp/x")
+        );
+
+        // Upsert same pair replaces rather than duplicates.
+        let _ = link_session(
+            &project,
+            r#"{"chatSessionId":"chat-1","foreignTool":"claude","foreignSessionId":"sess-9"}"#,
+        )
+        .unwrap();
+        let links2 = list_session_links(&project).unwrap();
+        assert_eq!(links2.len(), 1);
+        assert_eq!(links2[0].foreign_tool, "claude");
+        let _ = fs::remove_dir_all(&project);
+    }
+
+    #[test]
+    fn update_task_writes_status_and_notes() {
+        let project = temp_project();
+        let now = now_iso();
+        let task = Task {
+            id: "task-1".into(),
+            sprint_id: "sprint-1".into(),
+            project_id: "proj".into(),
+            title: "Do thing".into(),
+            description: None,
+            status: "todo".into(),
+            priority: "med".into(),
+            owner: None,
+            next_action: None,
+            notes: None,
+            linked_doc_ids: vec![],
+            linked_session_ids: vec![],
+            created_at: now.clone(),
+            updated_at: now,
+        };
+        write_project(&project, "tasks.json", &vec![task]).unwrap();
+
+        let out = update_task(
+            &project,
+            r#"{"taskId":"task-1","status":"doing","notes":"from agent","nextAction":"ship"}"#,
+        )
+        .unwrap();
+        assert!(out.contains("doing"), "{out}");
+        let tasks: Vec<Task> = read_project(&project, "tasks.json").unwrap();
+        assert_eq!(tasks[0].status, "doing");
+        assert_eq!(tasks[0].notes.as_deref(), Some("from agent"));
+        assert_eq!(tasks[0].next_action.as_deref(), Some("ship"));
+        let _ = fs::remove_dir_all(&project);
+    }
+
+    #[test]
+    fn mesh_query_fail_closed_without_trust_policy() {
+        let project = temp_project();
+        let err = mesh_query(
+            &project,
+            r#"{"peer":"peer-a","question":"what is blocked?"}"#,
+        )
+        .unwrap_err();
+        // Missing policy must not open a remote query path.
+        assert!(
+            err.contains("Missing")
+                || err.contains("denied")
+                || err.contains("trust")
+                || err.contains("policy")
+                || err.contains("not found")
+                || err.to_lowercase().contains("missing"),
+            "expected fail-closed error, got: {err}"
+        );
+        let _ = fs::remove_dir_all(&project);
+    }
+
+    #[test]
+    fn create_handoff_draft_and_approve() {
+        let project = temp_project();
+        let draft = create_handoff_draft(
+            &project,
+            r#"{"recipient":"Yo","role":"engineer"}"#,
+        )
+        .unwrap();
+        assert!(draft.contains("handoffId"), "{draft}");
+        let v: serde_json::Value = serde_json::from_str(&draft).unwrap();
+        let id = v["handoffId"].as_str().unwrap().to_string();
+        assert_eq!(v["status"].as_str().unwrap_or(""), "draft");
+
+        let brief = v["briefPath"].as_str().unwrap();
+        assert!(
+            Path::new(brief).exists(),
+            "brief should exist at {brief}"
+        );
+
+        let approved = approve_handoff(
+            &project,
+            &format!(r#"{{"handoffId":"{id}"}}"#),
+        )
+        .unwrap();
+        assert!(approved.contains(&id), "{approved}");
+        assert!(
+            approved.contains("approved") || approved.contains("Approved"),
+            "{approved}"
+        );
+        let _ = fs::remove_dir_all(&project);
+    }
+
+    #[test]
+    fn pending_questions_returns_json_view() {
+        let project = temp_project();
+        let out = pending_questions_json(&project).unwrap();
+        // Empty workspace still yields a structured view.
+        assert!(out.contains("{") || out.contains("["), "{out}");
+        let _ = fs::remove_dir_all(&project);
+    }
+
+    #[test]
+    fn record_delegate_launch_appends_run() {
+        let project = temp_project();
+        let brief = write_delegate_brief(&project, "codex", "gap-fill test").unwrap();
+        let run_id = record_delegate_launch(
+            &project,
+            "codex",
+            Some(&brief.to_string_lossy()),
+            Some("sess-abc"),
+        )
+        .unwrap();
+        assert!(!run_id.is_empty());
+        let runs = list_recent_runs(&project, 5).unwrap();
+        assert!(
+            runs.iter().any(|r| r.kind == "delegate_launch" && r.id == run_id),
+            "{runs:?}"
+        );
+        let _ = fs::remove_dir_all(&project);
+    }
 }

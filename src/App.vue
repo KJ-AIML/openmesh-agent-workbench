@@ -5,7 +5,27 @@ import { PanelLeft, PanelLeftClose } from "lucide-vue-next";
 import Sidebar from "./components/Sidebar.vue";
 import Titlebar from "./components/Titlebar.vue";
 import CommandPalette from "./components/CommandPalette.vue";
+import VoiceHud from "./components/voice/VoiceHud.vue";
+import ActionApprovalCard from "./components/actions/ActionApprovalCard.vue";
+import ActionRunPanel from "./components/actions/ActionRunPanel.vue";
 import { useStore } from "./lib/useStore";
+import { registerAppActionHandlers } from "./lib/appActions/dispatcher";
+import { dispatchAppAction } from "./lib/appActions/dispatcher";
+import {
+  dismissPendingAction,
+  takePendingAction,
+  usePendingActions,
+} from "./lib/appActions/pending";
+import {
+  listActionAudit,
+  peekUndoIntent,
+  popUndoIntent,
+  subscribeAudit,
+} from "./lib/appActions/audit";
+import {
+  cancelAgentRecipe,
+  runAgentRecipe,
+} from "./lib/agentEngineClient";
 import { useSidebarVisibility } from "./lib/useSidebarVisibility";
 import { useSidebarPeek } from "./lib/useSidebarPeek";
 import { getCommands, type Command } from "./lib/commands";
@@ -36,7 +56,27 @@ const {
   getRecentItemsForProject,
   addRecentItem,
   store,
+  writeNote,
+  createSprint,
+  currentProjectPath,
 } = useStore();
+const { pending } = usePendingActions();
+/** Bump when AppAction audit changes so the trail can hide when empty. */
+const auditTick = ref(0);
+let unsubAudit: (() => void) | null = null;
+/** Session hide preference — cleared when a new action is audited. */
+const actionTrailHidden = ref(false);
+const actionTrailHasContent = computed(() => {
+  auditTick.value;
+  return listActionAudit(1).length > 0 || !!peekUndoIntent();
+});
+const showActionTrail = computed(
+  () => actionTrailHasContent.value && !actionTrailHidden.value,
+);
+
+function hideActionTrail() {
+  actionTrailHidden.value = true;
+}
 /** Persisted pin preference — hover peek must not write this. */
 const { sidebarVisible: sidebarPinned, toggleSidebar } = useSidebarVisibility();
 const { sidebarPeek, onPeekEnter, onPeekLeave, closePeek } = useSidebarPeek();
@@ -69,7 +109,67 @@ onMounted(async () => {
   window.setTimeout(() => {
     splashMinimumElapsed.value = true;
   }, 700);
+
+  registerAppActionHandlers({
+    createNote: async (title) => {
+      const path = currentProjectPath.value;
+      if (!path) throw new Error("Open a project first");
+      const slug = (title || "note")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "")
+        .slice(0, 40);
+      const filename = `${slug || "note"}-${Date.now().toString(16)}.md`;
+      const body = title ? `# ${title}\n\n` : "";
+      await writeNote(filename, body);
+      await router.push("/notes");
+      return filename;
+    },
+    createSprint: async (name) => {
+      const sprint = await createSprint(name);
+      if (!sprint) throw new Error("Could not create sprint");
+      return sprint.name;
+    },
+    runRecipe: async (recipeId) => {
+      const path = currentProjectPath.value;
+      if (!path) throw new Error("Open a project first");
+      const runKey = `${path}:${recipeId}:${Date.now().toString(16)}`;
+      const result = await runAgentRecipe(path, recipeId, runKey);
+      return result.ok
+        ? `Recipe ${recipeId} finished`
+        : `Recipe ${recipeId} failed`;
+    },
+    stopRecipe: async (runKey) => {
+      await cancelAgentRecipe(runKey);
+      return "Recipe stopped";
+    },
+    openCanvas: async () => {
+      await router.push("/canvas");
+    },
+  });
+
+  unsubAudit = subscribeAudit(() => {
+    auditTick.value += 1;
+    // New audited action — surface the trail again if the user hid it.
+    actionTrailHidden.value = false;
+  });
 });
+
+async function approvePending(id: string) {
+  const item = takePendingAction(id);
+  if (!item) return;
+  await dispatchAppAction(router, item.intent, { confirmWrite: true });
+}
+
+function rejectPending(id: string) {
+  dismissPendingAction(id);
+}
+
+async function undoLastAction() {
+  const inverse = popUndoIntent();
+  if (!inverse) return;
+  await dispatchAppAction(router, inverse, { confirmWrite: true, enqueueIfNeeded: false });
+}
 // ─── Cached Git Status ───────────────────────────────────────────────
 const cachedGitStatus = ref<GitStatus | null>(null);
 
@@ -125,6 +225,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener("keydown", handleGlobalKeydown);
+  unsubAudit?.();
+  unsubAudit = null;
 });
 
 // ─── Command Context ──────────────────────────────────────────────────
@@ -435,10 +537,66 @@ defineExpose({ openPalette });
       @close="closePalette"
       @executed="handleCommandExecuted"
     />
+
+    <VoiceHud />
+
+    <div v-if="pending.length" class="shell__approvals">
+      <ActionApprovalCard
+        v-for="item in pending"
+        :key="item.id"
+        :item="item"
+        @approve="approvePending"
+        @reject="rejectPending"
+      />
+    </div>
+
+    <!--
+      Wrapper stays mounted so empty/hidden state never steals clicks
+      (pointer-events: none). Only the visible card opts back in.
+    -->
+    <div
+      class="shell__action-trail"
+      :class="{ 'shell__action-trail--idle': !showActionTrail }"
+      :aria-hidden="!showActionTrail"
+    >
+      <ActionRunPanel
+        v-if="showActionTrail"
+        @undo="undoLastAction"
+        @hide="hideActionTrail"
+      />
+    </div>
   </div>
 </template>
 
 <style scoped>
+.shell__approvals {
+  position: fixed;
+  left: 50%;
+  bottom: 96px;
+  transform: translateX(-50%);
+  z-index: 90;
+  width: min(480px, calc(100vw - 32px));
+  display: grid;
+  gap: 0.5rem;
+  pointer-events: auto;
+}
+/* Stack above Voice HUD (bottom-right); never intercept when idle/hidden. */
+.shell__action-trail {
+  position: fixed;
+  right: 18px;
+  bottom: 110px;
+  left: auto;
+  z-index: 60;
+  width: min(280px, calc(100vw - 36px));
+  opacity: 0.92;
+  pointer-events: none;
+}
+.shell__action-trail--idle {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
 .shell {
   display: flex;
   flex-direction: column;

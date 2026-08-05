@@ -16,10 +16,12 @@ import {
   Palette,
   Database,
   Puzzle,
+  Mic,
 } from "lucide-vue-next";
 import * as fileSystemAdapter from "../lib/adapters/fileSystemAdapter";
 import SettingsToolsPanel from "../components/settings/SettingsToolsPanel.vue";
 import SettingsExtensionsPanel from "../components/settings/SettingsExtensionsPanel.vue";
+import VoiceSettingsPanel from "../components/settings/VoiceSettingsPanel.vue";
 import AgentToolIcon from "../components/AgentToolIcon.vue";
 import {
   clearAgentSecret,
@@ -37,6 +39,7 @@ const { settings, saveSettings, resetAll, currentProject, store, projectPaths } 
 type SectionId =
   | "overview"
   | "provider"
+  | "voice"
   | "agents"
   | "extensions"
   | "sessions"
@@ -61,6 +64,7 @@ const sectionMeta: Record<
 > = {
   overview: { label: "Overview", icon: LayoutDashboard },
   provider: { label: "Provider", icon: KeyRound },
+  voice: { label: "Voice", icon: Mic },
   agents: { label: "Agents", icon: Bot },
   extensions: { label: "Extensions", icon: Puzzle },
   sessions: { label: "Sessions", icon: FolderClock },
@@ -76,7 +80,7 @@ const groups: {
   label: string;
   sections: SectionId[];
 }[] = [
-  { id: "setup", label: "Setup", sections: ["overview", "provider"] },
+  { id: "setup", label: "Setup", sections: ["overview", "provider", "voice"] },
   {
     id: "runtime",
     label: "Runtime",
@@ -526,6 +530,13 @@ const statusLine = computed(() => {
           <span class="text-muted text-[12px]">{{ item.value }}</span>
         </button>
       </div>
+    </div>
+
+    <div
+      v-show="activeSection === 'voice'"
+      class="workbench-card p-5 space-y-4"
+    >
+      <VoiceSettingsPanel />
     </div>
 
     <div

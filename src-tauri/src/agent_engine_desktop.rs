@@ -3,12 +3,13 @@
 use openmesh_core::agent_engine::{
     apply_patch, cancel_recipe_run, cancel_turn, enrich_system_prompt, format_patch_summary,
     get_recipe, list_recipes, list_recent_runs, load_chat_sessions, load_inventory, probe_provider,
-    read_patch, register_turn, reject_patch, remove_turn, resolve_provider_kind, rollback_patch,
-    run_agent_turn_cancellable, run_recipe, save_chat_sessions, tools_for_mode, write_delegate_brief,
-    AgentDefinition, AgentSecretStore, AgentSession, CascadingSecretStore, ChatMessage, ChatRole,
-    EngineTurnResult, LogCallback, OpenAiCompatibleProvider, PatchRecord, ProviderConfig,
-    ProviderProbeResult, Recipe, RecipeRunResult, StoredChatSession, ToolExecutor,
-    WorkspaceToolExecutor,
+    read_patch, record_delegate_launch, register_turn, reject_patch, remove_turn,
+    resolve_provider_kind, rollback_patch, run_agent_turn_cancellable, run_recipe_with_patch,
+    save_chat_sessions, suggest_verify_recipe, tools_for_mode, write_delegate_brief,
+    AgentDefinition, AgentSecretStore,
+    AgentSession, CascadingSecretStore, ChatMessage, ChatRole, EngineTurnResult, LogCallback,
+    OpenAiCompatibleProvider, PatchRecord, ProviderConfig, ProviderProbeResult, Recipe,
+    RecipeRunResult, StoredChatSession, ToolExecutor, WorkspaceToolExecutor,
 };
 use openmesh_core::storage::{default_settings, read_global, Settings};
 use serde::{Deserialize, Serialize};
@@ -156,6 +157,12 @@ fn agent_engine_turn_blocking(
     def.base_url = base_url;
     let mode = request.mode.as_deref().unwrap_or("ask");
     def.tool_allowlist = tools_for_mode(mode);
+    // Mode-specific budgets — Ask should stay snappy; each provider hop is slow.
+    def.max_tool_iterations = match mode.trim().to_ascii_lowercase().as_str() {
+        "plan" | "act" => 5,
+        "delegate" => 3,
+        _ => 3, // ask
+    };
 
     let mut session = AgentSession {
         messages: request
@@ -370,6 +377,9 @@ pub struct AgentRecipeRunRequest {
     pub recipe_id: String,
     #[serde(default)]
     pub run_key: Option<String>,
+    /// When verify follows a patch apply, link ledger rows.
+    #[serde(default)]
+    pub patch_id: Option<String>,
 }
 
 #[tauri::command]
@@ -378,11 +388,12 @@ pub async fn agent_recipe_run(
     project_path: String,
     request: AgentRecipeRunRequest,
 ) -> Result<RecipeRunResult, String> {
+    let recipe_id = request.recipe_id.clone();
     let run_key = request
         .run_key
         .filter(|s| !s.trim().is_empty())
-        .unwrap_or_else(|| format!("{}:{}", project_path, request.recipe_id));
-    let recipe_id = request.recipe_id;
+        .unwrap_or_else(|| format!("{}:{}", project_path, recipe_id));
+    let patch_id = request.patch_id;
     tauri::async_runtime::spawn_blocking(move || {
         let app_log = app.clone();
         let key_for_events = run_key.clone();
@@ -392,7 +403,13 @@ pub async fn agent_recipe_run(
                 json!({ "runKey": key_for_events, "line": line }),
             );
         });
-        let result = run_recipe(&project_path, &recipe_id, &run_key, Some(on_log))?;
+        let result = run_recipe_with_patch(
+            &project_path,
+            &recipe_id,
+            &run_key,
+            Some(on_log),
+            patch_id.as_deref(),
+        )?;
         let _ = app.emit(
             "agent-run-done",
             json!({
@@ -400,12 +417,21 @@ pub async fn agent_recipe_run(
                 "ok": result.ok,
                 "recipeId": result.recipe_id,
                 "exitCode": result.exit_code,
+                "patchId": patch_id,
             }),
         );
         Ok(result)
     })
     .await
     .map_err(|e| format!("recipe run failed to join: {e}"))?
+}
+
+#[tauri::command]
+pub fn agent_recipe_suggest(
+    project_path: String,
+    changed_paths: Option<Vec<String>>,
+) -> Result<String, String> {
+    suggest_verify_recipe(&project_path, changed_paths.as_deref().unwrap_or(&[]))
 }
 
 #[tauri::command]
@@ -438,6 +464,33 @@ pub async fn agent_delegate_brief(
     })
     .await
     .map_err(|e| format!("delegate brief failed to join: {e}"))?
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentDelegateLaunchRequest {
+    pub tool: String,
+    #[serde(default)]
+    pub brief_path: Option<String>,
+    #[serde(default)]
+    pub resume_session_id: Option<String>,
+}
+
+#[tauri::command]
+pub async fn agent_delegate_record_launch(
+    project_path: String,
+    request: AgentDelegateLaunchRequest,
+) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        record_delegate_launch(
+            &project_path,
+            &request.tool,
+            request.brief_path.as_deref(),
+            request.resume_session_id.as_deref(),
+        )
+    })
+    .await
+    .map_err(|e| format!("delegate launch record failed to join: {e}"))?
 }
 
 #[tauri::command]

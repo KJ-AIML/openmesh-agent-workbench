@@ -154,6 +154,20 @@ pub struct Settings {
     /// Skills / hooks / plugins enable map (not secrets).
     #[serde(default)]
     pub extensions: crate::agent_engine::ExtensionsSettings,
+    /// Cloud STT preferences (separate from chat LLM model).
+    #[serde(default)]
+    pub voice: VoiceSettings,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct VoiceSettings {
+    /// OpenRouter/OpenAI STT model slug, e.g. `openai/whisper-large-v3`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stt_model: Option<String>,
+    /// ISO-639-1 language hint (`en`, `th`, …). Empty/None = auto-detect.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stt_language: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -915,6 +929,10 @@ pub fn default_settings() -> Settings {
             font_size: "medium".to_string(),
         },
         extensions: crate::agent_engine::ExtensionsSettings::default(),
+        voice: VoiceSettings {
+            stt_model: Some("openai/whisper-large-v3".into()),
+            stt_language: None,
+        },
     }
 }
 

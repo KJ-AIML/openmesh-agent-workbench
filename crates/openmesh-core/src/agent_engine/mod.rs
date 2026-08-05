@@ -33,12 +33,13 @@ pub use patch::{
     reject_patch, rollback_patch, AgentRunRecord, PatchRecord, PatchStatus,
 };
 pub use recipes::{
-    cancel_recipe_run, ensure_default_recipes, get_recipe, list_recipes, run_recipe, LogCallback,
+    cancel_recipe_run, ensure_default_recipes, get_recipe, list_recipes, run_recipe,
+    run_recipe_with_patch, suggest_verify_recipe, LogCallback,
     Recipe, RecipeRunResult,
 };
 pub use continue_ops::{
     approve_handoff, create_handoff_draft, link_session, list_session_links, mesh_query,
-    pending_questions_json, update_task, write_delegate_brief, SessionLink,
+    pending_questions_json, record_delegate_launch, update_task, write_delegate_brief, SessionLink,
 };
 pub use workspace_tools::WorkspaceToolExecutor;
 pub use provider::{
@@ -57,7 +58,7 @@ pub use secrets::{
 pub use types::{
     AgentDefinition, AgentEngineError, AgentProviderKind, AgentSession, ChatMessage, ChatRole,
     EngineTurnResult, ToolCallRequest, ToolSpec, ToolStep, AGENT_ENGINE_PROTOCOL,
-    DEFAULT_MAX_TOOL_ITERATIONS, DEFAULT_SYSTEM_PROMPT,
+    DEFAULT_MAX_TOOL_ITERATIONS, DEFAULT_MAX_TOOLS_PER_ITERATION, DEFAULT_SYSTEM_PROMPT,
 };
 
 #[cfg(test)]

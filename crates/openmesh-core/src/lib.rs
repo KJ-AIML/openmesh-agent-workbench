@@ -168,6 +168,8 @@ pub mod rc;
 pub mod pending_proxy_question;
 pub mod lan;
 pub mod agent_engine;
+pub mod app_actions;
+pub mod canvas;
 pub mod relay;
 pub mod return_digest;
 pub mod team;

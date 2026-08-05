@@ -110,7 +110,7 @@ pub fn resolve_live_ask_config(
         base_url: resolved_base,
         // Empty allowlist = all built-in read-mostly tools (see filter_tools).
         tool_allowlist: vec![],
-        max_tool_iterations: 6,
+        max_tool_iterations: 3,
     };
     Ok((api_key, def))
 }

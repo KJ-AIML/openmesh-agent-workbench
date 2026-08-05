@@ -33,6 +33,11 @@ export type ChatTurnOptions = {
   onProgress?: (event: ChatTurnProgress) => void;
   mode?: "ask" | "plan" | "act" | "delegate";
   turnId?: string;
+  /**
+   * Skip local keyword/slash tool shortcuts (used by voice so prompt words
+   * like "Sprint" don't dump JSON into the HUD).
+   */
+  skipLocalTools?: boolean;
 };
 
 export async function runAgentChatTurn(
@@ -49,7 +54,8 @@ export async function runAgentChatTurn(
       "history" in settingsOrOpts ||
       "onProgress" in settingsOrOpts ||
       "mode" in settingsOrOpts ||
-      "turnId" in settingsOrOpts)
+      "turnId" in settingsOrOpts ||
+      "skipLocalTools" in settingsOrOpts)
       ? settingsOrOpts
       : { settings: settingsOrOpts as Settings | null | undefined, history };
 
@@ -79,7 +85,7 @@ export async function runAgentChatTurn(
     return { assistantText: listToolsHelp(), toolCalls: [] };
   }
 
-  const tools = resolveToolsForMessage(trimmed);
+  const tools = opts.skipLocalTools ? [] : resolveToolsForMessage(trimmed);
   const toolCalls: ChatToolCall[] = [];
 
   if (tools.length > 0) {

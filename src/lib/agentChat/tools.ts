@@ -11,6 +11,7 @@ import {
   runAgentRecipe,
   runAgentWorkspaceTool,
   summarizeAgentPatch,
+  recordDelegateLaunch,
   writeDelegateBrief,
 } from "../agentEngineClient";
 import { openAgentCli } from "../adapters/terminalAdapter";
@@ -381,6 +382,7 @@ export const AGENT_TOOLS: AgentTool[] = [
         );
         const launch = await openAgentCli(tool, projectPath, undefined, {
           resumeSessionId: sessionId,
+          briefPath: brief,
         });
         if (!launch.success) {
           return {
@@ -388,10 +390,14 @@ export const AGENT_TOOLS: AgentTool[] = [
             summary: launch.error || "Failed to launch agent CLI",
           };
         }
+        const runId = await recordDelegateLaunch(projectPath, tool, {
+          briefPath: brief,
+          resumeSessionId: sessionId,
+        });
         return {
           ok: true,
-          summary: `Launched ${tool}${sessionId ? ` (resume ${sessionId})` : ""}. Brief written to ${brief}`,
-          data: { tool, sessionId, brief },
+          summary: `Launched ${tool}${sessionId ? ` (resume ${sessionId})` : ""}. Brief written to ${brief} (run ${runId})`,
+          data: { tool, sessionId, brief, runId },
         };
       } catch (e) {
         return {
@@ -788,9 +794,16 @@ export function resolveToolsForMessage(message: string): AgentTool[] {
   }
 
   const lower = trimmed.toLowerCase();
-  const hits = AGENT_TOOLS.filter((t) =>
-    t.keywords.some((k) => lower.includes(k)),
-  );
-  // Prefer more specific multi-word keyword hits; keep unique
-  return hits.slice(0, 3);
+  // Score by longest matching keyword so Continuity phrases like
+  // "create handoff" prefer `/continue` over shorter overlaps.
+  const ranked = AGENT_TOOLS.map((t) => {
+    let best = 0;
+    for (const k of t.keywords) {
+      if (lower.includes(k) && k.length > best) best = k.length;
+    }
+    return { tool: t, score: best };
+  })
+    .filter((r) => r.score > 0)
+    .sort((a, b) => b.score - a.score);
+  return ranked.slice(0, 3).map((r) => r.tool);
 }

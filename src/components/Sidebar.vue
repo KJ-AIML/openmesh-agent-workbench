@@ -86,6 +86,7 @@ const workNav = [
   { label: "Sprint", icon: ListTodo, route: "/sprint" },
   { label: "Docs", icon: FileText, route: "/docs" },
   { label: "Notes", icon: FileEdit, route: "/notes" },
+  { label: "Canvas", icon: Network, route: "/canvas" },
   { label: "Context", icon: Search, route: "/context" },
 ];
 
