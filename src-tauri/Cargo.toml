@@ -1,6 +1,6 @@
 [package]
 name = "openmesh"
-version = "0.1.27"
+version = "0.1.28"
 rust-version = "1.92.0"
 description = "Personal workbench for resuming work"
 authors = ["Openmesh Team"]

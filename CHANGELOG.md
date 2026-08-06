@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.28] - 2026-08-06
+
+### Fixed
+- Release CI macOS bundling: do not map unset `APPLE_*` / `WINDOWS_*` secrets into the tauri-action env. Empty `APPLE_CERTIFICATE` is not a no-op — it triggers `security import` / `SecKeychainItemImport` failure after a successful compile (broke `v0.1.27` aarch64/x64 DMGs). Unsigned ad-hoc signing (`signingIdentity: "-"`) restored.
+
 ## [0.1.27] - 2026-08-06
 
 ### Documentation

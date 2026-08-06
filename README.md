@@ -141,7 +141,7 @@ No cloud sync.
 ## Current status
 
 > [!NOTE]
-> OpenMesh is early preview software (`0.x`). Version baseline **0.1.27**. Intended for local dogfooding. See [docs/PRODUCT_GUIDE.md](./docs/PRODUCT_GUIDE.md) and [CHANGELOG.md](./CHANGELOG.md).
+> OpenMesh is early preview software (`0.x`). Version baseline **0.1.28**. Intended for local dogfooding. See [docs/PRODUCT_GUIDE.md](./docs/PRODUCT_GUIDE.md) and [CHANGELOG.md](./CHANGELOG.md).
 
 ### Known limitations (summary)
 

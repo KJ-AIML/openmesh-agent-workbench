@@ -18,7 +18,8 @@ name: Release
 #   Windows users may see SmartScreen.
 #
 # When Apple / Windows certs are available, add these GitHub Actions secrets
-# (tauri-action / Tauri bundler read them from the env block below):
+# AND pass them in the tauri-action `env:` block (do not pre-wire empty secrets —
+# an empty APPLE_CERTIFICATE makes the bundler run `security import` and fail):
 #   macOS sign + notarize:
 #     APPLE_CERTIFICATE          — base64 .p12 Developer ID Application cert
 #     APPLE_CERTIFICATE_PASSWORD — password for that .p12
@@ -113,15 +114,10 @@ jobs:
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Present but empty until repo secrets are configured — no-op for unsigned builds.
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          # Do NOT map unset APPLE_*/WINDOWS_* secrets here. Missing secrets become
+          # empty strings in Actions, and tauri's macOS bundler treats a present
+          # APPLE_CERTIFICATE as "import this .p12" — which fails codesign with
+          # SecKeychainItemImport. Wire those env vars only after real secrets exist.
         with:
           tagName: ${{ github.event.inputs.tag || github.ref_name }}
           # releaseName/generateReleaseNotes/releaseBody are ONLY passed on a
