@@ -30,6 +30,7 @@ fn sample_peer(peer_id: &str, label: &str) -> MeshPeerRecord {
         proxy_profile_id: Some("profile-yo".into()),
         remote_workspace_id: Some("ws-yo".into()),
         notes: Some("local teammate".into()),
+        lan_address: None,
         created_at: "2026-08-02T15:00:00Z".into(),
         updated_at: "2026-08-02T15:00:00Z".into(),
     }

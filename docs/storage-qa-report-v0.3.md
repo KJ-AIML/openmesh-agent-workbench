@@ -1,3 +1,5 @@
+> **Historical QA report (v0.3).** Current docs: [`README.md`](./README.md) · [`ARCHITECTURE.md`](./ARCHITECTURE.md).
+
 # Openmesh v0.3 Storage QA and Hardening - Final Report
 
 **Date:** 2026-01-15  

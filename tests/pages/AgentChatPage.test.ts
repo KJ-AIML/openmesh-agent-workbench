@@ -4,7 +4,10 @@ import { nextTick, ref } from "vue";
 
 vi.mock("vue-router", () => ({
   useRoute: () => ({ path: "/agent-chat", query: {} }),
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({
+    push: vi.fn(),
+    currentRoute: { value: { path: "/agent-chat", query: {} } },
+  }),
 }));
 
 const runAgentChatTurn = vi.fn();
@@ -69,11 +72,63 @@ vi.mock("@/lib/useStore", () => ({
   useStore: () => mockStore,
 }));
 
+const openTerminal = vi.fn(
+  async (_opts?: unknown) => ({ success: true, isMock: true }),
+);
+
+vi.mock("@/lib/adapters/terminalAdapter", () => ({
+  openTerminal: (opts: unknown) => openTerminal(opts),
+  openAgentCli: vi.fn(async () => ({ success: true, isMock: true })),
+}));
+
+vi.mock("@/lib/adapters/ptyAdapter", () => ({
+  createPty: vi.fn(async () => ({
+    id: "shell-mock",
+    shell: "zsh",
+    cwd: "/tmp/test",
+  })),
+  writePty: vi.fn(async () => {}),
+  resizePty: vi.fn(async () => {}),
+  killPty: vi.fn(async () => {}),
+  killAllPtys: vi.fn(async () => {}),
+  listenPtyData: vi.fn(async () => () => {}),
+  listenPtyExit: vi.fn(async () => () => {}),
+}));
+
+vi.mock("@/components/chat/EmbeddedTerminal.vue", async () => {
+  const { defineComponent, h } = await import("vue");
+  return {
+    default: defineComponent({
+      name: "EmbeddedTerminalStub",
+      props: {
+        sessionId: { type: String, required: true },
+        cwd: { type: String, required: true },
+        active: { type: Boolean, required: true },
+      },
+      setup(props) {
+        return () =>
+          h("div", {
+            "data-testid": `embedded-term-${props.sessionId}`,
+          });
+      },
+    }),
+  };
+});
+
+vi.mock("@/lib/store", () => ({
+  store: {
+    listDocs: vi.fn(async () => []),
+    listNotes: vi.fn(async () => []),
+    getProject: vi.fn(async () => null),
+  },
+}));
+
 import AgentChatPage from "@/pages/AgentChatPage.vue";
 
 describe("AgentChatPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    openTerminal.mockResolvedValue({ success: true, isMock: true });
     mockStore.currentProjectPath.value = "/tmp/test";
     mockStore.currentProject.value = {
       id: "p1",
@@ -111,7 +166,7 @@ describe("AgentChatPage", () => {
     expect(wrapper.text()).toContain("Set up provider before chat");
   });
 
-  it("renders Chat shell with composer when ready", async () => {
+  it("renders Chat shell with slim composer when ready", async () => {
     const wrapper = mount(AgentChatPage);
     await flushPromises();
     await nextTick();
@@ -120,12 +175,56 @@ describe("AgentChatPage", () => {
     expect(wrapper.find("textarea").exists()).toBe(true);
     expect(wrapper.text()).toContain("Send");
     expect(wrapper.text()).toMatch(/OpenMesh Agent Engine|MockProvider|mock-model/);
-    // Starter chips live in the thread column (not a full-width header dump).
+    // One composer shell: mode + commands menu, not always-on slash chip rows.
+    expect(wrapper.find('[data-testid="chat-composer"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="composer-mode"]').text()).toMatch(/ask/i);
+    expect(wrapper.find('[data-testid="composer-commands"]').exists()).toBe(true);
+    expect(wrapper.text()).not.toContain("More…");
+    expect(wrapper.text()).not.toMatch(/slash = local/i);
+    // Slash starters live in the Commands menu (not a permanent chip row).
+    expect(wrapper.text()).not.toContain("/pilot");
+    await wrapper.find('[data-testid="composer-commands"]').trigger("click");
+    await nextTick();
     expect(wrapper.text()).toContain("/pilot");
-    expect(wrapper.text()).toContain("More…");
-    expect(wrapper.text()).toMatch(/slash = local/i);
-    expect(wrapper.text()).toMatch(/ask|plan|act|delegate/i);
+    expect(wrapper.find('[data-testid="composer-slash-menu"]').exists()).toBe(
+      true,
+    );
+    expect(wrapper.text()).toContain("All tools…");
     expect(wrapper.text()).not.toContain("DashScope Coding Plan");
+    // Quiet status icons inside the shell (no "0 Terminal" pill).
+    expect(wrapper.find('[data-testid="composer-status-bar"]').exists()).toBe(
+      true,
+    );
+    expect(
+      wrapper.find('[data-testid="composer-status-terminal-badge"]').exists(),
+    ).toBe(false);
+    expect(wrapper.find('[data-testid="composer-status-canvas"]').exists()).toBe(
+      true,
+    );
+    expect(wrapper.find('[data-testid="composer-status-working"]').exists()).toBe(
+      false,
+    );
+    // Terminal icon opens tabbed panel with an embedded PTY tab (not OS shell).
+    await wrapper.find('[data-testid="composer-status-terminal"]').trigger("click");
+    await flushPromises();
+    await nextTick();
+    expect(wrapper.find('[data-testid="chat-terminal-panel"]').exists()).toBe(
+      true,
+    );
+    expect(wrapper.find('[data-testid="term-tab-add"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid^="embedded-term-"]').exists()).toBe(true);
+    expect(wrapper.text()).not.toMatch(/external shell/i);
+    expect(wrapper.text()).toMatch(/\/ commands|@ context/i);
+    // Right-dock sidebar by default — chat column keeps its own scroll region.
+    const panel = wrapper.find('[data-testid="chat-terminal-panel"]');
+    expect(panel.attributes("data-dock")).toBe("right");
+    expect(wrapper.find('[data-testid="chat-main"]').classes()).toContain(
+      "chat__main--term-right",
+    );
+    expect(wrapper.find('[data-testid="term-panel-resize"]').exists()).toBe(
+      true,
+    );
+    expect(wrapper.find(".chat__column").exists()).toBe(true);
   });
 
   it("optimistic send shows user message before mocked agent resolves", async () => {
@@ -153,6 +252,12 @@ describe("AgentChatPage", () => {
     // User bubble should paint before the agent promise settles.
     expect(wrapper.text()).toContain("hello from e2e");
     expect(wrapper.text()).toMatch(/Thinking|Working/);
+    // Composer status chip tracks the in-flight turn.
+    await vi.waitFor(() => {
+      expect(wrapper.find('[data-testid="composer-status-working"]').exists()).toBe(
+        true,
+      );
+    });
 
     // send() awaits rAF + setTimeout(0) before calling the runner.
     await vi.waitFor(() => {
@@ -168,6 +273,16 @@ describe("AgentChatPage", () => {
     const callArgs = runAgentChatTurn.mock.calls[0];
     expect(callArgs[0]).toBe("/tmp/test");
     expect(callArgs[1]).toBe("hello from e2e");
+
+    // User vs assistant bubbles are visually/role-labeled distinct.
+    expect(wrapper.find('.msg--user[data-role="user"]').exists()).toBe(true);
+    expect(wrapper.find('.msg--assistant[data-role="assistant"]').exists()).toBe(
+      true,
+    );
+    expect(wrapper.find(".msg--user .bubble__role").text()).toMatch(/You/i);
+    expect(wrapper.find(".msg--assistant .bubble__role").text()).toMatch(
+      /Assistant/i,
+    );
   });
 
   it("exposes copy and fork actions on user/assistant bubbles", async () => {

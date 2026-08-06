@@ -58,6 +58,9 @@ const mockStore = {
   deleteNote: vi.fn(),
   createNote: vi.fn(),
   deleteSession: vi.fn(),
+  deleteAgentSession: vi.fn(),
+  updateAgentSession: vi.fn(),
+  addRecentItem: vi.fn(),
   toggleSessionFavorite: vi.fn(),
 };
 

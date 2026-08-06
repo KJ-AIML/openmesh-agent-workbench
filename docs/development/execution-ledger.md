@@ -1,5 +1,7 @@
 # OpenMesh Execution Ledger
 
+> **Append-only history — not the product bible.** Current capability docs: [`../README.md`](../README.md) · [`../CONTINUITY_MESH.md`](../CONTINUITY_MESH.md) · [`../LIMITATIONS.md`](../LIMITATIONS.md). Older entries may mention `web-demo/`, “no human chat UI”, or stale README debt that has since been fixed.
+
 Purpose:
 Append-only engineering history for OpenMesh Dev Tracks.
 

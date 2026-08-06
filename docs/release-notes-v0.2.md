@@ -1,3 +1,5 @@
+> **Historical release notes (v0.2).** Current product truth: [`../README.md`](../README.md) · [`README.md`](./README.md). “No embedded terminal emulator” and similar early limits are outdated.
+
 # Openmesh v0.2 Release Notes
 
 **Release Date:** 2026-01-15  

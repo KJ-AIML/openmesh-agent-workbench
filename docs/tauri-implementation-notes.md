@@ -1,3 +1,5 @@
+> **Historical implementation notes (early Tauri land).** Current architecture and runbook: [`ARCHITECTURE.md`](./ARCHITECTURE.md) · [`DEVELOPMENT.md`](./DEVELOPMENT.md).
+
 # Openmesh Tauri Implementation Notes
 
 **Phase:** 1 + 2A + 3 + 4A + 4B + 5 + 6  

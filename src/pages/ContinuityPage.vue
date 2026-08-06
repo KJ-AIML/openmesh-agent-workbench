@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from "vue";
+import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import {
   RefreshCw,
   Inbox,
@@ -17,8 +17,10 @@ import {
   ClipboardCheck,
   Flag,
   Radio,
+  MessageSquare,
 } from "lucide-vue-next";
 import { useStore } from "../lib/useStore";
+import ChatMessageContent from "../components/chat/ChatMessageContent.vue";
 import {
   type ContinuityHubSummary,
   type PendingQuestionsView,
@@ -36,18 +38,29 @@ import {
   type RcPackView,
   type LanServeStatus,
   type LanPeerInfo,
+  type LanPeerPresence,
+  type LanPresenceState,
+  type LanChatMessageView,
   getContinuityHubSummary,
   getPendingQuestions,
   getReturnDigest,
   listMeshPeers,
   listMeshEnvelopes,
   queryMeshPeer,
+  addMeshPeer,
   listRelayAudit,
   getOnlineProxyStatus,
   initOnlineProxy,
   askOnlineProxy,
   getTeamWorkspace,
   getTeamTrustPolicy,
+  initTeamWorkspace,
+  addTeamMember,
+  initTeamTrustPolicy,
+  setTeamTrustRemoteQuery,
+  setTeamTrustQueryMode,
+  addTeamTrustAllowlist,
+  listTeamTrustAudit,
   listConnectors,
   getOrgGraph,
   getPilotStatus,
@@ -59,10 +72,27 @@ import {
   lanListApprovedPackages,
   lanSendPackage,
   lanAskPeer,
+  lanProbePresence,
+  lanProbeAddress,
+  lanChatSend,
+  lanChatList,
   type MeshRemoteQueryAnswer,
 } from "../lib/continuityClient";
 
-type TabId = "pending" | "digest" | "mesh" | "relay" | "online-proxy" | "lan" | "team" | "trust" | "connectors" | "org" | "pilot" | "rc";
+type TabId =
+  | "pending"
+  | "digest"
+  | "mesh"
+  | "relay"
+  | "online-proxy"
+  | "lan"
+  | "chat"
+  | "team"
+  | "trust"
+  | "connectors"
+  | "org"
+  | "pilot"
+  | "rc";
 type GroupId = "you" | "team" | "mesh" | "gate";
 
 const { currentProject, currentProjectPath } = useStore();
@@ -96,6 +126,11 @@ const lanAskTo = ref("");
 const lanAskQuestion = ref("");
 const lanAskTier = ref("low-impact");
 const lanAskAnswer = ref<MeshRemoteQueryAnswer | null>(null);
+const lanPresenceByAddress = ref<Record<string, LanPeerPresence>>({});
+const lanManualProbe = ref("");
+const lanManualProbeResult = ref<LanPeerPresence | null>(null);
+const presenceProbing = ref(false);
+let presenceTimer: ReturnType<typeof setInterval> | null = null;
 const packCliHint = computed(
   () =>
     "openmesh-cli relay pack --envelope-id <id> --package-id <pkg> && openmesh-cli relay approve --id <pkg>",
@@ -103,17 +138,38 @@ const packCliHint = computed(
 const acting = ref(false);
 const teamWs = ref<TeamWorkspaceView | null>(null);
 const trustPolicy = ref<TeamTrustPolicyView | null>(null);
+const trustAudit = ref<
+  Array<{
+    eventId: string;
+    teamId: string;
+    actorMemberId: string;
+    action: string;
+    detail: string;
+    at: string;
+  }>
+>([]);
 const connectors = ref<ConnectorDescriptorView[]>([]);
 const orgGraph = ref<OrgGraphView | null>(null);
 const pilotPack = ref<PilotPackView | null>(null);
 const rcPack = ref<RcPackView | null>(null);
+
+const meshAddLabel = ref("");
+const meshAddLan = ref("");
+const meshAddNotes = ref("");
+const teamInitName = ref("");
+const teamMemberLabel = ref("");
+const teamMemberPeer = ref("");
+const trustAllowPeer = ref("");
+const chatPeerTo = ref("");
+const chatText = ref("");
+const chatMessages = ref<LanChatMessageView[]>([]);
 
 const hasProject = computed(() => !!currentProjectPath.value);
 
 const groups: { id: GroupId; label: string; tabs: TabId[] }[] = [
   { id: "you", label: "You", tabs: ["pending", "digest"] },
   { id: "team", label: "Team", tabs: ["team", "trust", "connectors", "org"] },
-  { id: "mesh", label: "Mesh", tabs: ["mesh", "relay", "online-proxy", "lan"] },
+  { id: "mesh", label: "Mesh", tabs: ["mesh", "lan", "chat", "relay", "online-proxy"] },
   { id: "gate", label: "Gate", tabs: ["pilot", "rc"] },
 ];
 
@@ -130,6 +186,7 @@ const tabMeta: Record<TabId, { label: string; icon: typeof Inbox }> = {
   relay: { label: "Relay", icon: Share2 },
   "online-proxy": { label: "Proxy", icon: Cloud },
   lan: { label: "LAN", icon: Radio },
+  chat: { label: "Chat", icon: MessageSquare },
 };
 
 const visibleTabs = computed(() => {
@@ -192,6 +249,9 @@ async function loadTab() {
       case "mesh":
         peers.value = await listMeshPeers(path);
         envelopes.value = await listMeshEnvelopes(path);
+        if (peers.value.some((p) => p.lanAddress)) {
+          await refreshLanPresence();
+        }
         break;
       case "relay":
         audit.value = await listRelayAudit(path);
@@ -202,12 +262,39 @@ async function loadTab() {
       case "lan":
         lanStatus.value = await lanServeStatus(path);
         await refreshLanApproved();
+        if (lanPeers.value.length === 0) {
+          try {
+            lanPeers.value = await lanDiscover(path, { seconds: 2 });
+          } catch {
+            /* keep empty */
+          }
+        }
+        await refreshLanPresence();
+        startPresencePolling();
+        break;
+      case "chat":
+        lanStatus.value = await lanServeStatus(path);
+        if (lanPeers.value.length === 0) {
+          try {
+            lanPeers.value = await lanDiscover(path, { seconds: 2 });
+          } catch {
+            /* keep empty */
+          }
+        }
+        await refreshLanPresence();
+        await refreshChatMessages();
+        startPresencePolling();
         break;
       case "team":
         teamWs.value = await getTeamWorkspace(path);
         break;
       case "trust":
         trustPolicy.value = await getTeamTrustPolicy(path);
+        try {
+          trustAudit.value = await listTeamTrustAudit(path, 20);
+        } catch {
+          trustAudit.value = [];
+        }
         break;
       case "connectors":
         connectors.value = await listConnectors(path);
@@ -315,6 +402,265 @@ async function handleLanDiscover() {
   try {
     // Falls back to last-known peers when UDP finds nothing (VPN/loopback).
     lanPeers.value = await lanDiscover(currentProjectPath.value, { seconds: 3 });
+    await refreshLanPresence();
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    acting.value = false;
+  }
+}
+
+function presenceFor(address: string): LanPeerPresence | undefined {
+  return lanPresenceByAddress.value[address];
+}
+
+function presenceLabel(state?: LanPresenceState): string {
+  switch (state) {
+    case "live":
+      return "live";
+    case "stale":
+      return "stale";
+    case "unreachable":
+      return "unreachable";
+    default:
+      return "unknown";
+  }
+}
+
+async function refreshLanPresence() {
+  const targets: Array<{ address: string; lastSeenAt?: string }> = [];
+  const seen = new Set<string>();
+  for (const p of lanPeers.value) {
+    if (!p.address || seen.has(p.address)) continue;
+    seen.add(p.address);
+    targets.push({ address: p.address, lastSeenAt: p.lastSeenAt });
+  }
+  for (const p of peers.value) {
+    if (p.lanAddress && !seen.has(p.lanAddress)) {
+      seen.add(p.lanAddress);
+      targets.push({ address: p.lanAddress });
+    }
+  }
+  if (lanAskTo.value.trim() && !seen.has(lanAskTo.value.trim())) {
+    targets.push({ address: lanAskTo.value.trim() });
+  }
+  if (lanSendTo.value.trim() && !seen.has(lanSendTo.value.trim())) {
+    targets.push({ address: lanSendTo.value.trim() });
+  }
+  if (targets.length === 0) return;
+  presenceProbing.value = true;
+  try {
+    const rows = await lanProbePresence(targets);
+    const next: Record<string, LanPeerPresence> = {
+      ...lanPresenceByAddress.value,
+    };
+    for (const row of rows) {
+      next[row.address] = row;
+    }
+    lanPresenceByAddress.value = next;
+  } catch {
+    /* keep prior presence */
+  } finally {
+    presenceProbing.value = false;
+  }
+}
+
+function startPresencePolling() {
+  stopPresencePolling();
+  presenceTimer = setInterval(() => {
+    if (tab.value === "lan" || tab.value === "chat") {
+      void refreshLanPresence();
+    }
+  }, 8000);
+}
+
+function stopPresencePolling() {
+  if (presenceTimer) {
+    clearInterval(presenceTimer);
+    presenceTimer = null;
+  }
+}
+
+async function handleManualProbe() {
+  if (!lanManualProbe.value.trim()) return;
+  acting.value = true;
+  error.value = null;
+  lanManualProbeResult.value = null;
+  try {
+    const row = await lanProbeAddress(lanManualProbe.value.trim());
+    lanManualProbeResult.value = row;
+    lanPresenceByAddress.value = {
+      ...lanPresenceByAddress.value,
+      [row.address]: row,
+    };
+    lanAskTo.value = row.address;
+    lanSendTo.value = row.address;
+    chatPeerTo.value = row.address;
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    acting.value = false;
+  }
+}
+
+async function handleMeshAddPeer() {
+  if (!currentProjectPath.value || !meshAddLabel.value.trim()) return;
+  acting.value = true;
+  error.value = null;
+  try {
+    await addMeshPeer(currentProjectPath.value, {
+      label: meshAddLabel.value.trim(),
+      lanAddress: meshAddLan.value.trim() || undefined,
+      notes: meshAddNotes.value.trim() || undefined,
+    });
+    meshAddLabel.value = "";
+    meshAddLan.value = "";
+    meshAddNotes.value = "";
+    peers.value = await listMeshPeers(currentProjectPath.value);
+    await loadSummary();
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    acting.value = false;
+  }
+}
+
+async function handleTeamInit() {
+  if (!currentProjectPath.value || !teamInitName.value.trim()) return;
+  acting.value = true;
+  error.value = null;
+  try {
+    teamWs.value = await initTeamWorkspace(currentProjectPath.value, {
+      name: teamInitName.value.trim(),
+      ownerLabel: currentProject.value?.name || "local-operator",
+    });
+    teamInitName.value = "";
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    acting.value = false;
+  }
+}
+
+async function handleTeamAddMember() {
+  if (!currentProjectPath.value || !teamMemberLabel.value.trim()) return;
+  acting.value = true;
+  error.value = null;
+  try {
+    teamWs.value = await addTeamMember(currentProjectPath.value, {
+      label: teamMemberLabel.value.trim(),
+      meshPeerId: teamMemberPeer.value.trim() || undefined,
+      role: "member",
+    });
+    teamMemberLabel.value = "";
+    teamMemberPeer.value = "";
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    acting.value = false;
+  }
+}
+
+async function handleTrustInit() {
+  if (!currentProjectPath.value) return;
+  acting.value = true;
+  error.value = null;
+  try {
+    trustPolicy.value = await initTeamTrustPolicy(currentProjectPath.value);
+    trustAudit.value = await listTeamTrustAudit(currentProjectPath.value, 20);
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    acting.value = false;
+  }
+}
+
+async function handleTrustToggleRemote() {
+  if (!currentProjectPath.value || !trustPolicy.value) return;
+  acting.value = true;
+  error.value = null;
+  try {
+    trustPolicy.value = await setTeamTrustRemoteQuery(
+      currentProjectPath.value,
+      !trustPolicy.value.remoteQueryEnabled,
+    );
+    trustAudit.value = await listTeamTrustAudit(currentProjectPath.value, 20);
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    acting.value = false;
+  }
+}
+
+async function handleTrustSetMode(mode: string) {
+  if (!currentProjectPath.value) return;
+  acting.value = true;
+  error.value = null;
+  try {
+    trustPolicy.value = await setTeamTrustQueryMode(currentProjectPath.value, mode);
+    trustAudit.value = await listTeamTrustAudit(currentProjectPath.value, 20);
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    acting.value = false;
+  }
+}
+
+async function handleTrustAllowAdd() {
+  if (!currentProjectPath.value || !trustAllowPeer.value.trim()) return;
+  acting.value = true;
+  error.value = null;
+  try {
+    trustPolicy.value = await addTeamTrustAllowlist(currentProjectPath.value, {
+      meshPeerId: trustAllowPeer.value.trim(),
+    });
+    trustAllowPeer.value = "";
+    trustAudit.value = await listTeamTrustAudit(currentProjectPath.value, 20);
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    acting.value = false;
+  }
+}
+
+async function refreshChatMessages() {
+  if (!currentProjectPath.value) return;
+  try {
+    // Fetch recent local store, then filter by host:port and/or discovered peer id
+    // (inbound LAN messages are keyed by from_peer_id; outbound by host:port).
+    const all = await lanChatList(currentProjectPath.value, undefined, 200);
+    const addr = chatPeerTo.value.trim();
+    if (!addr) {
+      chatMessages.value = all;
+      return;
+    }
+    const peerId = presenceFor(addr)?.health?.peerId;
+    chatMessages.value = all.filter(
+      (m) =>
+        m.peerKey === addr ||
+        (!!peerId &&
+          (m.peerKey === peerId || m.message.fromPeerId === peerId)),
+    );
+  } catch {
+    chatMessages.value = [];
+  }
+}
+
+async function handleChatSend() {
+  if (!currentProjectPath.value || !chatPeerTo.value.trim() || !chatText.value.trim()) {
+    return;
+  }
+  acting.value = true;
+  error.value = null;
+  try {
+    await lanChatSend(
+      currentProjectPath.value,
+      chatPeerTo.value.trim(),
+      chatText.value.trim(),
+      { fromLabel: currentProject.value?.name || undefined },
+    );
+    chatText.value = "";
+    await refreshChatMessages();
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
   } finally {
@@ -336,6 +682,18 @@ async function refreshLanApproved() {
 function selectLanPeer(peer: LanPeerInfo) {
   lanSendTo.value = peer.address;
   lanAskTo.value = peer.address;
+  chatPeerTo.value = peer.address;
+  lanManualProbe.value = peer.address;
+}
+
+function selectMeshPeer(p: MeshPeerRecord) {
+  meshPeer.value = p.peerId;
+  if (p.lanAddress) {
+    chatPeerTo.value = p.lanAddress;
+    lanAskTo.value = p.lanAddress;
+    lanSendTo.value = p.lanAddress;
+    void refreshLanPresence();
+  }
 }
 
 async function handleLanSend() {
@@ -411,6 +769,9 @@ function missedCounts(d: ReturnDigest) {
 watch(tab, () => {
   const owner = groups.find((g) => g.tabs.includes(tab.value));
   if (owner) group.value = owner.id;
+  if (tab.value !== "lan" && tab.value !== "chat") {
+    stopPresencePolling();
+  }
   loadTab();
 });
 
@@ -424,15 +785,23 @@ watch(currentProjectPath, () => {
   lastAnswer.value = null;
   teamWs.value = null;
   trustPolicy.value = null;
+  trustAudit.value = [];
   connectors.value = [];
   orgGraph.value = null;
   pilotPack.value = null;
   rcPack.value = null;
+  lanPresenceByAddress.value = {};
+  chatMessages.value = [];
+  stopPresencePolling();
   loadTab();
 });
 
 onMounted(() => {
   loadTab();
+});
+
+onUnmounted(() => {
+  stopPresencePolling();
 });
 </script>
 
@@ -623,22 +992,65 @@ onMounted(() => {
       <!-- Mesh -->
       <div v-else-if="tab === 'mesh'" class="space-y-3">
         <div class="workbench-card p-4 space-y-3">
+          <h3 class="section-label">Register peer</h3>
+          <p class="text-[12px] text-muted">
+            Local peer registry (same as <code class="code">mesh peer add</code>).
+            Optional LAN host:port enables presence probing and Team Chat.
+          </p>
+          <input
+            v-model="meshAddLabel"
+            class="input-sm w-full"
+            placeholder="Label (e.g. Yo)"
+          />
+          <input
+            v-model="meshAddLan"
+            class="input-sm w-full"
+            placeholder="LAN host:port (optional)"
+          />
+          <input
+            v-model="meshAddNotes"
+            class="input-sm w-full"
+            placeholder="Notes (optional)"
+          />
+          <button
+            type="button"
+            class="btn-primary"
+            :disabled="acting || !meshAddLabel.trim()"
+            @click="handleMeshAddPeer"
+          >
+            Add peer
+          </button>
+        </div>
+        <div class="workbench-card p-4 space-y-3">
           <h3 class="section-label">Peers ({{ peers.length }})</h3>
           <div v-if="peers.length === 0" class="text-[12px] text-muted">
-            No mesh peers registered. Use CLI
-            <code class="code">mesh peer add</code> to register a local peer.
+            No mesh peers registered yet.
           </div>
           <div
             v-for="p in peers"
             :key="p.peerId"
             class="rounded-lg p-3 text-[12px] cursor-pointer"
             style="background: var(--surface-2); border: 1px solid var(--border)"
-            @click="meshPeer = p.peerId"
+            @click="selectMeshPeer(p)"
           >
-            <div class="font-medium text-[13px]">{{ p.label }}</div>
+            <div class="flex items-center gap-2">
+              <span
+                v-if="p.lanAddress"
+                class="presence-dot"
+                :class="'presence-dot--' + (presenceFor(p.lanAddress)?.state || 'unknown')"
+                :title="presenceLabel(presenceFor(p.lanAddress)?.state)"
+              />
+              <div class="font-medium text-[13px]">{{ p.label }}</div>
+            </div>
             <div class="text-muted">id={{ p.peerId }}</div>
             <div v-if="p.remoteWorkspaceId" class="text-muted">
               workspace={{ p.remoteWorkspaceId }}
+            </div>
+            <div v-if="p.lanAddress" class="text-muted">
+              lan={{ p.lanAddress }}
+              <span v-if="presenceFor(p.lanAddress)" class="badge">
+                {{ presenceLabel(presenceFor(p.lanAddress)?.state) }}
+              </span>
             </div>
           </div>
         </div>
@@ -685,9 +1097,10 @@ onMounted(() => {
               <span v-if="meshAnswer.refused" class="badge">refused</span>
             </div>
             <div class="text-[12px] text-muted">{{ meshAnswer.freshness.statement }}</div>
-            <pre class="text-[12px] whitespace-pre-wrap font-sans">{{
-              meshAnswer.answerText
-            }}</pre>
+            <ChatMessageContent
+              class="continuity-answer-md"
+              :text="meshAnswer.answerText"
+            />
           </div>
         </div>
         <div class="workbench-card p-4 space-y-3">
@@ -765,15 +1178,18 @@ onMounted(() => {
           </div>
         </div>
         <div class="workbench-card p-4 space-y-3">
-          <h3 class="section-label">Peers ({{ lanPeers.length }})</h3>
+          <div class="flex items-center justify-between gap-2">
+            <h3 class="section-label">Peers ({{ lanPeers.length }})</h3>
+            <span v-if="presenceProbing" class="text-[11px] text-muted">probing…</span>
+          </div>
           <div v-if="lanPeers.length === 0" class="text-[12px] text-muted space-y-2">
             <p>No peers discovered this scan.</p>
             <ul class="list-disc pl-4 space-y-1">
               <li>Start a listener on the other machine (Continuity → LAN).</li>
               <li>
                 If you’re on VPN / different subnet / loopback-only, skip UDP and
-                enter <code class="text-[11px]">host:httpPort</code> under Ask /
-                Send (default HTTP port 41778).
+                probe a manual <code class="text-[11px]">host:httpPort</code>
+                below (default HTTP port 41778).
               </li>
               <li>
                 Peer needs an API key in Settings — otherwise Ask returns
@@ -782,8 +1198,9 @@ onMounted(() => {
             </ul>
           </div>
           <p v-else class="text-[11px] text-muted">
-            Click a row to fill host:port. If UDP was quiet, this list may be
-            last-known peers from a previous scan.
+            Green = live health. Amber = seen recently but health failed. Gray =
+            unreachable. Probes <code class="text-[11px]">GET /v1/health</code>
+            every ~8s while this tab is open.
           </p>
           <div
             v-for="p in lanPeers"
@@ -792,9 +1209,65 @@ onMounted(() => {
             style="background: var(--surface-2); border: 1px solid var(--border)"
             @click="selectLanPeer(p)"
           >
-            <div class="font-medium text-[13px]">{{ p.ownerLabel }}</div>
+            <div class="flex items-center gap-2">
+              <span
+                class="presence-dot"
+                :class="'presence-dot--' + (presenceFor(p.address)?.state || 'unknown')"
+                :title="presenceLabel(presenceFor(p.address)?.state)"
+              />
+              <div class="font-medium text-[13px]">{{ p.ownerLabel }}</div>
+              <span class="badge">{{
+                presenceLabel(presenceFor(p.address)?.state)
+              }}</span>
+              <span
+                v-if="presenceFor(p.address)?.latencyMs != null"
+                class="text-muted text-[11px]"
+              >
+                {{ presenceFor(p.address)?.latencyMs }}ms
+              </span>
+            </div>
             <div class="text-muted">id={{ p.peerId }} · {{ p.address }}</div>
-            <div class="text-muted text-[11px]">seen {{ p.lastSeenAt }}</div>
+            <div class="text-muted text-[11px]">
+              discovered {{ p.lastSeenAt }}
+              <span v-if="presenceFor(p.address)?.probedAt">
+                · probed {{ presenceFor(p.address)?.probedAt }}
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="workbench-card p-4 space-y-3">
+          <h3 class="section-label">Manual host:port probe</h3>
+          <p class="text-[12px] text-muted">
+            Probe any LAN peer without UDP discovery (VPN / other subnet).
+          </p>
+          <div class="flex items-center gap-2 flex-wrap">
+            <input
+              v-model="lanManualProbe"
+              class="input-sm flex-1 min-w-[12rem]"
+              placeholder="192.168.1.20:41778"
+            />
+            <button
+              type="button"
+              class="btn-primary"
+              :disabled="acting || !lanManualProbe.trim()"
+              @click="handleManualProbe"
+            >
+              Probe
+            </button>
+          </div>
+          <div
+            v-if="lanManualProbeResult"
+            class="flex items-center gap-2 text-[12px]"
+          >
+            <span
+              class="presence-dot"
+              :class="'presence-dot--' + lanManualProbeResult.state"
+            />
+            <span class="badge">{{ lanManualProbeResult.state }}</span>
+            <span class="text-muted">{{ lanManualProbeResult.address }}</span>
+            <span v-if="lanManualProbeResult.health" class="text-muted">
+              · {{ lanManualProbeResult.health.ownerLabel }}
+            </span>
           </div>
         </div>
         <div class="workbench-card p-4 space-y-3">
@@ -893,9 +1366,92 @@ onMounted(() => {
               <span v-if="lanAskAnswer.refused" class="badge">refused</span>
             </div>
             <div class="text-[12px] text-muted">{{ lanAskAnswer.freshness.statement }}</div>
-            <pre class="text-[12px] whitespace-pre-wrap font-sans">{{
-              lanAskAnswer.answerText
-            }}</pre>
+            <ChatMessageContent
+              class="continuity-answer-md"
+              :text="lanAskAnswer.answerText"
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- Team Chat (LAN text MVP) -->
+      <div v-else-if="tab === 'chat'" class="space-y-3">
+        <div class="workbench-card p-4 space-y-3">
+          <h3 class="section-label">Team Chat (LAN)</h3>
+          <p class="text-[12px] text-muted">
+            Text peer delivery over LAN HTTP
+            (<code class="code">POST /v1/chat/message</code>. Not WhatsApp —
+            local/LAN text only, trusted-LAN alpha (no E2E crypto product claim).
+            Both sides need Continuity → LAN listener running.
+          </p>
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="p in lanPeers"
+              :key="'chat-' + p.address"
+              type="button"
+              class="btn-ghost text-[12px] inline-flex items-center gap-1.5"
+              @click="chatPeerTo = p.address; refreshChatMessages()"
+            >
+              <span
+                class="presence-dot"
+                :class="'presence-dot--' + (presenceFor(p.address)?.state || 'unknown')"
+              />
+              {{ p.ownerLabel }}
+            </button>
+          </div>
+          <input
+            v-model="chatPeerTo"
+            class="input-sm w-full"
+            placeholder="Peer host:port"
+            @change="refreshChatMessages"
+          />
+          <div
+            class="rounded-lg p-3 space-y-2 max-h-64 overflow-y-auto"
+            style="background: var(--surface-2); border: 1px solid var(--border)"
+          >
+            <div v-if="chatMessages.length === 0" class="text-[12px] text-muted">
+              No messages in this thread yet.
+            </div>
+            <div
+              v-for="m in chatMessages"
+              :key="m.message.messageId + m.storedAt"
+              class="text-[12px]"
+              :class="m.direction === 'outbound' ? 'text-right' : ''"
+            >
+              <div class="text-[11px] text-muted">
+                {{ m.message.fromLabel }}
+                · {{ m.direction }}
+                · {{ m.message.sentAt }}
+              </div>
+              <div
+                class="inline-block rounded-lg px-2.5 py-1.5 mt-0.5 text-left max-w-full"
+                style="background: var(--surface-3)"
+              >
+                <ChatMessageContent
+                  class="continuity-answer-md"
+                  :text="m.message.text"
+                />
+              </div>
+            </div>
+          </div>
+          <textarea
+            v-model="chatText"
+            rows="2"
+            class="input-area w-full"
+            placeholder="Message…"
+          />
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              class="btn-primary"
+              :disabled="acting || !chatPeerTo.trim() || !chatText.trim()"
+              @click="handleChatSend"
+            >
+              {{ acting ? "Sending…" : "Send" }}
+            </button>
+            <button type="button" class="btn-ghost" @click="refreshChatMessages">
+              Refresh thread
+            </button>
           </div>
         </div>
       </div>
@@ -906,7 +1462,8 @@ onMounted(() => {
           <h3 class="section-label">Audit trail ({{ audit.length }})</h3>
           <p class="text-[12px] text-muted">
             Pack / approve / send / receive remain CLI-first. This view is
-            read-only audit.
+            read-only audit. Relay packages are filesystem/LAN transfer — not a
+            WAN cloud mesh.
           </p>
           <div v-if="audit.length === 0" class="text-[12px] text-muted py-2">
             No relay audit events yet.
@@ -937,7 +1494,9 @@ onMounted(() => {
             <p class="text-[13px] text-muted">
               Continuity Proxy is not initialized for this project. Init stores
               local config; Ask uses your Agent Engine provider (Settings → API
-              key) — not a remote cloud teammate.
+              key) — not a remote cloud teammate. WAN / other-Wi‑Fi peer reach
+              is not available without a real relay you host; mesh peers remain
+              LAN or file-envelope based today.
             </p>
             <button
               type="button"
@@ -1016,9 +1575,10 @@ onMounted(() => {
               >
                 {{ lastAnswer.freshness.statement }}
               </div>
-              <pre class="text-[12px] whitespace-pre-wrap font-sans">{{
-                lastAnswer.answerText
-              }}</pre>
+              <ChatMessageContent
+                class="continuity-answer-md"
+                :text="lastAnswer.answerText"
+              />
             </div>
           </template>
         </div>
@@ -1029,21 +1589,66 @@ onMounted(() => {
         <div v-if="loading" class="text-[13px] text-muted flex items-center gap-2">
           <Loader2 class="h-4 w-4 animate-spin" /> Loading…
         </div>
-        <div v-else-if="!teamWs" class="workbench-card p-8 text-center space-y-2">
-          <p class="text-[14px] font-semibold">No team workspace</p>
-          <p class="text-[12px] text-muted">Run <code class="text-[11px]">team init</code> in the CLI for this project.</p>
-        </div>
-        <div v-else class="workbench-card p-5 space-y-3">
-          <h3 class="text-[14px] font-semibold">{{ teamWs.displayName }}</h3>
-          <p class="text-[12px] text-muted">team_id={{ teamWs.teamId }} · members={{ teamWs.members?.length ?? 0 }}</p>
-          <ul class="space-y-1.5 text-[12px]">
-            <li v-for="m in teamWs.members" :key="m.memberId" class="flex gap-2">
-              <span class="font-medium">{{ m.label }}</span>
-              <span class="text-muted">{{ m.role }}</span>
-              <span v-if="m.meshPeerId" class="text-muted">peer={{ m.meshPeerId }}</span>
-            </li>
-          </ul>
-        </div>
+        <template v-else-if="!teamWs">
+          <div class="workbench-card p-5 space-y-3">
+            <h3 class="text-[14px] font-semibold">Initialize team workspace</h3>
+            <p class="text-[12px] text-muted">
+              Local team registry (same as <code class="code">team init</code>).
+              Not cloud multi-tenant admin.
+            </p>
+            <input
+              v-model="teamInitName"
+              class="input-sm w-full"
+              placeholder="Team display name"
+            />
+            <button
+              type="button"
+              class="btn-primary"
+              :disabled="acting || !teamInitName.trim()"
+              @click="handleTeamInit"
+            >
+              Initialize team
+            </button>
+          </div>
+        </template>
+        <template v-else>
+          <div class="workbench-card p-5 space-y-3">
+            <h3 class="text-[14px] font-semibold">{{ teamWs.displayName }}</h3>
+            <p class="text-[12px] text-muted">
+              team_id={{ teamWs.teamId }} · host={{ teamWs.hostWorkspaceId }} ·
+              members={{ teamWs.members?.length ?? 0 }}
+            </p>
+            <ul class="space-y-1.5 text-[12px]">
+              <li v-for="m in teamWs.members" :key="m.memberId" class="flex gap-2 flex-wrap">
+                <span class="font-medium">{{ m.label }}</span>
+                <span class="badge">{{ m.role }}</span>
+                <span class="text-muted">id={{ m.memberId }}</span>
+                <span v-if="m.meshPeerId" class="text-muted">peer={{ m.meshPeerId }}</span>
+              </li>
+            </ul>
+          </div>
+          <div class="workbench-card p-5 space-y-3">
+            <h3 class="section-label">Add member</h3>
+            <input
+              v-model="teamMemberLabel"
+              class="input-sm w-full"
+              placeholder="Member label"
+            />
+            <input
+              v-model="teamMemberPeer"
+              class="input-sm w-full"
+              placeholder="Linked mesh peer id (optional)"
+            />
+            <button
+              type="button"
+              class="btn-primary"
+              :disabled="acting || !teamMemberLabel.trim()"
+              @click="handleTeamAddMember"
+            >
+              Add member
+            </button>
+          </div>
+        </template>
       </div>
 
       <!-- Trust (0.1.17) -->
@@ -1051,18 +1656,138 @@ onMounted(() => {
         <div v-if="loading" class="text-[13px] text-muted flex items-center gap-2">
           <Loader2 class="h-4 w-4 animate-spin" /> Loading…
         </div>
-        <div v-else-if="!trustPolicy" class="workbench-card p-8 text-center space-y-2">
-          <p class="text-[14px] font-semibold">No trust policy</p>
-          <p class="text-[12px] text-muted">Run <code class="text-[11px]">trust-admin init</code> after team init.</p>
-        </div>
-        <div v-else class="workbench-card p-5 space-y-2 text-[12px]">
-          <p><span class="text-muted">remote query</span> · {{ trustPolicy.remoteQueryEnabled ? 'enabled' : 'disabled' }}</p>
-          <p><span class="text-muted">allowlist mode</span> · {{ trustPolicy.queryAllowlistMode }}</p>
-          <p><span class="text-muted">allowlist size</span> · {{ trustPolicy.queryAllowlist?.length ?? 0 }}</p>
-          <p><span class="text-muted">secrets fail-closed</span> · {{ trustPolicy.secretTopicsFailClosed }}</p>
-          <p><span class="text-muted">secret export</span> · {{ trustPolicy.allowSecretExport }}</p>
-          <p><span class="text-muted">selective sync</span> · {{ trustPolicy.syncRequireSelective }}</p>
-        </div>
+        <template v-else-if="!trustPolicy">
+          <div class="workbench-card p-5 space-y-3">
+            <h3 class="text-[14px] font-semibold">No trust policy</h3>
+            <p class="text-[12px] text-muted">
+              Initialize after team workspace exists. Secrets stay fail-closed;
+              this is policy gating — not finished-product E2E mesh crypto.
+            </p>
+            <button
+              type="button"
+              class="btn-primary"
+              :disabled="acting"
+              @click="handleTrustInit"
+            >
+              Initialize trust policy
+            </button>
+          </div>
+        </template>
+        <template v-else>
+          <div class="workbench-card p-5 space-y-3 text-[12px]">
+            <p>
+              <span class="text-muted">team</span> · {{ trustPolicy.teamId }}
+            </p>
+            <p>
+              <span class="text-muted">remote query</span> ·
+              {{ trustPolicy.remoteQueryEnabled ? "enabled" : "disabled" }}
+            </p>
+            <p>
+              <span class="text-muted">allowlist mode</span> ·
+              {{ trustPolicy.queryAllowlistMode }}
+            </p>
+            <p>
+              <span class="text-muted">allowlist size</span> ·
+              {{ trustPolicy.queryAllowlist?.length ?? 0 }}
+            </p>
+            <p>
+              <span class="text-muted">secrets fail-closed</span> ·
+              {{ trustPolicy.secretTopicsFailClosed }}
+            </p>
+            <p>
+              <span class="text-muted">secret export</span> ·
+              {{ trustPolicy.allowSecretExport }}
+            </p>
+            <p>
+              <span class="text-muted">selective sync</span> ·
+              {{ trustPolicy.syncRequireSelective }}
+            </p>
+            <div class="flex flex-wrap gap-2 pt-1">
+              <button
+                type="button"
+                class="btn-ghost"
+                :disabled="acting"
+                @click="handleTrustToggleRemote"
+              >
+                {{
+                  trustPolicy.remoteQueryEnabled
+                    ? "Disable remote query"
+                    : "Enable remote query"
+                }}
+              </button>
+              <button
+                type="button"
+                class="btn-ghost"
+                :disabled="acting"
+                @click="handleTrustSetMode('allow-all')"
+              >
+                Mode: allow-all
+              </button>
+              <button
+                type="button"
+                class="btn-ghost"
+                :disabled="acting"
+                @click="handleTrustSetMode('allowlist-only')"
+              >
+                Mode: allowlist-only
+              </button>
+              <button
+                type="button"
+                class="btn-ghost"
+                :disabled="acting"
+                @click="handleTrustSetMode('deny-all')"
+              >
+                Mode: deny-all
+              </button>
+            </div>
+          </div>
+          <div class="workbench-card p-5 space-y-3">
+            <h3 class="section-label">Allowlist peer</h3>
+            <p class="text-[12px] text-muted">
+              When mode is allowlist-only, only listed mesh peers may be queried.
+            </p>
+            <input
+              v-model="trustAllowPeer"
+              class="input-sm w-full"
+              placeholder="Mesh peer id"
+            />
+            <button
+              type="button"
+              class="btn-primary"
+              :disabled="acting || !trustAllowPeer.trim()"
+              @click="handleTrustAllowAdd"
+            >
+              Add to allowlist
+            </button>
+            <ul
+              v-if="trustPolicy.queryAllowlist?.length"
+              class="space-y-1 text-[12px] text-muted"
+            >
+              <li
+                v-for="(e, i) in trustPolicy.queryAllowlist"
+                :key="i"
+              >
+                member={{ e.memberId || "-" }} · peer={{ e.meshPeerId || "-" }}
+              </li>
+            </ul>
+          </div>
+          <div class="workbench-card p-5 space-y-2">
+            <h3 class="section-label">Admin audit</h3>
+            <div v-if="trustAudit.length === 0" class="text-[12px] text-muted">
+              No audit events yet.
+            </div>
+            <div
+              v-for="ev in trustAudit"
+              :key="ev.eventId"
+              class="text-[12px] rounded p-2"
+              style="background: var(--surface-2)"
+            >
+              <span class="badge">{{ ev.action }}</span>
+              {{ ev.detail }}
+              <div class="text-muted text-[11px]">{{ ev.at }} · {{ ev.actorMemberId }}</div>
+            </div>
+          </div>
+        </template>
       </div>
 
       <!-- Connectors (0.1.18) -->
@@ -1346,5 +2071,34 @@ onMounted(() => {
 .btn-primary:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+.presence-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--muted-foreground);
+  opacity: 0.55;
+}
+.presence-dot--live {
+  background: var(--accent-green, #22c55e);
+  opacity: 1;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-green, #22c55e) 25%, transparent);
+}
+.presence-dot--stale {
+  background: var(--accent-amber, #f59e0b);
+  opacity: 1;
+}
+.presence-dot--unreachable,
+.presence-dot--unknown {
+  background: var(--muted-foreground);
+  opacity: 0.45;
+}
+
+/* Match Continuity card density; ChatMessageContent already uses theme tokens. */
+.continuity-answer-md :deep(.chat-prose) {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--foreground);
 }
 </style>

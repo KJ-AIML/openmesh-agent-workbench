@@ -2,8 +2,9 @@
 
 use crate::authority_policy::FreshnessTier;
 use crate::lan::ask::{answer_live_ask, LanAskRequest};
+use crate::lan::chat::{append_chat_message, LanChatDirection};
 use crate::lan::contract::{
-    LanAskHttpBody, LanBeacon, LanHealthResponse, LAN_PROTOCOL,
+    LanAskHttpBody, LanBeacon, LanChatMessage, LanHealthResponse, LAN_PROTOCOL,
 };
 use crate::relay::contract::RelayPackage;
 use crate::relay::transport::receive_package_payload;
@@ -195,7 +196,39 @@ fn route_request(
         }
         ("POST", "/v1/relay/package") => handle_relay_package(body, identity),
         ("POST", "/v1/mesh/ask") => handle_mesh_ask(body, identity),
+        ("POST", "/v1/chat/message") => handle_chat_message(body, identity),
         _ => (404, b"{\"error\":\"not found\"}".to_vec(), "application/json"),
+    }
+}
+
+fn handle_chat_message(body: &[u8], identity: &LanHttpIdentity) -> (u16, Vec<u8>, &'static str) {
+    let msg: LanChatMessage = match serde_json::from_slice(body) {
+        Ok(m) => m,
+        Err(e) => {
+            return (
+                400,
+                format!(r#"{{"error":"invalid chat message: {e}"}}"#).into_bytes(),
+                "application/json",
+            );
+        }
+    };
+    let peer_key = msg.from_peer_id.clone();
+    match append_chat_message(
+        &identity.project_path,
+        &msg,
+        LanChatDirection::Inbound,
+        &peer_key,
+    ) {
+        Ok(stored) => json_ok(&serde_json::json!({
+            "ok": true,
+            "messageId": stored.message.message_id,
+            "storedAt": stored.stored_at,
+        })),
+        Err(e) => (
+            400,
+            format!(r#"{{"error":"{e}"}}"#).into_bytes(),
+            "application/json",
+        ),
     }
 }
 
@@ -338,6 +371,50 @@ mod tests {
         let path = dir.to_string_lossy().to_string();
         init_project(&path).unwrap();
         path
+    }
+
+    #[test]
+    fn lan_http_chat_message_loopback() {
+        use crate::lan::chat::list_chat_messages;
+        use crate::lan::client::send_chat_message;
+        use crate::lan::contract::{LanChatMessage, LAN_CHAT_PROTOCOL};
+
+        let project = temp_project("chat");
+        let stop = Arc::new(AtomicBool::new(false));
+        let (listener, port) = bind_http_listener("127.0.0.1", 0).unwrap();
+        let beacon = LanBeacon {
+            protocol: LAN_PROTOCOL.into(),
+            project_id: "proj-chat".into(),
+            owner_label: "ChatHost".into(),
+            peer_id: "lan-chat-host".into(),
+            http_port: port,
+            started_at: Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        };
+        let identity = LanHttpIdentity {
+            project_path: project.clone(),
+            beacon,
+        };
+        let handle = spawn_http_server(listener, identity, stop.clone()).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(80));
+
+        let msg = LanChatMessage {
+            protocol: LAN_CHAT_PROTOCOL.into(),
+            message_id: "chat-test-1".into(),
+            from_peer_id: "lan-alice".into(),
+            from_label: "Alice".into(),
+            text: "hello over lan".into(),
+            sent_at: "2026-08-06T02:00:00Z".into(),
+            thread_id: None,
+        };
+        let resp = send_chat_message("127.0.0.1", port, &msg).unwrap();
+        assert_eq!(resp["ok"], true);
+
+        let stored = list_chat_messages(&project, Some("lan-alice"), None).unwrap();
+        assert_eq!(stored.len(), 1);
+        assert_eq!(stored[0].message.text, "hello over lan");
+
+        stop.store(true, Ordering::SeqCst);
+        let _ = handle.join();
     }
 
     #[test]

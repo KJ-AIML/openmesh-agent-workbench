@@ -48,6 +48,7 @@ fn register_peer(project: &str) {
             proxy_profile_id: None,
             remote_workspace_id: Some("ws-yo".into()),
             notes: None,
+            lan_address: None,
             created_at: now.into(),
             updated_at: now.into(),
         },

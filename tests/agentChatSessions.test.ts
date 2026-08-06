@@ -19,6 +19,25 @@ describe("createChatSession", () => {
     expect(s.title).toBe(DEFAULT_CHAT_TITLE);
     expect(s.titleIsDefault).toBe(true);
     expect(s.messages).toEqual([]);
+    expect(s.importedFrom).toBeUndefined();
+  });
+
+  it("round-trips importedFrom provenance through storage", () => {
+    const session = createChatSession();
+    session.importedFrom = {
+      source: "cursor",
+      id: "abc",
+      path: "/tmp/abc.jsonl",
+    };
+    session.title = "From cursor";
+    session.titleIsDefault = false;
+    persistSessions("/tmp/project-import-meta", [session]);
+    const loaded = loadSessions("/tmp/project-import-meta");
+    expect(loaded[0].importedFrom).toEqual({
+      source: "cursor",
+      id: "abc",
+      path: "/tmp/abc.jsonl",
+    });
   });
 
   it("generates unique ids", () => {

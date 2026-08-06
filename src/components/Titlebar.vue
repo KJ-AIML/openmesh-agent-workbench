@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from "vue";
-import { useRouter } from "vue-router";
+import { ref, onMounted, computed, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { Minus, Square, X, LayoutGrid, MessageSquare, Mic, MicOff } from "lucide-vue-next";
 import {
   minimizeWindow,
@@ -17,6 +17,13 @@ import {
   voicePttEnd,
   voicePttStart,
 } from "../lib/voice/voiceSession";
+import {
+  enabledTopNavbarTabs,
+  firstVisibleTopNavbarPath,
+  normalizeAppearance,
+  topNavbarTabForPath,
+  type TopNavbarTabId,
+} from "../lib/appearance";
 
 const props = withDefaults(
   defineProps<{
@@ -26,8 +33,33 @@ const props = withDefaults(
   { clearanceForTrafficLights: false },
 );
 
-const { currentProject } = useStore();
+const { currentProject, settings } = useStore();
+const route = useRoute();
 const router = useRouter();
+
+const appearance = computed(() =>
+  normalizeAppearance(settings.value.appearance),
+);
+
+const hotTabs = computed(() => enabledTopNavbarTabs(appearance.value));
+
+const TAB_ICONS: Partial<
+  Record<TopNavbarTabId, typeof MessageSquare | typeof LayoutGrid>
+> = {
+  chat: MessageSquare,
+  work: LayoutGrid,
+};
+
+watch(
+  [() => route.path, hotTabs],
+  ([path, tabs]) => {
+    const current = topNavbarTabForPath(path);
+    if (!current) return;
+    if (tabs.some((t) => t.id === current.id)) return;
+    void router.replace(firstVisibleTopNavbarPath(appearance.value));
+  },
+  { immediate: true },
+);
 const {
   enabled: voiceEnabled,
   phase: voicePhase,
@@ -191,32 +223,21 @@ async function handleDrag(e: MouseEvent) {
       <span class="tb__name">OpenMesh</span>
     </div>
 
-    <nav class="tb__nav" data-no-drag>
+    <nav class="tb__nav" data-no-drag aria-label="Top navbar tabs">
       <router-link
-        to="/agent-chat"
+        v-for="tab in hotTabs"
+        :key="tab.id"
+        :to="tab.path"
         class="tb__tab"
-        :class="{ 'is-active': $route.path === '/agent-chat' }"
+        :class="{ 'is-active': $route.path === tab.path }"
+        :data-tab="tab.id"
       >
-        <MessageSquare class="tb__tab-icon" />
-        Chat
-      </router-link>
-      <router-link to="/" class="tb__tab" :class="{ 'is-active': $route.path === '/' }">
-        <LayoutGrid class="tb__tab-icon" />
-        Work
-      </router-link>
-      <router-link
-        to="/docs"
-        class="tb__tab"
-        :class="{ 'is-active': $route.path === '/docs' }"
-      >
-        Docs
-      </router-link>
-      <router-link
-        to="/sprint"
-        class="tb__tab"
-        :class="{ 'is-active': $route.path === '/sprint' }"
-      >
-        Sprint
+        <component
+          :is="TAB_ICONS[tab.id]"
+          v-if="TAB_ICONS[tab.id]"
+          class="tb__tab-icon"
+        />
+        {{ tab.label }}
       </router-link>
     </nav>
 

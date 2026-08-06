@@ -18,10 +18,14 @@
 mod discovery;
 mod parse;
 mod redact;
+mod transcript;
 
 pub use discovery::{
-    candidate_session_dirs, default_session_dir, detect_provider_roots, normalize_tool,
-    normalize_workspace_path, scan_agent_sessions, scan_workspace_sessions,
+    candidate_session_dirs, cursor_project_slug, default_session_dir, detect_provider_roots,
+    normalize_tool, normalize_workspace_path, scan_agent_sessions, scan_workspace_sessions,
     session_matches_workspace, DetectedProviderRoot, ScannedForeignSession, SessionScanOverrides,
 };
 pub use redact::redact_secrets;
+pub use transcript::{
+    read_foreign_transcript, ForeignTranscript, ForeignTranscriptMessage,
+};

@@ -1,6 +1,6 @@
 [package]
 name = "openmesh"
-version = "0.1.26"
+version = "0.1.27"
 rust-version = "1.92.0"
 description = "Personal workbench for resuming work"
 authors = ["Openmesh Team"]
@@ -24,3 +24,4 @@ base64 = "0.22"
 dirs = "5"
 tokio = { version = "1", features = ["rt", "macros"] }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "multipart", "json", "rustls-tls"] }
+portable-pty = "0.9"

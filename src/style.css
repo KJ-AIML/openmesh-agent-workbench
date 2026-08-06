@@ -10,17 +10,48 @@
 }
 
 :root {
-  --background: #ffffff;
-  --foreground: #0a0a0a;
+  /* Light productivity palette — mirrors dark token surface */
+  --background: #f6f6f4;
+  --foreground: #121212;
   --card: #ffffff;
-  --card-foreground: #0a0a0a;
-  --muted: #f5f5f5;
-  --muted-foreground: #737373;
-  --border: rgba(0, 0, 0, 0.08);
-  --sidebar: #fafafa;
-  --sidebar-foreground: #0a0a0a;
-  --sidebar-accent: #f0f0f0;
-  --sidebar-accent-foreground: #0a0a0a;
+  --card-foreground: #121212;
+  --muted: #ecece8;
+  --muted-foreground: #6b6b6b;
+  --border: rgba(0, 0, 0, 0.09);
+  --border-strong: rgba(0, 0, 0, 0.16);
+  --sidebar: #f0f0ec;
+  --sidebar-foreground: #1a1a1a;
+  --sidebar-accent: #e4e4de;
+  --sidebar-accent-foreground: #121212;
+
+  --surface-1: #f2f2ee;
+  --surface-2: #ffffff;
+  --surface-3: #ebebe6;
+  --surface-hover: #e4e4de;
+  --surface-highlight: rgba(0, 0, 0, 0.04);
+  --divider: rgba(0, 0, 0, 0.07);
+  --shadow-color: rgba(0, 0, 0, 0.12);
+
+  /* Functional accents (shared; dark may nudge slightly) */
+  --accent-green: #16a34a;
+  --accent-blue: #2563eb;
+  --accent-amber: #d97706;
+  --accent-red: #dc2626;
+  --accent-purple: #9333ea;
+  --accent-yellow: #ca8a04;
+  --accent: var(--accent-blue);
+
+  /* Shared chrome height: sidebar top row + main titlebar (must match) */
+  --chrome-top: 44px;
+  /* Overlay titlebar traffic-light cluster clearance (collapsed sidebar).
+     Tabs share the traffic-light vertical band — 78px still reads flush; 96px clears. */
+  --mac-traffic-lights-inset: 96px;
+
+  /* Appearance — density + type (html[data-*]) */
+  --nav-item-height: 40px;
+  --ui-pad-y: 1.25rem;
+  --ui-gap: 0.65rem;
+  --card-radius: 18px;
 }
 
 .dark {
@@ -38,7 +69,6 @@
   --sidebar-accent: #151515;
   --sidebar-accent-foreground: #fafafa;
 
-  /* Extended palette for productivity surfaces */
   --surface-1: #0d0d0d;
   --surface-2: #121212;
   --surface-3: #1a1a1a;
@@ -47,19 +77,32 @@
   --divider: rgba(255, 255, 255, 0.06);
   --shadow-color: rgba(0, 0, 0, 0.4);
 
-  /* Functional accent colors */
   --accent-green: #22c55e;
   --accent-blue: #3b82f6;
   --accent-amber: #f59e0b;
   --accent-red: #ef4444;
   --accent-purple: #a855f7;
   --accent-yellow: #eab308;
+  --accent: var(--accent-blue);
+}
 
-  /* Shared chrome height: sidebar top row + main titlebar (must match) */
-  --chrome-top: 44px;
-  /* Overlay titlebar traffic-light cluster clearance (collapsed sidebar).
-     Tabs share the traffic-light vertical band — 78px still reads flush; 96px clears. */
-  --mac-traffic-lights-inset: 96px;
+/* Type scale — rem-based UI scales with html font-size */
+html[data-font-size="small"] {
+  font-size: 14px;
+}
+html[data-font-size="medium"] {
+  font-size: 16px;
+}
+html[data-font-size="large"] {
+  font-size: 17.5px;
+}
+
+html[data-density="compact"] {
+  --nav-item-height: 34px;
+  --ui-pad-y: 0.9rem;
+  --ui-gap: 0.45rem;
+  --card-radius: 14px;
+  --chrome-top: 40px;
 }
 
 /* Force continuous left rail under traffic lights */
@@ -101,6 +144,17 @@ html[data-platform="macos"] {
   h3 { font-size: 0.9375rem; line-height: 1.3; }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* Scrollbar — minimal */
 ::-webkit-scrollbar {
   width: 6px;
@@ -110,11 +164,11 @@ html[data-platform="macos"] {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: color-mix(in srgb, var(--foreground) 14%, transparent);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: color-mix(in srgb, var(--foreground) 22%, transparent);
 }
 
 /* ============================================================================
@@ -125,8 +179,8 @@ html[data-platform="macos"] {
 .workbench-card {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 18px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.24);
+  border-radius: var(--card-radius);
+  box-shadow: 0 2px 8px var(--shadow-color);
   position: relative;
 }
 
@@ -172,9 +226,9 @@ html[data-platform="macos"] {
   border: 1px solid transparent;
 }
 .btn-primary:hover {
-  background: #ffffff;
+  background: color-mix(in srgb, var(--foreground) 88%, var(--background));
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 12px var(--shadow-color);
 }
 .btn-primary:active {
   transform: translateY(0);
@@ -369,7 +423,7 @@ html[data-platform="macos"] {
 .om-nav {
   display: flex;
   flex-direction: column;
-  gap: 0.65rem;
+  gap: var(--ui-gap);
 }
 
 .om-seg {
@@ -448,7 +502,7 @@ html[data-platform="macos"] {
   display: flex;
   align-items: center;
   gap: 0.625rem;
-  height: 40px;
+  height: var(--nav-item-height);
   padding: 0 0.75rem;
   border-radius: 10px;
   font-size: 0.8125rem;

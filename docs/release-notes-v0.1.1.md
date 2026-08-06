@@ -1,3 +1,5 @@
+> **Historical release notes (v0.1.1).** Current docs: [`README.md`](./README.md) · [`../README.md`](../README.md).
+
 # OpenMesh v0.1.1 - Local Workbench Reliability
 
 OpenMesh v0.1.1 is a Windows preview reliability update for the local workbench layer.

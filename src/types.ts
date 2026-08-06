@@ -206,6 +206,18 @@ export type Settings = {
 	appearance: {
 		theme: "dark" | "light" | "system";
 		fontSize: "small" | "medium" | "large";
+		/** Sidebar / chrome spacing. Missing ⇒ comfortable. */
+		density?: "comfortable" | "compact";
+		/**
+		 * Titlebar hot tabs (Chat / Work / Docs / Sprint).
+		 * Missing keys ⇒ shown; at least one must stay enabled.
+		 */
+		topNavbarTabs?: {
+			chat?: boolean;
+			work?: boolean;
+			docs?: boolean;
+			sprint?: boolean;
+		};
 	};
 	/** Skills / hooks / plugins enable maps (opt-out; missing ⇒ enabled). */
 	extensions?: {

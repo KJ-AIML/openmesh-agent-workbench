@@ -17,6 +17,13 @@ export type ChatMessage = {
   at: number;
 };
 
+/** Provenance when a chat was seeded from a scanned foreign session (copy only). */
+export type ChatImportProvenance = {
+  source: string;
+  id: string;
+  path?: string;
+};
+
 export type ChatSession = {
   id: string;
   title: string;
@@ -25,6 +32,8 @@ export type ChatSession = {
   messages: ChatMessage[];
   createdAt: number;
   updatedAt: number;
+  /** Present when this OpenMesh chat continues a scanned provider session copy. */
+  importedFrom?: ChatImportProvenance;
 };
 
 const STORAGE_PREFIX = "openmesh.chat.v1";
@@ -77,17 +86,29 @@ function isChatMessage(v: unknown): v is ChatMessage {
   );
 }
 
+function isImportProvenance(v: unknown): v is ChatImportProvenance {
+  if (!v || typeof v !== "object") return false;
+  const p = v as ChatImportProvenance;
+  return typeof p.source === "string" && typeof p.id === "string";
+}
+
 function isChatSession(v: unknown): v is ChatSession {
   if (!v || typeof v !== "object") return false;
   const s = v as ChatSession;
-  return (
-    typeof s.id === "string" &&
-    typeof s.title === "string" &&
-    Array.isArray(s.messages) &&
-    s.messages.every(isChatMessage) &&
-    typeof s.createdAt === "number" &&
-    typeof s.updatedAt === "number"
-  );
+  if (
+    typeof s.id !== "string" ||
+    typeof s.title !== "string" ||
+    !Array.isArray(s.messages) ||
+    !s.messages.every(isChatMessage) ||
+    typeof s.createdAt !== "number" ||
+    typeof s.updatedAt !== "number"
+  ) {
+    return false;
+  }
+  if (s.importedFrom !== undefined && !isImportProvenance(s.importedFrom)) {
+    return false;
+  }
+  return true;
 }
 
 function parseStoredSessions(raw: string | null): ChatSession[] {
@@ -139,6 +160,16 @@ export async function loadSessionsAsync(projectPath: string): Promise<ChatSessio
             })),
           createdAt: s.createdAt,
           updatedAt: s.updatedAt,
+          importedFrom: isImportProvenance(s.importedFrom)
+            ? {
+                source: s.importedFrom.source,
+                id: s.importedFrom.id,
+                path:
+                  typeof s.importedFrom.path === "string"
+                    ? s.importedFrom.path
+                    : undefined,
+              }
+            : undefined,
         }))
         .filter(isChatSession)
         .sort((a, b) => b.updatedAt - a.updatedAt);
@@ -175,6 +206,7 @@ export async function persistSessionsAsync(
         })),
         createdAt: s.createdAt,
         updatedAt: s.updatedAt,
+        importedFrom: s.importedFrom,
       })),
     );
   } catch {
@@ -277,6 +309,9 @@ export function forkSessionAt(
     messages,
     createdAt: now,
     updatedAt: now,
+    importedFrom: session.importedFrom
+      ? { ...session.importedFrom }
+      : undefined,
   };
 }
 

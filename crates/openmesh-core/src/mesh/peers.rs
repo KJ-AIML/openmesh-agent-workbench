@@ -33,6 +33,9 @@ pub struct MeshPeerRecord {
     pub remote_workspace_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub notes: Option<String>,
+    /// Optional LAN `host:port` for presence / chat (trusted-LAN alpha).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lan_address: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -172,6 +175,19 @@ pub fn validate_mesh_peer_record(record: &MeshPeerRecord) -> Result<(), MeshPeer
             return Err(MeshPeerError::ValidationFailed(format!(
                 "notes exceeds {MAX_PEER_NOTES_BYTES} bytes"
             )));
+        }
+    }
+    if let Some(addr) = &record.lan_address {
+        let trimmed = addr.trim();
+        if trimmed.is_empty() {
+            return Err(MeshPeerError::ValidationFailed(
+                "lan_address is empty after trim".into(),
+            ));
+        }
+        if trimmed.len() > 256 || !trimmed.contains(':') {
+            return Err(MeshPeerError::ValidationFailed(
+                "lan_address must be host:port".into(),
+            ));
         }
     }
     validate_utc_timestamp(&record.created_at)

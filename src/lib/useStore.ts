@@ -64,7 +64,17 @@ function defaultSettings(): Settings {
 			grokEnabled: true,
 		},
 		localPaths: {},
-		appearance: { theme: "dark", fontSize: "medium" },
+		appearance: {
+			theme: "dark",
+			fontSize: "medium",
+			density: "comfortable",
+			topNavbarTabs: {
+				chat: true,
+				work: true,
+				docs: true,
+				sprint: true,
+			},
+		},
 		extensions: { skills: {}, hooks: {}, plugins: {} },
 		voice: {
 			sttModel: "openai/whisper-large-v3",

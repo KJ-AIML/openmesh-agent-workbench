@@ -871,14 +871,77 @@ fn slugify_path(cwd: &str) -> String {
         .collect()
 }
 
-/// Cursor encodes workspace paths by replacing every non-alphanumeric char with `-`
-/// (including `_`): `/Users/kjct0s_/.../openmesh-ws` →
+/// Cursor project folder name under `~/.cursor/projects/<slug>/`.
+///
+/// Empirically (macOS): strip leading separators, map `/` and `\` to `-`,
+/// **drop** `_` (not replace), keep existing `-`, map other non-alnum to `-`,
+/// then collapse runs of `-`.
+///
+/// Example: `/Users/kjct0s_/Developer/experiments/openmesh-ws` →
 /// `Users-kjct0s-Developer-experiments-openmesh-ws`.
-fn cursor_project_slug(cwd: &str) -> String {
-    cwd.trim_start_matches('/')
-        .chars()
-        .map(|c| if c.is_ascii_alphanumeric() { c } else { '-' })
-        .collect()
+pub fn cursor_project_slug(cwd: &str) -> String {
+    let trimmed = cwd.trim().trim_start_matches(['/', '\\']);
+    let mut raw = String::with_capacity(trimmed.len());
+    for c in trimmed.chars() {
+        if c == '/' || c == '\\' {
+            raw.push('-');
+        } else if c == '_' {
+            // Cursor drops underscores rather than turning them into hyphens.
+        } else if c.is_ascii_alphanumeric() || c == '-' {
+            raw.push(c);
+        } else {
+            raw.push('-');
+        }
+    }
+    let mut out = String::with_capacity(raw.len());
+    let mut prev_dash = false;
+    for c in raw.chars() {
+        if c == '-' {
+            if !prev_dash {
+                out.push('-');
+            }
+            prev_dash = true;
+        } else {
+            out.push(c);
+            prev_dash = false;
+        }
+    }
+    out.trim_matches('-').to_string()
+}
+
+/// True when Cursor project folders refer to the same workspace or an ancestor/descendant.
+fn cursor_slugs_related(workspace_slug: &str, project_slug: &str) -> bool {
+    if workspace_slug.is_empty() || project_slug.is_empty() {
+        return false;
+    }
+    workspace_slug == project_slug
+        || workspace_slug.starts_with(&format!("{project_slug}-"))
+        || project_slug.starts_with(&format!("{workspace_slug}-"))
+}
+
+/// Extract `<slug>` from `.../projects/<slug>/agent-transcripts/...`
+/// (or `.../<slug>/agent-transcripts/...` when the scan root is already `projects`).
+fn cursor_project_slug_from_session_path(path: &str) -> Option<String> {
+    let comps: Vec<&str> = Path::new(path)
+        .components()
+        .filter_map(|c| c.as_os_str().to_str())
+        .collect();
+    if let Some(idx) = comps.iter().position(|c| *c == "projects") {
+        if let Some(name) = comps.get(idx + 1).copied() {
+            if !name.is_empty() && name != "agent-transcripts" && name != "chats" {
+                return Some(name.to_string());
+            }
+        }
+    }
+    if let Some(idx) = comps.iter().position(|c| *c == "agent-transcripts") {
+        if idx > 0 {
+            let name = comps[idx - 1];
+            if !name.is_empty() {
+                return Some(name.to_string());
+            }
+        }
+    }
+    None
 }
 
 fn url_encode_path(cwd: &str) -> String {
@@ -902,6 +965,8 @@ pub fn session_matches_workspace(session: &ScannedForeignSession, workspace_cwd:
         return true;
     }
 
+    let ws_cursor_slug = cursor_project_slug(&workspace);
+
     if let Some(hint) = session.project_hint.as_deref() {
         let hint_n = normalize_workspace_path(hint);
         if !hint_n.is_empty()
@@ -909,6 +974,11 @@ pub fn session_matches_workspace(session: &ScannedForeignSession, workspace_cwd:
                 || hint_n.starts_with(&(workspace.clone() + "/"))
                 || workspace.starts_with(&(hint_n.clone() + "/")))
         {
+            return true;
+        }
+        // Cursor decode is lossy (`_` dropped, `-` ↔ `/`); compare re-encoded slugs.
+        let hint_slug = cursor_project_slug(hint);
+        if cursor_slugs_related(&ws_cursor_slug, &hint_slug) {
             return true;
         }
     }
@@ -921,9 +991,13 @@ pub fn session_matches_workspace(session: &ScannedForeignSession, workspace_cwd:
         return true;
     }
 
-    // Cursor project folders: non-alphanumeric → `-` (including `_`).
-    let cursorish = cursor_project_slug(&workspace);
-    if !cursorish.is_empty() && path.contains(&cursorish) {
+    // Cursor: match project folder slug, including parent/child workspace folders.
+    if let Some(project_slug) = cursor_project_slug_from_session_path(path) {
+        if cursor_slugs_related(&ws_cursor_slug, &project_slug) {
+            return true;
+        }
+    }
+    if !ws_cursor_slug.is_empty() && path.contains(&ws_cursor_slug) {
         return true;
     }
 
@@ -1088,5 +1162,130 @@ mod tests {
         assert_eq!(normalize_tool("claude-code"), Some("claude"));
         assert_eq!(normalize_tool("gemini-cli"), Some("gemini"));
         assert_eq!(normalize_tool("nope"), None);
+    }
+
+    #[test]
+    fn cursor_project_slug_drops_underscores_and_maps_separators() {
+        assert_eq!(
+            cursor_project_slug("/Users/kjct0s_/Developer/experiments/openmesh-ws"),
+            "Users-kjct0s-Developer-experiments-openmesh-ws"
+        );
+        assert_eq!(
+            cursor_project_slug(
+                "/Users/kjct0s_/Developer/Axtra-Intellion-WS/repos/axtra-intellion-saas-platform"
+            ),
+            "Users-kjct0s-Developer-Axtra-Intellion-WS-repos-axtra-intellion-saas-platform"
+        );
+        // Windows separators become hyphens; underscores are dropped.
+        assert_eq!(
+            cursor_project_slug(r"C:\Users\me\demo_app"),
+            "C-Users-me-demoapp"
+        );
+        // Must not produce the old buggy double-dash form for `_` before `/`.
+        assert!(!cursor_project_slug("/Users/kjct0s_/Developer").contains("--"));
+    }
+
+    #[test]
+    fn discovers_cursor_agent_transcript_for_workspace() {
+        let dir = tempdir().unwrap();
+        let workspace = "/Users/kjct0s_/Developer/experiments/openmesh-ws";
+        let slug = cursor_project_slug(workspace);
+        let session_id = "6e7ebc72-51c1-4b6a-83db-6fdabadef21f";
+        // Mirror ~/.cursor/projects/<slug>/agent-transcripts/<id>/<id>.jsonl
+        let transcript_dir = dir
+            .path()
+            .join("projects")
+            .join(&slug)
+            .join("agent-transcripts")
+            .join(session_id);
+        fs::create_dir_all(&transcript_dir).unwrap();
+        let path = transcript_dir.join(format!("{session_id}.jsonl"));
+        fs::write(
+            &path,
+            r#"{"role":"user","message":{"content":[{"type":"text","text":"<timestamp>x</timestamp>\n<user_query>\nAdd Cursor session scanning\n</user_query>"}]}}
+"#,
+        )
+        .unwrap();
+        // Subagent dump must be ignored
+        let sub = transcript_dir.join("subagents");
+        fs::create_dir_all(&sub).unwrap();
+        fs::write(sub.join(format!("{session_id}.jsonl")), "{\"role\":\"user\"}\n").unwrap();
+
+        let projects_root = dir.path().join("projects");
+        let sessions = scan_agent_sessions(
+            "cursor",
+            projects_root.to_str().unwrap(),
+            Some(10),
+            Some(workspace),
+        )
+        .unwrap();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].tool_name, "cursor");
+        assert_eq!(sessions[0].title, "Add Cursor session scanning");
+        assert!(sessions[0].session_path.ends_with(".jsonl"));
+
+        // Nested OpenMesh project under the same Cursor workspace still matches.
+        let nested = format!("{workspace}/repos/openmesh-agent-workbench");
+        let nested_hits = scan_agent_sessions(
+            "cursor",
+            projects_root.to_str().unwrap(),
+            Some(10),
+            Some(&nested),
+        )
+        .unwrap();
+        assert_eq!(nested_hits.len(), 1);
+
+        let other = scan_agent_sessions(
+            "cursor",
+            projects_root.to_str().unwrap(),
+            Some(10),
+            Some("/Users/kjct0s_/Developer/experiments/other-ws"),
+        )
+        .unwrap();
+        assert!(other.is_empty());
+    }
+
+    #[test]
+    fn cursor_empty_projects_dir_returns_empty_ok() {
+        let dir = tempdir().unwrap();
+        let sessions = scan_agent_sessions(
+            "cursor",
+            dir.path().to_str().unwrap(),
+            Some(10),
+            Some("/Users/kjct0s_/Developer/experiments/openmesh-ws"),
+        )
+        .unwrap();
+        assert!(sessions.is_empty());
+
+        let missing = dir.path().join("does-not-exist");
+        assert!(scan_agent_sessions("cursor", missing.to_str().unwrap(), Some(5), None).is_err());
+    }
+
+    #[test]
+    fn session_matches_workspace_uses_cursor_slug_relatedness() {
+        let session = ScannedForeignSession {
+            id: "cursor_abc".into(),
+            tool_name: "cursor".into(),
+            title: "t".into(),
+            session_path: "/Users/me/.cursor/projects/Users-kjct0s-Developer-experiments-openmesh-ws/agent-transcripts/abc/abc.jsonl".into(),
+            file_name: "abc.jsonl".into(),
+            created_at: "2026-08-01T00:00:00Z".into(),
+            last_active_at: "2026-08-01T00:00:00Z".into(),
+            file_size_bytes: 1,
+            summary_preview: None,
+            project_hint: Some("/Users/kjct0s/Developer/experiments/openmesh/ws".into()),
+        };
+        assert!(session_matches_workspace(
+            &session,
+            "/Users/kjct0s_/Developer/experiments/openmesh-ws"
+        ));
+        assert!(session_matches_workspace(
+            &session,
+            "/Users/kjct0s_/Developer/experiments/openmesh-ws/repos/openmesh-agent-workbench"
+        ));
+        assert!(!session_matches_workspace(
+            &session,
+            "/Users/kjct0s_/Developer/experiments/heli-ws"
+        ));
     }
 }

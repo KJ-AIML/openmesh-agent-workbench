@@ -7,9 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.27] - 2026-08-06
+
+### Documentation
+- **Product / capability docs set** under `docs/` — index, product guide, architecture, Chat, Continuity/mesh, Sessions, Terminal, Canvas, Settings, Limitations, Development. Root `README.md` refreshed (no `web-demo/`, embedded PTY, multi-OS installers, honest LAN limits). Stale Continuity plan banners redirect to `docs/CONTINUITY_MESH.md`.
+- Release install notes (`.github/release-install-notes.md`) + `scripts/macos-unquarantine.sh` for unsigned preview Gatekeeper remediation (`xattr -cr`).
+
 ### Added
+- **Embedded PTY terminal** in Agent Chat (xterm + `portable-pty`) — tabbed shell sidebar, distinct from external “Resume in terminal”
+- **Chat composer** status bar / menus polish; shell-tab helpers for composer ↔ terminal
+- **Continue in Chat** from Agent Sessions (`resumeIntoChat`) including Cursor session scan/import paths
+- **Appearance → Top navbar tabs** — toggle which hot tabs show in the titlebar (Chat / Work / Docs / Sprint)
+- **Settings → Updates** — GitHub Releases checker (semver compare + install guidance for unsigned builds)
+- **Mesh / LAN human chat** — trusted-LAN alpha `POST /v1/chat/message` with durable local store (`.openmesh/lan/chat/`)
 - **Canvas Auto UI** — agents create safe JSON UI documents (`schema: openmesh.canvas/1`) via `canvas_upsert_auto_ui`; rendered on **Canvas → Auto UI** and inline in Chat ` ```canvas ` fences. Builtin skill `openmesh-canvas`. Not Cursor `.canvas.tsx` (that SDK only runs inside Cursor).
 - Network graph remains under **Canvas → Network** with Continuity-aligned chrome.
+
+### Changed
+- Release workflow prepends Gatekeeper / arch picker notes on tag-push releases (aarch64 vs x64 DMGs)
+- Session discovery/parsers extended for broader provider coverage (Cursor transcripts where available)
 
 ## [0.1.26] - 2026-08-04
 

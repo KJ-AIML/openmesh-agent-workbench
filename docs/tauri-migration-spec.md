@@ -1,3 +1,5 @@
+> **Historical migration audit.** App is already on Tauri v2 at repo root. Current architecture: [`ARCHITECTURE.md`](./ARCHITECTURE.md) · [`DEVELOPMENT.md`](./DEVELOPMENT.md).
+
 # Openmesh Tauri Migration Spec
 
 > Version: 1.0.0 · 2026-07-01  

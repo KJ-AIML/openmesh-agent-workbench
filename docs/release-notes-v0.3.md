@@ -1,3 +1,5 @@
+> **Historical release notes (v0.3).** Current docs: [`README.md`](./README.md) · [`PRODUCT_GUIDE.md`](./PRODUCT_GUIDE.md).
+
 # Openmesh v0.3 Release Notes
 
 **Release Date:** 2026-01-15  

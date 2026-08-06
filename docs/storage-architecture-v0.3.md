@@ -1,3 +1,5 @@
+> **Mostly still accurate for file-based storage roots**, but incomplete vs later surfaces (agent chats, relay/LAN, canvases, secrets file). Current map: [`ARCHITECTURE.md`](./ARCHITECTURE.md) · [`PRODUCT_GUIDE.md`](./PRODUCT_GUIDE.md#storage--secrets). Dogfood: prefer [`PRODUCT_GUIDE.md`](./PRODUCT_GUIDE.md) over the v0.3 checklist alone.
+
 # Openmesh v0.3 Storage Architecture
 
 ## Overview

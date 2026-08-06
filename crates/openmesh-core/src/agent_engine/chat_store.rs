@@ -18,6 +18,15 @@ pub struct StoredChatMessage {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ChatImportProvenance {
+    pub source: String,
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StoredChatSession {
     pub id: String,
     pub title: String,
@@ -26,6 +35,9 @@ pub struct StoredChatSession {
     pub messages: Vec<StoredChatMessage>,
     pub created_at: i64,
     pub updated_at: i64,
+    /// When this chat was seeded from a scanned foreign session (copy only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub imported_from: Option<ChatImportProvenance>,
 }
 
 fn chats_path(project_path: &str) -> PathBuf {
@@ -88,11 +100,23 @@ mod tests {
             }],
             created_at: 1,
             updated_at: 2,
+            imported_from: Some(ChatImportProvenance {
+                source: "cursor".into(),
+                id: "abc".into(),
+                path: Some("/tmp/abc.jsonl".into()),
+            }),
         }];
         save_chat_sessions(&project, &sessions).unwrap();
         let loaded = load_chat_sessions(&project).unwrap();
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].title, "Hello");
+        assert_eq!(
+            loaded[0]
+                .imported_from
+                .as_ref()
+                .map(|p| p.source.as_str()),
+            Some("cursor")
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 }

@@ -17,10 +17,13 @@ import {
   Database,
   Puzzle,
   Mic,
+  Info,
 } from "lucide-vue-next";
 import * as fileSystemAdapter from "../lib/adapters/fileSystemAdapter";
 import SettingsToolsPanel from "../components/settings/SettingsToolsPanel.vue";
 import SettingsExtensionsPanel from "../components/settings/SettingsExtensionsPanel.vue";
+import SettingsUpdatesPanel from "../components/settings/SettingsUpdatesPanel.vue";
+import SettingsAppearancePanel from "../components/settings/SettingsAppearancePanel.vue";
 import VoiceSettingsPanel from "../components/settings/VoiceSettingsPanel.vue";
 import AgentToolIcon from "../components/AgentToolIcon.vue";
 import {
@@ -30,6 +33,11 @@ import {
   testAgentProvider,
   type ProviderProbeResult,
 } from "../lib/agentEngineClient";
+import { getAppVersion } from "../lib/updates/appVersion";
+import {
+  hasKnownUpdate,
+  readPersistedUpdateCheck,
+} from "../lib/updates/updateCheck";
 
 const route = useRoute();
 const router = useRouter();
@@ -47,7 +55,8 @@ type SectionId =
   | "tools"
   | "paths"
   | "appearance"
-  | "data";
+  | "data"
+  | "about";
 
 const form = ref(JSON.parse(JSON.stringify(settings.value)));
 const apiKeyInput = ref("");
@@ -57,6 +66,10 @@ const activeGroup = ref<"setup" | "runtime" | "project" | "app">("setup");
 const validationStatus = ref<Record<string, { valid: boolean; message?: string }>>({});
 const providerTestBusy = ref(false);
 const providerTest = ref<ProviderProbeResult | null>(null);
+const appVersion = getAppVersion();
+const updateBadge = ref(
+  hasKnownUpdate(readPersistedUpdateCheck(), appVersion),
+);
 
 const sectionMeta: Record<
   SectionId,
@@ -73,6 +86,7 @@ const sectionMeta: Record<
   paths: { label: "Paths", icon: FolderTree },
   appearance: { label: "Appearance", icon: Palette },
   data: { label: "Data", icon: Database },
+  about: { label: "About", icon: Info },
 };
 
 const groups: {
@@ -87,7 +101,7 @@ const groups: {
     sections: ["agents", "extensions", "sessions", "server"],
   },
   { id: "project", label: "Project", sections: ["tools", "paths"] },
-  { id: "app", label: "App", sections: ["appearance", "data"] },
+  { id: "app", label: "App", sections: ["appearance", "data", "about"] },
 ];
 
 const sections = groups.flatMap((g) =>
@@ -460,8 +474,17 @@ const statusLine = computed(() => {
     <header class="settings__head">
       <div class="settings__head-main">
         <h1 class="settings__title">Settings</h1>
-        <p class="settings__meta">{{ statusLine }}</p>
+        <p class="settings__meta">{{ statusLine }} · v{{ appVersion }}</p>
       </div>
+      <button
+        v-if="updateBadge"
+        type="button"
+        class="settings__update-chip"
+        title="A newer GitHub release is available"
+        @click="goToSection('about')"
+      >
+        Update available
+      </button>
     </header>
 
     <div
@@ -500,6 +523,11 @@ const statusLine = computed(() => {
         >
           <component :is="s.icon" class="h-3.5 w-3.5" />
           {{ s.label }}
+          <span
+            v-if="s.id === 'about' && updateBadge"
+            class="settings__tab-dot"
+            aria-label="Update available"
+          />
         </button>
       </div>
     </nav>
@@ -1215,40 +1243,7 @@ const statusLine = computed(() => {
       </button>
     </div>
 
-    <div
-      v-show="activeSection === 'appearance'"
-      class="workbench-card p-5 space-y-4"
-    >
-      <div>
-        <p class="settings__panel-title">Appearance</p>
-        <p class="settings__panel-desc">Theme and base font size.</p>
-      </div>
-      <div>
-        <label class="block text-caption font-medium mb-2 text-muted">Theme</label>
-        <select
-          v-model="form.appearance.theme"
-          class="input-luxury w-full"
-        >
-          <option value="dark">Dark</option>
-          <option value="light">Light</option>
-          <option value="system">System</option>
-        </select>
-      </div>
-      <div>
-        <label class="block text-caption font-medium mb-2 text-muted">Font Size</label>
-        <select
-          v-model="form.appearance.fontSize"
-          class="input-luxury w-full"
-        >
-          <option value="small">Small</option>
-          <option value="medium">Medium</option>
-          <option value="large">Large</option>
-        </select>
-      </div>
-      <button @click="saveSection('appearance')" class="btn-primary">
-        Save Appearance
-      </button>
-    </div>
+    <SettingsAppearancePanel v-show="activeSection === 'appearance'" />
 
     <div
       v-show="activeSection === 'data'"
@@ -1285,6 +1280,13 @@ const statusLine = computed(() => {
           Reset All Data
         </button>
       </div>
+    </div>
+
+    <div
+      v-show="activeSection === 'about'"
+      class="workbench-card p-5 space-y-4"
+    >
+      <SettingsUpdatesPanel @badge="updateBadge = $event" />
     </div>
   </div>
 </template>
@@ -1349,5 +1351,29 @@ const statusLine = computed(() => {
 .settings__check:hover {
   background: var(--surface-highlight);
   border-color: var(--border);
+}
+
+.settings__update-chip {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.3rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--accent-amber) 40%, var(--border));
+  background: color-mix(in srgb, var(--accent-amber) 14%, transparent);
+  color: var(--accent-amber);
+  cursor: pointer;
+}
+
+.settings__update-chip:hover {
+  background: color-mix(in srgb, var(--accent-amber) 22%, transparent);
+}
+
+.settings__tab-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--accent-amber);
+  flex-shrink: 0;
 }
 </style>

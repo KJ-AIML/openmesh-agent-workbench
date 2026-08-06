@@ -9,7 +9,7 @@ import {
   triggerRef,
   watch,
 } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import {
   AlertCircle,
   Check,
@@ -73,13 +73,36 @@ import {
 import { createPersistQueue } from "../lib/agentChat/persistQueue";
 import ChatMessageContent from "../components/chat/ChatMessageContent.vue";
 import ChatComposer from "../components/chat/ChatComposer.vue";
+import ChatTerminalPanel from "../components/chat/ChatTerminalPanel.vue";
+import ComposerStatusBar from "../components/chat/ComposerStatusBar.vue";
 import ChatThinkingBubble from "../components/chat/ChatThinkingBubble.vue";
 import PatchApprovalCard from "../components/chat/PatchApprovalCard.vue";
 import VerifyLogPanel from "../components/chat/VerifyLogPanel.vue";
+import {
+  completeRunningOfKind,
+  completeSessionRun,
+  createSessionRun,
+  listTerminalRuns,
+  looksLikeTerminalTool,
+  truncateCommand,
+  upsertSessionRun,
+  type SessionRun,
+} from "../lib/agentChat/sessionRuns";
+import {
+  createShellTab,
+  removeShellTab,
+  resolveTerminalCwd,
+  shortCwdLabel,
+  upsertShellTab,
+  type ShellTab,
+} from "../lib/agentChat/shellTabs";
+import { openTerminal } from "../lib/adapters/terminalAdapter";
+import { killAllPtys, killPty } from "../lib/adapters/ptyAdapter";
 
 type ChatMode = "ask" | "plan" | "act" | "delegate";
 
 const router = useRouter();
+const route = useRoute();
 const { currentProjectPath, currentProject, settings, saveSettings } = useStore();
 
 /** Real secret-store presence; null until probed (or when IPC unavailable). */
@@ -104,6 +127,11 @@ const activeTurnId = ref<string | null>(null);
 const verifyRunKey = ref<string | null>(null);
 const scroller = ref<HTMLElement | null>(null);
 const composer = ref<InstanceType<typeof ChatComposer> | null>(null);
+/**
+ * In-memory session run tracker for composer status chips.
+ * v1: verify/delegate + active turn only — not OS PTY supervision.
+ */
+const sessionRunsByChat = ref<Record<string, SessionRun[]>>({});
 /** Expanded /tools dump message ids (collapsed by default). */
 const expandedToolsIds = ref<Set<string>>(new Set());
 /** Brief “Copied” feedback on the message action that succeeded. */
@@ -168,6 +196,231 @@ const activeSession = computed(
   () => sessions.value.find((s) => s.id === activeSessionId.value) ?? null,
 );
 
+const activeSessionRuns = computed(() => {
+  const id = activeSessionId.value;
+  if (!id) return [] as SessionRun[];
+  return sessionRunsByChat.value[id] ?? [];
+});
+
+const statusWorkingCount = computed(() =>
+  activeSessionRuns.value.filter(
+    (r) => r.kind === "working" && r.status === "running",
+  ).length,
+);
+
+const statusTerminalRuns = computed(() =>
+  listTerminalRuns(activeSessionRuns.value),
+);
+
+/** Quiet Canvas control in the composer toolbar. */
+const statusShowCanvas = computed(() => true);
+
+/** Chat-adjacent terminal panel (embedded PTY + xterm). */
+const terminalPanelOpen = ref(false);
+/** Right sidebar by default; bottom dock optional (persisted inside panel). */
+const terminalDock = ref<"right" | "bottom">("right");
+const shellTabs = ref<ShellTab[]>([]);
+const activeShellTabId = ref<string | null>(null);
+
+try {
+  const raw = localStorage.getItem("openmesh.chat.terminal.dock");
+  if (raw === "bottom" || raw === "right") terminalDock.value = raw;
+} catch {
+  /* storage unavailable */
+}
+
+const terminalCwd = computed(() =>
+  resolveTerminalCwd(currentProjectPath.value),
+);
+const terminalCwdLabel = computed(() =>
+  shortCwdLabel(terminalCwd.value || currentProjectPath.value || "home"),
+);
+
+function mutateActiveRuns(mutator: (runs: SessionRun[]) => SessionRun[]) {
+  const id = activeSessionId.value;
+  if (!id) return;
+  const prev = sessionRunsByChat.value[id] ?? [];
+  const next = mutator(prev);
+  if (next === prev) return;
+  sessionRunsByChat.value = { ...sessionRunsByChat.value, [id]: next };
+}
+
+function startWorkingRun(turnId: string, label: string) {
+  mutateActiveRuns((runs) =>
+    upsertSessionRun(
+      runs,
+      createSessionRun({
+        id: `working:${turnId}`,
+        kind: "working",
+        title: "Working",
+        command: label,
+        toolId: "agent_turn",
+      }),
+    ),
+  );
+}
+
+function finishWorkingRuns(
+  status: "done" | "failed" | "cancelled" = "done",
+) {
+  mutateActiveRuns((runs) => completeRunningOfKind(runs, "working", status));
+}
+
+function startTerminalRun(opts: {
+  id: string;
+  title: string;
+  command: string;
+  toolId?: string;
+}) {
+  mutateActiveRuns((runs) => {
+    const existing = runs.find((r) => r.id === opts.id);
+    if (existing?.status === "running") {
+      // Keep original startedAt while the same run is still active.
+      return upsertSessionRun(runs, {
+        ...existing,
+        title: opts.title,
+        command: truncateCommand(opts.command, 120),
+        toolId: opts.toolId ?? existing.toolId,
+      });
+    }
+    return upsertSessionRun(
+      runs,
+      createSessionRun({
+        id: opts.id,
+        kind: "terminal",
+        title: opts.title,
+        command: truncateCommand(opts.command, 120),
+        toolId: opts.toolId,
+      }),
+    );
+  });
+}
+
+/** Stable id so progress events + final toolCalls share one Terminal row. */
+function terminalRunIdFor(turnId: string, toolIdOrTitle: string): string {
+  const s = toolIdOrTitle.toLowerCase();
+  if (s.includes("verify") && verifyRunKey.value) {
+    return `term:${verifyRunKey.value}`;
+  }
+  if (s.includes("verify")) return `term:${turnId}:verify`;
+  if (s.includes("delegate")) return `term:${turnId}:delegate`;
+  return `term:${turnId}:${s.replace(/\s+/g, "-")}`;
+}
+
+function finishTerminalRun(
+  id: string,
+  status: "done" | "failed" | "cancelled",
+  output?: string,
+  messageId?: string,
+) {
+  mutateActiveRuns((runs) =>
+    completeSessionRun(runs, id, { status, output, messageId }),
+  );
+}
+
+function focusWorkingBubble() {
+  void scrollBottom();
+  const el = scroller.value?.querySelector(".think");
+  (el as HTMLElement | null)?.scrollIntoView({ behavior: "smooth", block: "end" });
+}
+
+function openCanvasFromStatus() {
+  void router.push("/canvas");
+}
+
+function toggleTerminalPanel() {
+  terminalPanelOpen.value = !terminalPanelOpen.value;
+  if (terminalPanelOpen.value && shellTabs.value.length === 0) {
+    createEmbeddedShellTab();
+  }
+}
+
+function openTerminalPanel() {
+  terminalPanelOpen.value = true;
+  if (shellTabs.value.length === 0) {
+    createEmbeddedShellTab();
+  }
+}
+
+function closeTerminalPanel() {
+  terminalPanelOpen.value = false;
+}
+
+function createEmbeddedShellTab() {
+  // Prefer project cwd; empty string lets the PTY backend fall back to HOME.
+  const cwd = terminalCwd.value;
+  const tab = createShellTab({ cwd, status: "launching" });
+  shellTabs.value = [...shellTabs.value, tab];
+  activeShellTabId.value = tab.id;
+  terminalPanelOpen.value = true;
+}
+
+function onShellTabReady(payload: { id: string; shell: string; cwd: string }) {
+  const tab = shellTabs.value.find((t) => t.id === payload.id);
+  if (!tab) return;
+  shellTabs.value = upsertShellTab(shellTabs.value, {
+    ...tab,
+    label: payload.shell || tab.label,
+    cwd: payload.cwd || tab.cwd,
+    status: "open",
+    error: undefined,
+  });
+}
+
+function onShellTabError(payload: { id: string; error: string }) {
+  const tab = shellTabs.value.find((t) => t.id === payload.id);
+  if (!tab) return;
+  shellTabs.value = upsertShellTab(shellTabs.value, {
+    ...tab,
+    status: "error",
+    error: payload.error,
+  });
+}
+
+function onShellTabExit(id: string) {
+  const tab = shellTabs.value.find((t) => t.id === id);
+  if (!tab) return;
+  shellTabs.value = upsertShellTab(shellTabs.value, {
+    ...tab,
+    status: "exited",
+  });
+}
+
+function closeShellTab(id: string) {
+  void killPty(id);
+  const { tabs, nextActiveId } = removeShellTab(shellTabs.value, id);
+  shellTabs.value = tabs;
+  activeShellTabId.value = nextActiveId;
+}
+
+function focusShellTab(id: string) {
+  terminalPanelOpen.value = true;
+  if (shellTabs.value.some((t) => t.id === id)) {
+    activeShellTabId.value = id;
+  }
+}
+
+async function openExternalTerminal() {
+  const cwd = terminalCwd.value;
+  if (!cwd) return;
+  await openTerminal({ workingDir: cwd });
+}
+
+function onSelectTerminalRun(run: SessionRun) {
+  terminalPanelOpen.value = true;
+  if (!run.messageId || !scroller.value) return;
+  const nodes = scroller.value.querySelectorAll("[data-msg-id]");
+  for (const node of nodes) {
+    if ((node as HTMLElement).dataset.msgId === run.messageId) {
+      (node as HTMLElement).scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+      break;
+    }
+  }
+}
+
 function welcomeText(): string {
   const provider = settings.value.provider?.name?.trim() || "provider";
   return (
@@ -206,6 +459,28 @@ function afterSessionMutation(session?: ChatSession | null) {
   }
 }
 
+function chatQueryId(): string | null {
+  const q = route.query.chat;
+  if (typeof q === "string" && q.trim()) return q.trim();
+  if (Array.isArray(q) && typeof q[0] === "string" && q[0].trim()) {
+    return q[0].trim();
+  }
+  return null;
+}
+
+/** Activate a chat from `?chat=` when present (e.g. resume-from-sessions). */
+function applyChatQuery() {
+  const id = chatQueryId();
+  if (!id) return;
+  const match = sessions.value.find((s) => s.id === id);
+  if (!match) return;
+  if (activeSessionId.value === id) return;
+  activeSessionId.value = id;
+  bindActiveMessages(match);
+  error.value = null;
+  scrollBottom();
+}
+
 async function loadForProject(path: string) {
   const loaded = await loadSessionsAsync(path);
   if (loaded.length === 0) {
@@ -218,8 +493,13 @@ async function loadForProject(path: string) {
     persistQueue.schedule(path, sessions.value);
   } else {
     sessions.value = loaded;
-    activeSessionId.value = loaded[0].id;
-    bindActiveMessages(loaded[0]);
+    const preferred = chatQueryId();
+    const match = preferred
+      ? loaded.find((s) => s.id === preferred)
+      : undefined;
+    const active = match ?? loaded[0];
+    activeSessionId.value = active.id;
+    bindActiveMessages(active);
   }
 }
 
@@ -238,6 +518,11 @@ watch(
     }
   },
   { immediate: true },
+);
+
+watch(
+  () => route.query.chat,
+  () => applyChatQuery(),
 );
 
 onMounted(() => {
@@ -313,6 +598,7 @@ onBeforeUnmount(() => {
   if (actionToastTimer !== null) clearTimeout(actionToastTimer);
   registerVoiceChatLink(null);
   clearAppActionHandlers();
+  void killAllPtys();
 });
 
 function showActionToast(msg: string) {
@@ -326,6 +612,12 @@ function showActionToast(msg: string) {
 
 function showMessageActions(m: ChatMessage): boolean {
   return m.role === "user" || m.role === "assistant";
+}
+
+function roleLabel(role: ChatMessage["role"]): string {
+  if (role === "user") return "You";
+  if (role === "assistant") return "Assistant";
+  return "System";
 }
 
 async function copyMessage(m: ChatMessage) {
@@ -417,11 +709,29 @@ function applyTurnProgress(event: ChatTurnProgress) {
     stopStatusRotate();
     busyLabel.value = "Working with tools…";
     busyDetail.value = event.title;
+    if (looksLikeTerminalTool(event.title) && activeTurnId.value) {
+      startTerminalRun({
+        id: terminalRunIdFor(activeTurnId.value, event.title),
+        title: event.title,
+        command: event.title,
+        toolId: event.title.toLowerCase().includes("delegate")
+          ? "delegate"
+          : event.title.toLowerCase().includes("verify")
+            ? "verify"
+            : event.title,
+      });
+    }
     return;
   }
   // tool_done — keep last tool visible until next event / reply lands
   busyLabel.value = event.ok ? "Finishing…" : "Tool failed…";
   busyDetail.value = event.title;
+  if (looksLikeTerminalTool(event.title) && activeTurnId.value) {
+    finishTerminalRun(
+      terminalRunIdFor(activeTurnId.value, event.title),
+      event.ok ? "done" : "failed",
+    );
+  }
 }
 
 function startNewChat() {
@@ -529,11 +839,27 @@ async function send(text: string) {
   error.value = null;
   const turnId = `turn-${Date.now().toString(16)}`;
   activeTurnId.value = turnId;
+  startWorkingRun(turnId, busyLabel.value);
   const verifyMatch = trimmed.match(/^\/verify\s+(\S+)/i);
   verifyRunKey.value =
     verifyMatch && verifyMatch[1] && verifyMatch[1].toLowerCase() !== "list"
       ? `${projectPath}:${verifyMatch[1]}`
       : null;
+  if (verifyRunKey.value && verifyMatch?.[1]) {
+    startTerminalRun({
+      id: `term:${verifyRunKey.value}`,
+      title: "Verify",
+      command: verifyMatch[1],
+      toolId: "verify",
+    });
+  } else if (/^\/delegate\b/i.test(trimmed)) {
+    startTerminalRun({
+      id: `term:${turnId}:delegate`,
+      title: "Delegate",
+      command: trimmed.replace(/^\/delegate\s*/i, "").trim() || "delegate",
+      toolId: "delegate",
+    });
+  }
 
   // Paint user bubble + thinking indicator, then yield the event loop before IPC.
   await scrollBottom();
@@ -565,17 +891,45 @@ async function send(text: string) {
       summary: t.summary,
     }));
     await applyVoiceUiActions(router, parseUiActionsFromToolSteps(navSteps));
-    session.messages.push(
-      createChatMessage("assistant", result.assistantText, result.toolCalls),
+    const assistantMsg = createChatMessage(
+      "assistant",
+      result.assistantText,
+      result.toolCalls,
     );
+    session.messages.push(assistantMsg);
+    for (const t of result.toolCalls ?? []) {
+      if (!looksLikeTerminalTool(t.toolId) && !looksLikeTerminalTool(t.title)) {
+        continue;
+      }
+      const termId = terminalRunIdFor(turnId, t.toolId || t.title);
+      // Ensure a row exists even if progress events were skipped (engine path).
+      startTerminalRun({
+        id: termId,
+        title: t.title || t.toolId,
+        command: truncateCommand(t.summary.split("\n")[0] || t.title, 120),
+        toolId: t.toolId,
+      });
+      finishTerminalRun(
+        termId,
+        t.ok ? "done" : "failed",
+        truncateCommand(t.summary, 2400),
+        assistantMsg.id,
+      );
+    }
+    finishWorkingRuns("done");
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
     session.messages.push(createChatMessage("assistant", `Error: ${error.value}`));
+    finishWorkingRuns("failed");
+    if (verifyRunKey.value) {
+      finishTerminalRun(`term:${verifyRunKey.value}`, "failed", error.value);
+    }
   } finally {
     stopStatusRotate();
     busy.value = false;
     busyDetail.value = null;
     activeTurnId.value = null;
+    finishWorkingRuns("done");
     // Keep verify panel briefly after completion so logs remain visible.
     if (!verifyRunKey.value) verifyRunKey.value = null;
     touchSession(session);
@@ -589,24 +943,46 @@ async function verifyFromPatch(payload: { recipeId: string; patchId: string }) {
   const projectPath = currentProjectPath.value;
   if (!projectPath || busy.value) return;
   const runKey = `${projectPath}:${payload.recipeId}`;
+  const turnId = `verify-${Date.now().toString(16)}`;
   verifyRunKey.value = runKey;
   busyLabel.value = `Verifying ${payload.recipeId}…`;
   busyDetail.value = `patch ${payload.patchId}`;
   busy.value = true;
   error.value = null;
+  activeTurnId.value = turnId;
+  startWorkingRun(turnId, busyLabel.value);
+  startTerminalRun({
+    id: `term:${runKey}`,
+    title: "Verify",
+    command: payload.recipeId,
+    toolId: "verify",
+  });
   try {
     const { runAgentRecipe } = await import("../lib/agentEngineClient");
-    await runAgentRecipe(
+    const result = await runAgentRecipe(
       projectPath,
       payload.recipeId,
       runKey,
       payload.patchId,
     );
+    finishTerminalRun(
+      `term:${runKey}`,
+      result.ok ? "done" : "failed",
+      truncateCommand(
+        `exit=${result.exitCode ?? "n/a"} ${result.stdout ?? ""}\n${result.stderr ?? ""}`,
+        2400,
+      ),
+    );
+    finishWorkingRuns(result.ok ? "done" : "failed");
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
+    finishTerminalRun(`term:${runKey}`, "failed", error.value);
+    finishWorkingRuns("failed");
   } finally {
     busy.value = false;
     busyDetail.value = null;
+    activeTurnId.value = null;
+    finishWorkingRuns("done");
     await scrollBottom();
   }
 }
@@ -624,19 +1000,15 @@ async function stopTurn() {
     try {
       const { cancelAgentRecipe } = await import("../lib/agentEngineClient");
       await cancelAgentRecipe(verifyRunKey.value);
+      finishTerminalRun(`term:${verifyRunKey.value}`, "cancelled");
     } catch {
       /* ignore */
     }
   }
+  finishWorkingRuns("cancelled");
+  mutateActiveRuns((runs) => completeRunningOfKind(runs, "terminal", "cancelled"));
   busyLabel.value = "Stopping…";
 }
-
-function insertSlash(cmd: string) {
-  composer.value?.insertSlash(cmd);
-}
-
-/** Starter chips only — full catalog via “More…” → /tools (not stacked). */
-const starterChips = ["/pilot", "/read", "/diff", "/verify", "/continue"] as const;
 
 function runToolsDump() {
   void send("/tools");
@@ -791,196 +1163,220 @@ function toggleToolsExpanded(id: string) {
           </div>
         </aside>
 
-        <div class="chat__main">
-          <div class="chat__thread-bar">
-            <span class="chat__thread-meta" :title="projectLabel">
-              {{ projectLabel }}
-            </span>
-            <button
-              v-if="activeMessages.length > 0"
-              type="button"
-              class="chat__clear"
-              title="Clear this chat"
-              @click="clearActiveChat"
-            >
-              <Eraser :size="13" />
-              Clear
-            </button>
-          </div>
+        <div
+          class="chat__main"
+          :class="{
+            'chat__main--term-open': terminalPanelOpen,
+            'chat__main--term-right': terminalPanelOpen && terminalDock === 'right',
+            'chat__main--term-bottom':
+              terminalPanelOpen && terminalDock === 'bottom',
+          }"
+          data-testid="chat-main"
+        >
+          <div class="chat__column">
+            <div class="chat__thread-bar">
+              <span class="chat__thread-meta" :title="projectLabel">
+                {{ projectLabel }}
+              </span>
+              <button
+                v-if="activeMessages.length > 0"
+                type="button"
+                class="chat__clear"
+                title="Clear this chat"
+                @click="clearActiveChat"
+              >
+                <Eraser :size="13" />
+                Clear
+              </button>
+            </div>
 
-          <Transition name="chat-switch" mode="out-in">
-            <div :key="activeSessionId ?? 'none'" class="chat__thread-wrap">
-              <div v-if="activeMessages.length === 0" class="chat__thread-empty">
-                <Sparkles :size="20" />
-                <p class="chat__thread-empty-title">Start a conversation</p>
-                <p class="chat__thread-empty-body">
-                  Ask about the workspace, or pick a starter below.
-                </p>
-              </div>
-              <div v-else ref="scroller" class="chat__thread">
-                <div class="chat__thread-inner">
-                  <!-- Plain list (no TransitionGroup) — avoids O(n) move FLIP
-                       work when appending; v-memo keeps old markdown bubbles cold. -->
-                  <div class="chat__thread-msgs">
-                    <div
-                      v-for="(m, mi) in activeMessages"
-                      :key="m.id"
-                      class="msg"
-                      :class="`msg--${m.role}`"
-                    >
-                      <article
-                        class="bubble"
-                        :class="`bubble--${m.role}`"
-                        v-memo="[
-                          m.id,
-                          m.text,
-                          m.toolCalls,
-                          isToolsHelpMessage(m) ? isToolsExpanded(m.id) : false,
-                        ]"
+            <Transition name="chat-switch" mode="out-in">
+              <div :key="activeSessionId ?? 'none'" class="chat__thread-wrap">
+                <div v-if="activeMessages.length === 0" class="chat__thread-empty">
+                  <Sparkles :size="20" />
+                  <p class="chat__thread-empty-title">Start a conversation</p>
+                  <p class="chat__thread-empty-body">
+                    Ask about the workspace, or press / for commands.
+                  </p>
+                </div>
+                <div v-else ref="scroller" class="chat__thread">
+                  <div class="chat__thread-inner">
+                    <!-- Plain list (no TransitionGroup) — avoids O(n) move FLIP
+                         work when appending; v-memo keeps old markdown bubbles cold. -->
+                    <div class="chat__thread-msgs">
+                      <div
+                        v-for="(m, mi) in activeMessages"
+                        :key="m.id"
+                        class="msg"
+                        :class="`msg--${m.role}`"
+                        :data-msg-id="m.id"
+                        :data-role="m.role"
                       >
-                        <div v-if="m.toolCalls?.length" class="bubble__tools">
-                          <div
-                            v-for="(t, i) in m.toolCalls"
-                            :key="`${m.id}-${t.toolId}-${i}`"
-                            class="tool"
-                            :class="t.ok ? 'tool--ok' : 'tool--fail'"
-                          >
-                            <Wrench :size="12" />
-                            <span>{{ t.title }}</span>
-                            <span v-if="!t.ok" class="tool__flag">fail</span>
+                        <article
+                          class="bubble"
+                          :class="`bubble--${m.role}`"
+                          v-memo="[
+                            m.id,
+                            m.text,
+                            m.toolCalls,
+                            isToolsHelpMessage(m) ? isToolsExpanded(m.id) : false,
+                          ]"
+                        >
+                          <header class="bubble__meta">
+                            <span class="bubble__role">{{ roleLabel(m.role) }}</span>
+                          </header>
+                          <div v-if="m.toolCalls?.length" class="bubble__tools">
+                            <div
+                              v-for="(t, i) in m.toolCalls"
+                              :key="`${m.id}-${t.toolId}-${i}`"
+                              class="tool"
+                              :class="t.ok ? 'tool--ok' : 'tool--fail'"
+                            >
+                              <Wrench :size="12" />
+                              <span>{{ t.title }}</span>
+                              <span v-if="!t.ok" class="tool__flag">fail</span>
+                            </div>
                           </div>
-                        </div>
-                        <div v-if="isToolsHelpMessage(m)" class="tools-fold">
+                          <div v-if="isToolsHelpMessage(m)" class="tools-fold">
+                            <button
+                              type="button"
+                              class="tools-fold__toggle"
+                              :aria-expanded="isToolsExpanded(m.id)"
+                              @click="toggleToolsExpanded(m.id)"
+                            >
+                              <ChevronDown
+                                v-if="isToolsExpanded(m.id)"
+                                :size="14"
+                              />
+                              <ChevronRight v-else :size="14" />
+                              <span>{{ toolsHelpSummary(m.text) }}</span>
+                              <span class="tools-fold__action">
+                                {{ isToolsExpanded(m.id) ? "Collapse" : "Expand" }}
+                              </span>
+                            </button>
+                            <ChatMessageContent
+                              v-if="isToolsExpanded(m.id)"
+                              :text="m.text"
+                            />
+                          </div>
+                          <ChatMessageContent v-else :text="m.text" />
+                          <template
+                            v-if="
+                              m.role === 'assistant' &&
+                              currentProjectPath &&
+                              patchIdsForMessage(m).length
+                            "
+                          >
+                            <PatchApprovalCard
+                              v-for="pid in patchIdsForMessage(m)"
+                              :key="`${m.id}-${pid}`"
+                              :project-path="currentProjectPath"
+                              :patch-id="pid"
+                              @verify="verifyFromPatch"
+                            />
+                          </template>
+                        </article>
+                        <div
+                          v-if="showMessageActions(m)"
+                          class="msg__actions"
+                        >
                           <button
                             type="button"
-                            class="tools-fold__toggle"
-                            :aria-expanded="isToolsExpanded(m.id)"
-                            @click="toggleToolsExpanded(m.id)"
+                            class="msg__action"
+                            title="Copy message"
+                            aria-label="Copy message"
+                            @click="copyMessage(m)"
                           >
-                            <ChevronDown
-                              v-if="isToolsExpanded(m.id)"
-                              :size="14"
-                            />
-                            <ChevronRight v-else :size="14" />
-                            <span>{{ toolsHelpSummary(m.text) }}</span>
-                            <span class="tools-fold__action">
-                              {{ isToolsExpanded(m.id) ? "Collapse" : "Expand" }}
-                            </span>
+                            <Check v-if="copiedMessageId === m.id" :size="12" />
+                            <Copy v-else :size="12" />
                           </button>
-                          <ChatMessageContent
-                            v-if="isToolsExpanded(m.id)"
-                            :text="m.text"
-                          />
+                          <button
+                            type="button"
+                            class="msg__action"
+                            title="Fork chat from here"
+                            aria-label="Fork chat from here"
+                            @click="forkFromMessage(mi)"
+                          >
+                            <GitFork :size="12" />
+                          </button>
                         </div>
-                        <ChatMessageContent v-else :text="m.text" />
-                        <template
-                          v-if="
-                            m.role === 'assistant' &&
-                            currentProjectPath &&
-                            patchIdsForMessage(m).length
-                          "
-                        >
-                          <PatchApprovalCard
-                            v-for="pid in patchIdsForMessage(m)"
-                            :key="`${m.id}-${pid}`"
-                            :project-path="currentProjectPath"
-                            :patch-id="pid"
-                            @verify="verifyFromPatch"
-                          />
-                        </template>
-                      </article>
-                      <div
-                        v-if="showMessageActions(m)"
-                        class="msg__actions"
-                      >
-                        <button
-                          type="button"
-                          class="msg__action"
-                          title="Copy message"
-                          aria-label="Copy message"
-                          @click="copyMessage(m)"
-                        >
-                          <Check v-if="copiedMessageId === m.id" :size="12" />
-                          <Copy v-else :size="12" />
-                        </button>
-                        <button
-                          type="button"
-                          class="msg__action"
-                          title="Fork chat from here"
-                          aria-label="Fork chat from here"
-                          @click="forkFromMessage(mi)"
-                        >
-                          <GitFork :size="12" />
-                        </button>
                       </div>
                     </div>
-                  </div>
-                  <Transition name="think">
-                    <ChatThinkingBubble
-                      v-if="busy"
-                      :label="busyLabel"
-                      :detail="busyDetail"
+                    <Transition name="think">
+                      <ChatThinkingBubble
+                        v-if="busy"
+                        :label="busyLabel"
+                        :detail="busyDetail"
+                      />
+                    </Transition>
+                    <VerifyLogPanel
+                      v-if="verifyRunKey"
+                      :run-key="verifyRunKey"
+                      :active="busy"
+                      :project-path="currentProjectPath || undefined"
                     />
-                  </Transition>
-                  <VerifyLogPanel
-                    v-if="verifyRunKey"
-                    :run-key="verifyRunKey"
-                    :active="busy"
-                    :project-path="currentProjectPath || undefined"
-                  />
+                  </div>
                 </div>
               </div>
-            </div>
-          </Transition>
+            </Transition>
 
-          <div class="chat__modes" aria-label="Agent mode">
-            <button
-              v-for="m in (['ask', 'plan', 'act', 'delegate'] as const)"
-              :key="m"
-              type="button"
-              class="chat__mode"
-              :class="{ 'chat__mode--on': chatMode === m }"
-              :disabled="busy"
-              @click="chatMode = m"
+            <ChatComposer
+              ref="composer"
+              v-model:mode="chatMode"
+              :busy="busy"
+              :project-path="currentProjectPath"
+              :project-name="currentProject?.name ?? null"
+              :terminal-runs="statusTerminalRuns"
+              :shell-tabs="shellTabs"
+              :show-canvas="statusShowCanvas"
+              @send="send"
+              @stop="stopTurn"
+              @tools="runToolsDump"
+              @open-canvas="openCanvasFromStatus"
+              @select-terminal="onSelectTerminalRun"
+              @focus-shell="focusShellTab"
+              @open-terminal-panel="openTerminalPanel"
             >
-              {{ m }}
-            </button>
+              <template #status>
+                <ComposerStatusBar
+                  :working-count="statusWorkingCount"
+                  :terminal-runs="statusTerminalRuns"
+                  :shell-tab-count="shellTabs.length"
+                  :terminal-panel-open="terminalPanelOpen"
+                  :show-canvas="statusShowCanvas"
+                  @focus-working="focusWorkingBubble"
+                  @open-canvas="openCanvasFromStatus"
+                  @toggle-terminal-panel="toggleTerminalPanel"
+                />
+              </template>
+            </ChatComposer>
+            <p class="chat__hint">
+              <button type="button" class="chat__link" @click="runToolsDump">
+                Tools
+              </button>
+              <span class="chat__hint-sep" aria-hidden="true">·</span>
+              <span class="chat__hint-meta">/ commands · @ context</span>
+            </p>
           </div>
 
-          <div class="chat__starters" aria-label="Starter tools">
-            <button
-              v-for="q in starterChips"
-              :key="q"
-              type="button"
-              class="chat__chip"
-              :disabled="busy"
-              @click="insertSlash(q)"
-            >
-              {{ q }}
-            </button>
-            <button
-              type="button"
-              class="chat__chip chat__chip--more"
-              :disabled="busy"
-              title="List all tools"
-              @click="runToolsDump"
-            >
-              More…
-            </button>
-          </div>
-
-          <ChatComposer
-            ref="composer"
-            :busy="busy"
-            @send="send"
-            @stop="stopTurn"
+          <ChatTerminalPanel
+            :open="terminalPanelOpen"
+            :dock="terminalDock"
+            :tabs="shellTabs"
+            :active-tab-id="activeShellTabId"
+            :terminal-runs="statusTerminalRuns"
+            :cwd-label="terminalCwdLabel"
+            @close="closeTerminalPanel"
+            @update:dock="terminalDock = $event"
+            @update:active-tab-id="activeShellTabId = $event"
+            @new-tab="createEmbeddedShellTab"
+            @close-tab="closeShellTab"
+            @tab-ready="onShellTabReady"
+            @tab-error="onShellTabError"
+            @tab-exit="onShellTabExit"
+            @open-external="openExternalTerminal"
+            @select-run="onSelectTerminalRun"
           />
-          <p class="chat__hint">
-            Mode {{ chatMode }} · slash = local · freeform = Agent Engine ·
-            <button type="button" class="chat__link" @click="runToolsDump">
-              Tools
-            </button>
-          </p>
         </div>
       </div>
 
@@ -1057,66 +1453,6 @@ function toggleToolsExpanded(id: string) {
 .chat__clear:hover {
   background: var(--surface-2);
   border-color: var(--border);
-  color: var(--foreground);
-}
-
-.chat__modes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  margin-bottom: 0.45rem;
-}
-.chat__mode {
-  border: 1px solid var(--border);
-  background: transparent;
-  color: var(--muted-foreground);
-  border-radius: 999px;
-  padding: 0.2rem 0.65rem;
-  font-size: 0.72rem;
-  text-transform: capitalize;
-  cursor: pointer;
-}
-.chat__mode--on {
-  color: var(--foreground);
-  border-color: color-mix(in srgb, var(--accent-blue, #3d7eff) 55%, var(--border));
-  background: color-mix(in srgb, var(--accent-blue, #3d7eff) 16%, transparent);
-}
-.chat__mode:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-.chat__starters {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  flex-shrink: 0;
-}
-
-.chat__chip {
-  border: 1px solid var(--border);
-  background: var(--surface-2);
-  color: var(--muted-foreground);
-  border-radius: 999px;
-  padding: 0.25rem 0.65rem;
-  font-size: 0.72rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
-}
-
-.chat__chip:hover:not(:disabled) {
-  background: var(--surface-hover);
-  border-color: var(--border-strong);
-  color: var(--foreground);
-}
-
-.chat__chip:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.chat__chip--more {
-  border-style: dashed;
   color: var(--foreground);
 }
 
@@ -1416,10 +1752,35 @@ function toggleToolsExpanded(id: string) {
   flex: 1;
   min-width: 0;
   display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.chat__main--term-bottom {
+  flex-direction: column;
+  padding: 0 1.25rem 1rem;
+}
+
+.chat__column {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
   flex-direction: column;
   gap: 0.65rem;
   padding: 0.75rem 1.25rem 1rem;
   overflow: hidden;
+}
+
+.chat__main--term-right .chat__column {
+  padding-right: 1rem;
+}
+
+.chat__main--term-bottom .chat__column {
+  flex: 1;
+  min-height: 0;
+  padding-bottom: 0.5rem;
 }
 
 .chat__thread-wrap {
@@ -1481,12 +1842,19 @@ function toggleToolsExpanded(id: string) {
 .msg--user {
   align-self: flex-end;
   align-items: flex-end;
+  max-width: min(640px, 92%);
 }
 
-.msg--assistant,
-.msg--system {
+.msg--assistant {
   align-self: flex-start;
   align-items: flex-start;
+  max-width: min(820px, 100%);
+}
+
+.msg--system {
+  align-self: stretch;
+  align-items: stretch;
+  max-width: 100%;
 }
 
 .msg__actions {
@@ -1547,15 +1915,54 @@ function toggleToolsExpanded(id: string) {
   background: var(--surface-2);
 }
 
+.bubble__meta {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.35rem;
+}
+
+.bubble__role {
+  font-size: 0.65rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
 .bubble--user {
-  background: var(--surface-3);
-  border-color: var(--border-strong);
+  width: fit-content;
+  max-width: 100%;
+  margin-left: auto;
+  background: color-mix(in srgb, var(--accent-blue) 16%, var(--surface-3));
+  border-color: color-mix(in srgb, var(--accent-blue) 42%, var(--border));
   transform-origin: bottom right;
 }
 
-.bubble--assistant,
-.bubble--system {
+.bubble--user .bubble__role {
+  color: color-mix(in srgb, var(--accent-blue) 75%, var(--foreground));
+}
+
+.bubble--assistant {
   transform-origin: bottom left;
+}
+
+.bubble--assistant .bubble__role {
+  color: color-mix(in srgb, var(--accent-green) 55%, var(--muted-foreground));
+}
+
+.bubble--system {
+  width: 100%;
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--border) 80%, transparent);
+  background: color-mix(in srgb, var(--surface-1) 70%, transparent);
+  color: var(--muted-foreground);
+  padding: 0.55rem 0.75rem;
+  font-size: 0.82rem;
+  transform-origin: bottom left;
+}
+
+.bubble--system .bubble__role {
+  letter-spacing: 0.06em;
 }
 
 .bubble__tools {
@@ -1628,19 +2035,25 @@ function toggleToolsExpanded(id: string) {
 }
 
 .chat__hint {
-  margin: 0;
+  margin: 0.35rem 0 0;
   font-size: 0.7rem;
   color: var(--muted-foreground);
   flex-shrink: 0;
   line-height: 1.35;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.chat__hint code {
-  font-family: var(--font-mono);
-  font-size: 0.68rem;
+.chat__hint-sep {
+  opacity: 0.5;
+}
+
+.chat__hint-meta {
+  opacity: 0.85;
 }
 
 .chat__link {

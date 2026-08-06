@@ -2,6 +2,7 @@ mod continuity_desktop;
 mod agent_engine_desktop;
 mod canvas_desktop;
 mod extensions_desktop;
+mod pty_desktop;
 mod voice;
 mod voice_desktop;
 
@@ -750,6 +751,35 @@ fn detect_agent_session_roots(
     session_readers::detect_provider_roots(overrides.as_ref())
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ReadForeignTranscriptResult {
+    success: bool,
+    transcript: Option<session_readers::ForeignTranscript>,
+    error: Option<String>,
+}
+
+/// Read-only extract of a scanned provider session for OpenMesh Chat resume/import.
+/// Does not mutate the provider session file.
+#[tauri::command]
+fn read_foreign_session_transcript(
+    tool: String,
+    session_path: String,
+) -> ReadForeignTranscriptResult {
+    match session_readers::read_foreign_transcript(&tool, &session_path) {
+        Ok(transcript) => ReadForeignTranscriptResult {
+            success: true,
+            transcript: Some(transcript),
+            error: None,
+        },
+        Err(error) => ReadForeignTranscriptResult {
+            success: false,
+            transcript: None,
+            error: Some(error),
+        },
+    }
+}
+
 // Phase 6: Command Preset Runner
 #[derive(Serialize)]
 struct RunCommandPresetResult {
@@ -1246,6 +1276,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .manage(std::sync::Arc::new(pty_desktop::PtyManager::default()))
         .invoke_handler(tauri::generate_handler![
             greet,
             get_host_os,
@@ -1253,10 +1284,16 @@ pub fn run() {
             open_folder,
             get_git_status,
             open_terminal,
+            pty_desktop::pty_create,
+            pty_desktop::pty_write,
+            pty_desktop::pty_resize,
+            pty_desktop::pty_kill,
+            pty_desktop::pty_kill_all,
             open_agent_cli,
             scan_agent_sessions,
             scan_workspace_agent_sessions,
             detect_agent_session_roots,
+            read_foreign_session_transcript,
             run_command_preset,
             // File-based storage commands
             get_settings,
@@ -1311,6 +1348,7 @@ pub fn run() {
             continuity_desktop::mesh_list_peers,
             continuity_desktop::mesh_list_envelopes,
             continuity_desktop::mesh_query_peer,
+            continuity_desktop::mesh_add_peer,
             continuity_desktop::relay_list_audit,
             continuity_desktop::online_proxy_status,
             continuity_desktop::online_proxy_init,
@@ -1318,12 +1356,18 @@ pub fn run() {
             // Team Workspace Foundation (0.1.15)
             continuity_desktop::team_workspace_status,
             continuity_desktop::team_list_members,
+            continuity_desktop::team_init,
+            continuity_desktop::team_add_member,
             // Team Cloud Beta (0.1.16)
             continuity_desktop::team_cloud_status,
             continuity_desktop::team_cloud_sync_scaffold,
             // Trust Admin Beta (0.1.17)
             continuity_desktop::team_trust_policy_status,
             continuity_desktop::team_trust_audit_list,
+            continuity_desktop::team_trust_init,
+            continuity_desktop::team_trust_set_remote_query,
+            continuity_desktop::team_trust_set_query_mode,
+            continuity_desktop::team_trust_allowlist_add,
             // Connector Layer (0.1.18)
             continuity_desktop::connector_list,
             continuity_desktop::org_graph_show,
@@ -1338,6 +1382,10 @@ pub fn run() {
             continuity_desktop::lan_list_approved_packages,
             continuity_desktop::lan_send_package,
             continuity_desktop::lan_ask_peer,
+            continuity_desktop::lan_probe_presence,
+            continuity_desktop::lan_probe_address,
+            continuity_desktop::lan_chat_send,
+            continuity_desktop::lan_chat_list,
             // Agent Engine + Tool Loop (0.1.23)
             agent_engine_desktop::agent_secret_status,
             agent_engine_desktop::agent_secret_set,

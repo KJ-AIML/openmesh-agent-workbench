@@ -19,12 +19,17 @@ import {
   AlertCircle,
   Plus,
   Zap,
+  Loader2,
 } from "lucide-vue-next";
 import * as fileSystemAdapter from "../lib/adapters/fileSystemAdapter";
 import * as terminalAdapter from "../lib/adapters/terminalAdapter";
 import * as gitAdapter from "../lib/adapters/gitAdapter";
-import type { GitStatus } from "../lib/adapters/types";
+import type { GitStatus, ScannedSession } from "../lib/adapters/types";
 import AgentToolIcon from "../components/AgentToolIcon.vue";
+import {
+  pickRecentAgentSessions,
+  scanConfiguredSessionsResult,
+} from "../lib/scanConfiguredSessions";
 
 const router = useRouter();
 const {
@@ -33,7 +38,6 @@ const {
   settings,
   projectSprint,
   projectTasks,
-  projectSessions,
   projectDocs,
   getRecentItemsForProject,
   addRecentItem,
@@ -56,19 +60,56 @@ async function handleQuickStartSprint() {
     startingHomeSprint.value = false;
   }
 }
-const topSessions = computed(() => projectSessions.value.slice(0, 4));
+
+/** Disk-scanned agent sessions (same source as Agent Sessions page). */
+const homeSessions = ref<ScannedSession[]>([]);
+const sessionsLoading = ref(false);
+const sessionsError = ref<string | null>(null);
+const topSessions = computed(() => pickRecentAgentSessions(homeSessions.value, 4));
 
 const gitStatus = ref<GitStatus | null>(null);
 const gitIsMock = ref(false);
 
+async function refreshHomeSessions() {
+  const folderPath = currentProject.value?.folderPath;
+  if (!folderPath) {
+    homeSessions.value = [];
+    sessionsError.value = null;
+    sessionsLoading.value = false;
+    return;
+  }
+
+  sessionsLoading.value = true;
+  sessionsError.value = null;
+  try {
+    const result = await scanConfiguredSessionsResult(
+      settings.value.sessionDirs,
+      100,
+      folderPath,
+    );
+    if (!result.ok) {
+      homeSessions.value = [];
+      sessionsError.value = result.error;
+      return;
+    }
+    homeSessions.value = result.sessions;
+  } finally {
+    sessionsLoading.value = false;
+  }
+}
+
+function openAgentSession(sessionId: string) {
+  router.push({ path: "/agent-sessions", query: { session: sessionId } });
+}
+
 onMounted(async () => {
-  await refreshGitStatus();
+  await Promise.all([refreshGitStatus(), refreshHomeSessions()]);
 });
 
 watch(
-  () => currentProject.value,
+  () => currentProject.value?.folderPath,
   async () => {
-    await refreshGitStatus();
+    await Promise.all([refreshGitStatus(), refreshHomeSessions()]);
   },
 );
 
@@ -576,7 +617,29 @@ async function launchAgent(tool: string) {
               </button>
             </div>
             <div
-              v-if="topSessions.length === 0"
+              v-if="sessionsLoading"
+              class="flex items-center justify-center gap-2 py-4 text-[11px] text-muted"
+            >
+              <Loader2 class="h-3.5 w-3.5 animate-spin" />
+              Scanning sessions…
+            </div>
+            <div
+              v-else-if="sessionsError"
+              class="text-center py-3 space-y-2"
+            >
+              <p class="text-[11px]" style="color: var(--accent-red, #ef4444)">
+                {{ sessionsError }}
+              </p>
+              <button
+                type="button"
+                class="action-pill mx-auto text-[10px]"
+                @click="refreshHomeSessions"
+              >
+                Retry
+              </button>
+            </div>
+            <div
+              v-else-if="topSessions.length === 0"
               class="text-center py-3 space-y-2"
             >
               <div
@@ -585,33 +648,45 @@ async function launchAgent(tool: string) {
               >
                 <Bot class="h-4 w-4 text-muted" />
               </div>
-              <p class="text-[11px] text-muted">No sessions yet</p>
+              <p class="text-[11px] text-muted">No agent sessions for this project yet</p>
               <button
+                type="button"
                 @click="router.push('/agent-sessions')"
                 class="action-pill mx-auto text-[10px]"
               >
-                Scan Sessions
+                Open Sessions
               </button>
             </div>
             <div v-else class="space-y-1">
-              <div
+              <button
                 v-for="session in topSessions"
                 :key="session.id"
-                class="flex items-center justify-between rounded-lg px-2 py-1.5 text-[11px]"
+                type="button"
+                class="flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left text-[11px] transition-colors"
+                style="background: transparent"
+                @mouseenter="
+                  ($event.currentTarget as HTMLElement).style.background =
+                    'var(--surface-highlight)';
+                "
+                @mouseleave="
+                  ($event.currentTarget as HTMLElement).style.background =
+                    'transparent';
+                "
+                @click="openAgentSession(session.id)"
               >
                 <div class="flex items-center gap-1.5 flex-1 min-w-0">
+                  <AgentToolIcon :tool="session.toolName" :size="12" />
                   <span class="truncate" style="color: var(--foreground)">{{
                     session.title
                   }}</span>
-                  <span
-                    class="text-[9px] flex-shrink-0 text-subtle"
-                    >{{ session.tool }}</span
-                  >
+                  <span class="text-[9px] flex-shrink-0 text-subtle">{{
+                    session.toolName
+                  }}</span>
                 </div>
                 <span class="text-[9px] flex-shrink-0 text-subtle ml-1">{{
                   timeAgo(session.lastActiveAt)
                 }}</span>
-              </div>
+              </button>
             </div>
           </div>
 

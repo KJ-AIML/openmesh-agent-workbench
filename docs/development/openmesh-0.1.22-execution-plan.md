@@ -1,5 +1,11 @@
 # OpenMesh 0.1.22 — LAN Relay + Live Ask
 
+> **Historical execution plan.** Superseded product truth:
+> - Capability guide: [`../CONTINUITY_MESH.md`](../CONTINUITY_MESH.md)
+> - Limits: [`../LIMITATIONS.md`](../LIMITATIONS.md)
+>
+> **Drift vs this plan:** Continuity → Mesh → **Chat** (human LAN text) shipped after this plan’s “non-goal”; live ask answers via **Agent Engine** (not LocalScaffold / Work Proxy paste); HTTP also exposes `POST /v1/chat/message`. Keep this file for archaeology only.
+
 **Status:** IMPLEMENTATION COMPLETE + FOLLOW-UP (stale serve-status fixed; local; uncommitted; tag/release pending ask)  
 **Human unlock:** 2026-08-03 (explicit unlock despite RC feature freeze — this track only)  
 **Depends on:** v0.1.21 RELEASED (filesystem relay + mesh query + online-proxy scaffolds)  

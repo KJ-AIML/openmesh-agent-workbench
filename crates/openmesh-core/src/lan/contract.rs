@@ -83,6 +83,56 @@ pub struct LanHealthResponse {
     pub http_port: u16,
 }
 
+/// Live / stale / unreachable presence from probing `GET /v1/health`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LanPresenceState {
+    /// Health probe succeeded — peer HTTP is reachable now.
+    Live,
+    /// Discovery saw the peer recently, but health probe failed (VPN/firewall gap).
+    Stale,
+    /// Health probe failed and no recent discovery signal.
+    Unreachable,
+    /// Not probed yet.
+    Unknown,
+}
+
+/// Presence probe result for one host:port (UI green-dot row).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LanPeerPresence {
+    pub address: String,
+    pub state: LanPresenceState,
+    pub probed_at: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latency_ms: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub health: Option<LanHealthResponse>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    /// Discovery/last-seen hint used to distinguish stale vs unreachable.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_seen_at: Option<String>,
+}
+
+/// Human team-chat text message over LAN HTTP (trusted-LAN alpha).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct LanChatMessage {
+    pub protocol: String,
+    pub message_id: String,
+    pub from_peer_id: String,
+    pub from_label: String,
+    pub text: String,
+    pub sent_at: String,
+    /// Optional conversation key (defaults to peer pair address/id).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thread_id: Option<String>,
+}
+
+pub const LAN_CHAT_PROTOCOL: &str = "openmesh-lan-chat/0.1";
+pub const MAX_CHAT_TEXT_BYTES: usize = 4000;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LanServeStatus {

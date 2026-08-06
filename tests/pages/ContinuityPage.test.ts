@@ -9,12 +9,20 @@ vi.mock("@/lib/continuityClient", () => ({
   listMeshPeers: vi.fn(),
   listMeshEnvelopes: vi.fn(),
   queryMeshPeer: vi.fn(),
+  addMeshPeer: vi.fn(),
   listRelayAudit: vi.fn(),
   getOnlineProxyStatus: vi.fn(),
   initOnlineProxy: vi.fn(),
   askOnlineProxy: vi.fn(),
   getTeamWorkspace: vi.fn(),
   getTeamTrustPolicy: vi.fn(),
+  initTeamWorkspace: vi.fn(),
+  addTeamMember: vi.fn(),
+  initTeamTrustPolicy: vi.fn(),
+  setTeamTrustRemoteQuery: vi.fn(),
+  setTeamTrustQueryMode: vi.fn(),
+  addTeamTrustAllowlist: vi.fn(),
+  listTeamTrustAudit: vi.fn(),
   listConnectors: vi.fn(),
   getOrgGraph: vi.fn(),
   getPilotStatus: vi.fn(),
@@ -26,6 +34,10 @@ vi.mock("@/lib/continuityClient", () => ({
   lanListApprovedPackages: vi.fn(),
   lanSendPackage: vi.fn(),
   lanAskPeer: vi.fn(),
+  lanProbePresence: vi.fn(),
+  lanProbeAddress: vi.fn(),
+  lanChatSend: vi.fn(),
+  lanChatList: vi.fn(),
 }));
 
 vi.mock("vue-router", () => ({
@@ -54,9 +66,14 @@ import {
   lanServeStatus,
   lanDiscover,
   lanListApprovedPackages,
+  lanProbePresence,
+  lanChatList,
   listMeshPeers,
   listMeshEnvelopes,
   listRelayAudit,
+  listTeamTrustAudit,
+  getTeamWorkspace,
+  getTeamTrustPolicy,
 } from "@/lib/continuityClient";
 
 describe("ContinuityPage", () => {
@@ -109,9 +126,14 @@ describe("ContinuityPage", () => {
     });
     (lanDiscover as any).mockResolvedValue([]);
     (lanListApprovedPackages as any).mockResolvedValue([]);
+    (lanProbePresence as any).mockResolvedValue([]);
+    (lanChatList as any).mockResolvedValue([]);
     (listMeshPeers as any).mockResolvedValue([]);
     (listMeshEnvelopes as any).mockResolvedValue([]);
     (listRelayAudit as any).mockResolvedValue([]);
+    (listTeamTrustAudit as any).mockResolvedValue([]);
+    (getTeamWorkspace as any).mockResolvedValue(null);
+    (getTeamTrustPolicy as any).mockResolvedValue(null);
   });
 
   it("renders Continuity header and section groups", async () => {
@@ -148,7 +170,7 @@ describe("ContinuityPage", () => {
     expect(wrapper.text()).toContain("1 open");
   });
 
-  it("Mesh group exposes Peers, Relay, Proxy, and LAN tabs", async () => {
+  it("Mesh group exposes Peers, LAN, Chat, Relay, and Proxy tabs", async () => {
     const wrapper = mount(ContinuityPage);
     await flushPromises();
 
@@ -164,9 +186,32 @@ describe("ContinuityPage", () => {
     expect(text).toContain("Relay");
     expect(text).toContain("Proxy");
     expect(text).toContain("LAN");
+    expect(text).toContain("Chat");
   });
 
-  it("LAN tab shows listener controls", async () => {
+  it("LAN tab shows listener controls and presence probe UI", async () => {
+    (lanDiscover as any).mockResolvedValue([
+      {
+        protocol: "openmesh-lan/0.1",
+        projectId: "p2",
+        ownerLabel: "Yo",
+        peerId: "lan-yo",
+        host: "127.0.0.1",
+        httpPort: 41778,
+        startedAt: "2026-08-06T01:00:00Z",
+        lastSeenAt: "2026-08-06T01:00:00Z",
+        address: "127.0.0.1:41778",
+      },
+    ]);
+    (lanProbePresence as any).mockResolvedValue([
+      {
+        address: "127.0.0.1:41778",
+        state: "live",
+        probedAt: "2026-08-06T01:00:05Z",
+        latencyMs: 12,
+      },
+    ]);
+
     const wrapper = mount(ContinuityPage);
     await flushPromises();
 
@@ -183,10 +228,14 @@ describe("ContinuityPage", () => {
     await nextTick();
 
     expect(lanServeStatus).toHaveBeenCalledWith("/tmp/test");
+    expect(lanProbePresence).toHaveBeenCalled();
     expect(wrapper.text()).toContain("LAN listener");
     expect(wrapper.text()).toContain("Start listener");
     expect(wrapper.text()).toContain("Refresh discover");
     expect(wrapper.text()).toContain("Listener is stopped");
+    expect(wrapper.text()).toContain("Manual host:port probe");
+    expect(wrapper.text()).toContain("Yo");
+    expect(wrapper.text()).toMatch(/live/i);
   });
 
   it("Proxy tab shows initialize control when not configured", async () => {

@@ -358,6 +358,7 @@ fn run_peer_add(args: &MeshPeerAddArgs, cwd: &Path) -> i32 {
         proxy_profile_id: args.profile_id.clone(),
         remote_workspace_id: args.workspace_id.clone(),
         notes: args.notes.clone(),
+        lan_address: None,
         created_at: now.clone(),
         updated_at: now,
     };

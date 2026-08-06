@@ -1,3 +1,5 @@
+> **Historical summary.** Paths referring to `web-demo/` and early Heli target names are obsolete — the app lives at the repo root. Current docs: [`README.md`](./README.md) · [`PRODUCT_GUIDE.md`](./PRODUCT_GUIDE.md) · [`DEVELOPMENT.md`](./DEVELOPMENT.md).
+
 # OpenMesh Post-v0.1.0 Development Summary
 
 Date: July 5, 2026

@@ -186,6 +186,7 @@ fn maybe_register_from_peer(
         proxy_profile_id: envelope.from_peer.proxy_profile_id.clone(),
         remote_workspace_id: envelope.from_peer.workspace_id.clone(),
         notes: Some("auto-registered from mesh import".into()),
+        lan_address: None,
         created_at: now.clone(),
         updated_at: now,
     };

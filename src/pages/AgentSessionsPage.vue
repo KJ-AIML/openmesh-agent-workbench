@@ -1,16 +1,30 @@
 <script setup lang="ts">
 import { ref, computed, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { useStore } from "../lib/useStore";
 import type { ScannedSession } from "../lib/adapters/types";
 import { scanConfiguredSessions } from "../lib/scanConfiguredSessions";
-import { Bot, Scan, Star, Trash2, FolderOpen, Play } from "lucide-vue-next";
+import { readForeignSessionTranscript } from "../lib/adapters/agentSessionAdapter";
+import {
+  buildResumedChatSession,
+  type ResumeMode,
+  type ResumeSourceMeta,
+} from "../lib/agentChat/resumeIntoChat";
+import {
+  loadSessionsAsync,
+  persistSessionsAsync,
+} from "../lib/agentChat/chatSessions";
+import { Bot, Scan, Star, Trash2, FolderOpen, Play, MessageSquare } from "lucide-vue-next";
 import AgentToolIcon from "../components/AgentToolIcon.vue";
 import {
   AGENT_TOOL_FILTERS,
   agentToolLabel,
 } from "../lib/agentToolIcons";
 import { openAgentCli } from "../lib/adapters/terminalAdapter";
+import type { AgentSession } from "../types";
 
+const route = useRoute();
+const router = useRouter();
 const {
   currentProject,
   projectSessions,
@@ -23,6 +37,10 @@ const {
 
 const resumeError = ref<string | null>(null);
 const resumeBusy = ref(false);
+const chatResumeOpen = ref(false);
+const chatResumeBusy = ref(false);
+const chatResumeError = ref<string | null>(null);
+const chatResumeMeta = ref<ResumeSourceMeta | null>(null);
 
 const selectedSessionId = ref<string | null>(null);
 const toolFilter = ref<string>("all");
@@ -131,18 +149,33 @@ async function handleScanSessions() {
   }
 }
 
+function applySessionQuery() {
+  const q = route.query.session;
+  const id = typeof q === "string" ? q : Array.isArray(q) ? q[0] : null;
+  if (!id) return;
+  const exists =
+    scannedSessions.value.some((s) => s.id === id) ||
+    projectSessions.value.some((s) => s.id === id);
+  if (exists) selectedSessionId.value = id;
+}
+
 // Auto-scan when the open project changes — show that workspace's agent sessions.
 watch(
   () => currentProject.value?.folderPath,
   (folderPath) => {
     if (folderPath) {
-      void handleScanSessions();
+      void handleScanSessions().then(() => applySessionQuery());
     } else {
       scannedSessions.value = [];
       lastScanTime.value = null;
     }
   },
   { immediate: true },
+);
+
+watch(
+  () => route.query.session,
+  () => applySessionQuery(),
 );
 
 function handleDelete(id: string) {
@@ -221,6 +254,76 @@ async function resumeScannedInTerminal(session: ScannedSession) {
     resumeError.value = e instanceof Error ? e.message : String(e);
   } finally {
     resumeBusy.value = false;
+  }
+}
+
+function openChatResumeForScanned(session: ScannedSession) {
+  chatResumeError.value = null;
+  chatResumeMeta.value = {
+    source: session.toolName,
+    id: session.id,
+    path: session.sessionPath,
+    title: session.title,
+    summaryPreview: session.summaryPreview,
+  };
+  chatResumeOpen.value = true;
+}
+
+function openChatResumeForSaved(session: AgentSession) {
+  chatResumeError.value = null;
+  chatResumeMeta.value = {
+    source: session.tool,
+    id: session.id,
+    path: session.sourcePath,
+    title: session.title,
+    summaryPreview: session.summary,
+  };
+  chatResumeOpen.value = true;
+}
+
+function closeChatResume() {
+  if (chatResumeBusy.value) return;
+  chatResumeOpen.value = false;
+  chatResumeMeta.value = null;
+  chatResumeError.value = null;
+}
+
+async function continueInChat(mode: ResumeMode) {
+  const meta = chatResumeMeta.value;
+  const projectPath = currentProject.value?.folderPath;
+  if (!meta || !projectPath) {
+    chatResumeError.value = "Open a project first to continue in Chat.";
+    return;
+  }
+
+  chatResumeBusy.value = true;
+  chatResumeError.value = null;
+  try {
+    let transcript = null;
+    if (meta.path) {
+      const result = await readForeignSessionTranscript(meta.source, meta.path);
+      if (result.success && result.data) {
+        transcript = result.data;
+      }
+      // Preview/summary fallback is fine when IPC or parse is unavailable.
+    }
+
+    const seeded = buildResumedChatSession(mode, meta, transcript);
+    const existing = await loadSessionsAsync(projectPath);
+    const next = [seeded, ...existing.filter((s) => s.id !== seeded.id)];
+    await persistSessionsAsync(projectPath, next);
+
+    chatResumeOpen.value = false;
+    chatResumeMeta.value = null;
+    await router.push({
+      path: "/agent-chat",
+      query: { chat: seeded.id },
+    });
+  } catch (e) {
+    chatResumeError.value =
+      e instanceof Error ? e.message : "Failed to create OpenMesh chat session";
+  } finally {
+    chatResumeBusy.value = false;
   }
 }
 
@@ -451,6 +554,15 @@ function formatBytes(bytes: number): string {
         </div>
         <div class="flex gap-2 flex-wrap pt-1">
           <button
+            type="button"
+            class="btn-primary text-[12px] inline-flex items-center gap-1.5"
+            :disabled="chatResumeBusy || !currentProject"
+            @click="openChatResumeForSaved(selectedSession)"
+          >
+            <MessageSquare class="h-3.5 w-3.5" />
+            Continue in Chat
+          </button>
+          <button
             @click="
               updateAgentSession(selectedSession.id, {
                 isImportant: !selectedSession.isImportant,
@@ -507,9 +619,18 @@ function formatBytes(bytes: number): string {
         </p>
         <div class="flex gap-2 flex-wrap pt-1">
           <button
-            v-if="resumeToolName(selectedScannedSession.toolName)"
             type="button"
             class="btn-primary text-[12px] inline-flex items-center gap-1.5"
+            :disabled="chatResumeBusy || !currentProject"
+            @click="openChatResumeForScanned(selectedScannedSession)"
+          >
+            <MessageSquare class="h-3.5 w-3.5" />
+            Continue in Chat
+          </button>
+          <button
+            v-if="resumeToolName(selectedScannedSession.toolName)"
+            type="button"
+            class="btn-secondary text-[12px] inline-flex items-center gap-1.5"
             :disabled="resumeBusy"
             @click="resumeScannedInTerminal(selectedScannedSession)"
           >
@@ -528,6 +649,69 @@ function formatBytes(bytes: number): string {
             style="color: #ef4444"
           >
             <Trash2 class="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Continue in Chat choice modal -->
+    <div
+      v-if="chatResumeOpen"
+      class="fixed inset-0 z-50 flex items-center justify-center"
+      style="background: rgba(0,0,0,0.6)"
+      @click.self="closeChatResume"
+    >
+      <div
+        class="rounded-2xl p-6 max-w-md w-full mx-4 space-y-4"
+        style="background: var(--surface-2); border: 1px solid var(--border); box-shadow: 0 20px 60px rgba(0,0,0,0.5)"
+        role="dialog"
+        aria-labelledby="chat-resume-title"
+      >
+        <div>
+          <h2 id="chat-resume-title" class="text-[15px] font-semibold" style="color: var(--foreground)">
+            Continue in OpenMesh Chat
+          </h2>
+          <p class="text-[12px] text-muted mt-2 leading-relaxed">
+            OpenMesh will create a new Agent Chat session from a copy of this scanned session.
+            The original provider session stays untouched. Continuation uses your configured Agent Engine.
+          </p>
+          <p v-if="chatResumeMeta" class="text-[11px] text-muted mt-2 font-mono break-all">
+            {{ chatResumeMeta.source }} · {{ chatResumeMeta.title || chatResumeMeta.id }}
+          </p>
+        </div>
+        <p v-if="chatResumeError" class="text-[12px]" style="color: #ef4444">
+          {{ chatResumeError }}
+        </p>
+        <div class="space-y-2">
+          <button
+            type="button"
+            class="btn-primary w-full text-[12px] justify-center"
+            :disabled="chatResumeBusy"
+            @click="continueInChat('summarize')"
+          >
+            {{ chatResumeBusy ? "Working…" : "Summarize & continue" }}
+          </button>
+          <p class="text-[11px] text-muted px-0.5">
+            Seed Chat with a concise local summary (title + first/last turns). Reliable offline.
+          </p>
+          <button
+            type="button"
+            class="btn-secondary w-full text-[12px] justify-center"
+            :disabled="chatResumeBusy"
+            @click="continueInChat('import')"
+          >
+            Import full &amp; continue
+          </button>
+          <p class="text-[11px] text-muted px-0.5">
+            Copy readable message history into a new OpenMesh chat (not the live provider thread). Large sessions are truncated safely.
+          </p>
+          <button
+            type="button"
+            class="btn-ghost w-full text-[12px] justify-center"
+            :disabled="chatResumeBusy"
+            @click="closeChatResume"
+          >
+            Cancel / Not now
           </button>
         </div>
       </div>

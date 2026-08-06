@@ -41,11 +41,31 @@ vi.mock("@/lib/adapters/terminalAdapter", () => ({
   openTerminal: vi.fn(),
 }));
 
+vi.mock("@/lib/updates/updateCheck", () => ({
+  hasKnownUpdate: () => false,
+  readPersistedUpdateCheck: () => null,
+  maybeBackgroundUpdateCheck: vi.fn().mockResolvedValue(null),
+  checkForUpdates: vi.fn(),
+  openExternalUrl: vi.fn(),
+}));
+
+vi.mock("@/lib/updates/appVersion", () => ({
+  getAppVersion: () => "0.1.26",
+}));
+
 // Tools panel pulls presets; stub so Settings smoke stays focused on Provider/Extensions.
 vi.mock("@/components/settings/SettingsToolsPanel.vue", () => ({
   default: {
     name: "SettingsToolsPanel",
     template: "<div data-testid=\"settings-tools-stub\" />",
+  },
+}));
+
+vi.mock("@/components/settings/SettingsUpdatesPanel.vue", () => ({
+  default: {
+    name: "SettingsUpdatesPanel",
+    template:
+      '<div data-testid="settings-updates-stub">Check for updates</div>',
   },
 }));
 
@@ -75,7 +95,17 @@ const mockStore = {
       grokEnabled: true,
     },
     localPaths: {},
-    appearance: { theme: "dark", fontSize: "medium" },
+    appearance: {
+      theme: "dark",
+      fontSize: "medium",
+      density: "comfortable",
+      topNavbarTabs: {
+        chat: true,
+        work: true,
+        docs: true,
+        sprint: true,
+      },
+    },
     extensions: { skills: {}, hooks: {}, plugins: {} },
   } as any),
   saveSettings: vi.fn().mockResolvedValue(undefined),
@@ -154,5 +184,88 @@ describe("SettingsPage", () => {
     expect(wrapper.text()).toContain("Hooks");
     // Web runtime: empty inventory messaging (no live Tauri IPC).
     expect(wrapper.text()).toMatch(/No skills yet|Built-ins should appear/i);
+  });
+
+  it("About section shows version and check-for-updates entry", async () => {
+    mockQuery.value = { section: "about" };
+    const wrapper = mount(SettingsPage);
+    await flushPromises();
+    await nextTick();
+
+    const appGroup = wrapper
+      .findAll('[role="tab"]')
+      .find((b) => b.text().trim() === "App");
+    if (appGroup) {
+      await appGroup.trigger("click");
+      await nextTick();
+    }
+    const about = wrapper
+      .findAll('[role="tab"]')
+      .find((b) => b.text().includes("About"));
+    if (about) {
+      await about.trigger("click");
+      await flushPromises();
+      await nextTick();
+    }
+
+    expect(wrapper.text()).toMatch(/v0\.1\.26/);
+    expect(wrapper.text()).toContain("Check for updates");
+  });
+
+  it("Appearance section shows theme controls and live preview", async () => {
+    mockQuery.value = { section: "appearance" };
+    const wrapper = mount(SettingsPage);
+    await flushPromises();
+    await nextTick();
+
+    const appGroup = wrapper
+      .findAll('[role="tab"]')
+      .find((b) => b.text().trim() === "App");
+    if (appGroup) {
+      await appGroup.trigger("click");
+      await nextTick();
+    }
+    const appearance = wrapper
+      .findAll('[role="tab"]')
+      .find((b) => b.text().includes("Appearance"));
+    if (appearance) {
+      await appearance.trigger("click");
+      await flushPromises();
+      await nextTick();
+    }
+
+    expect(wrapper.text()).toContain("Appearance");
+    expect(wrapper.text()).toMatch(/Theme/);
+    expect(wrapper.text()).toContain("Dark");
+    expect(wrapper.text()).toContain("Light");
+    expect(wrapper.text()).toContain("System");
+    expect(wrapper.text()).toContain("Compact");
+    expect(wrapper.text()).toContain("Top navbar tabs");
+    expect(wrapper.find('[data-testid="appearance-preview"]').exists()).toBe(
+      true,
+    );
+    expect(
+      wrapper.find('[data-testid="appearance-top-navbar-tabs"]').exists(),
+    ).toBe(true);
+
+    const light = wrapper
+      .findAll('[role="radio"]')
+      .find((b) => b.text().trim() === "Light");
+    expect(light).toBeTruthy();
+    await light!.trigger("click");
+    await flushPromises();
+    expect(mockStore.saveSettings).toHaveBeenCalled();
+    const payload = mockStore.saveSettings.mock.calls.at(-1)?.[0];
+    expect(payload?.appearance?.theme).toBe("light");
+
+    const sprintToggle = wrapper
+      .find('[data-testid="appearance-top-navbar-tabs"]')
+      .findAll("button")
+      .find((b) => b.text().trim() === "Sprint");
+    expect(sprintToggle).toBeTruthy();
+    await sprintToggle!.trigger("click");
+    await flushPromises();
+    const tabPayload = mockStore.saveSettings.mock.calls.at(-1)?.[0];
+    expect(tabPayload?.appearance?.topNavbarTabs?.sprint).toBe(false);
   });
 });

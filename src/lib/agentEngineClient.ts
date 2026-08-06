@@ -108,6 +108,11 @@ export type StoredChatSession = {
   }>;
   createdAt: number;
   updatedAt: number;
+  importedFrom?: {
+    source: string;
+    id: string;
+    path?: string;
+  };
 };
 
 export async function loadDurableChats(

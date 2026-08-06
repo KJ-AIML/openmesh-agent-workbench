@@ -40,6 +40,10 @@ import {
   type SnapshotContext,
 } from "./lib/snapshot";
 import { isMacOS, resolveIsMacOS } from "./lib/adapters/environment";
+import {
+  applyAppearance,
+  bindSystemThemeListener,
+} from "./lib/appearance";
 
 const route = useRoute();
 const router = useRouter();
@@ -60,6 +64,16 @@ const {
   createSprint,
   currentProjectPath,
 } = useStore();
+
+watch(
+  () => settings.value.appearance,
+  (appearance) => {
+    applyAppearance(appearance);
+  },
+  { deep: true, immediate: true },
+);
+
+let unbindSystemTheme: (() => void) | null = null;
 const { pending } = usePendingActions();
 /** Bump when AppAction audit changes so the trail can hide when empty. */
 const auditTick = ref(0);
@@ -106,6 +120,9 @@ onMounted(async () => {
   macOS.value = await resolveIsMacOS();
   document.documentElement.dataset.platform = macOS.value ? "macos" : "other";
   document.documentElement.classList.toggle("is-macos", macOS.value);
+  unbindSystemTheme = bindSystemThemeListener(
+    () => settings.value.appearance,
+  );
   window.setTimeout(() => {
     splashMinimumElapsed.value = true;
   }, 700);
@@ -227,6 +244,8 @@ onUnmounted(() => {
   document.removeEventListener("keydown", handleGlobalKeydown);
   unsubAudit?.();
   unsubAudit = null;
+  unbindSystemTheme?.();
+  unbindSystemTheme = null;
 });
 
 // ─── Command Context ──────────────────────────────────────────────────
@@ -758,7 +777,7 @@ defineExpose({ openPalette });
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 1.25rem;
+  padding: var(--ui-pad-y);
   background: var(--background);
 }
 

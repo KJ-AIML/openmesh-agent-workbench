@@ -19,7 +19,10 @@ pub mod types;
 pub mod workspace_tools;
 
 pub use engine_loop::{run_agent_turn, run_agent_turn_cancellable};
-pub use chat_store::{load_chat_sessions, save_chat_sessions, StoredChatMessage, StoredChatSession};
+pub use chat_store::{
+    load_chat_sessions, save_chat_sessions, ChatImportProvenance, StoredChatMessage,
+    StoredChatSession,
+};
 pub use extensions::{
     build_skills_prompt_section, enrich_system_prompt, install_from_path, load_inventory,
     local_catalog, parse_skill_markdown, CatalogEntry, ExtensionSource, ExtensionsInventory,

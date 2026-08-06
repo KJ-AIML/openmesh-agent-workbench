@@ -1,3 +1,5 @@
+> **Historical release notes (v0.1.0).** Current product truth: [`../README.md`](../README.md) · [`README.md`](./README.md) · [`LIMITATIONS.md`](./LIMITATIONS.md). Claims such as “no embedded terminal” and “Windows-first only” are outdated.
+
 # OpenMesh v0.1.0 — Agent Workbench Preview
 
 First Windows preview release of OpenMesh, a local-first desktop agent workbench.

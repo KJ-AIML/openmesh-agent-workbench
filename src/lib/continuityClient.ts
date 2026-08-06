@@ -65,6 +65,8 @@ export interface MeshPeerRecord {
   proxyProfileId?: string;
   remoteWorkspaceId?: string;
   notes?: string;
+  /** Optional LAN host:port for presence / chat. */
+  lanAddress?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -283,12 +285,19 @@ export interface TeamWorkspaceView {
   limitations: string[];
 }
 
+export interface TeamTrustAllowEntry {
+  memberId?: string;
+  meshPeerId?: string;
+  note?: string;
+  addedAt?: string;
+}
+
 export interface TeamTrustPolicyView {
   protocolVersion: string;
   teamId: string;
   remoteQueryEnabled: boolean;
   queryAllowlistMode: string;
-  queryAllowlist: unknown[];
+  queryAllowlist: TeamTrustAllowEntry[];
   secretTopicsFailClosed: boolean;
   allowSecretExport: boolean;
   syncRequireSelective: boolean;
@@ -521,5 +530,207 @@ export async function lanAskPeer(
       question,
       tier: opts?.tier,
     },
+  });
+}
+
+// ── Presence / Mesh+Team writes / LAN chat ────────────────────────────
+
+export type LanPresenceState = "live" | "stale" | "unreachable" | "unknown";
+
+export interface LanPeerPresence {
+  address: string;
+  state: LanPresenceState;
+  probedAt: string;
+  latencyMs?: number;
+  health?: {
+    ok: boolean;
+    protocol: string;
+    peerId: string;
+    ownerLabel: string;
+    projectId: string;
+    httpPort: number;
+  };
+  error?: string;
+  lastSeenAt?: string;
+}
+
+export async function lanProbePresence(
+  targets: Array<{ address: string; lastSeenAt?: string }>,
+): Promise<LanPeerPresence[]> {
+  return invoke<LanPeerPresence[]>("lan_probe_presence", {
+    request: {
+      targets: targets.map((t) => ({
+        address: t.address,
+        lastSeenAt: t.lastSeenAt,
+      })),
+    },
+  });
+}
+
+export async function lanProbeAddress(address: string): Promise<LanPeerPresence> {
+  return invoke<LanPeerPresence>("lan_probe_address", { address });
+}
+
+export async function addMeshPeer(
+  projectPath: string,
+  opts: {
+    label: string;
+    peerId?: string;
+    profileId?: string;
+    workspaceId?: string;
+    notes?: string;
+    lanAddress?: string;
+  },
+): Promise<MeshPeerRecord> {
+  return invoke<MeshPeerRecord>("mesh_add_peer", {
+    projectPath,
+    request: {
+      label: opts.label,
+      peerId: opts.peerId,
+      profileId: opts.profileId,
+      workspaceId: opts.workspaceId,
+      notes: opts.notes,
+      lanAddress: opts.lanAddress,
+    },
+  });
+}
+
+export async function initTeamWorkspace(
+  projectPath: string,
+  opts: { name: string; ownerLabel?: string; teamId?: string },
+): Promise<TeamWorkspaceView> {
+  return invoke<TeamWorkspaceView>("team_init", {
+    projectPath,
+    request: {
+      name: opts.name,
+      ownerLabel: opts.ownerLabel,
+      teamId: opts.teamId,
+    },
+  });
+}
+
+export async function addTeamMember(
+  projectPath: string,
+  opts: {
+    label: string;
+    memberId?: string;
+    role?: string;
+    meshPeerId?: string;
+    proxyProfileId?: string;
+    remoteWorkspaceId?: string;
+  },
+): Promise<TeamWorkspaceView> {
+  return invoke<TeamWorkspaceView>("team_add_member", {
+    projectPath,
+    request: {
+      label: opts.label,
+      memberId: opts.memberId,
+      role: opts.role,
+      meshPeerId: opts.meshPeerId,
+      proxyProfileId: opts.proxyProfileId,
+      remoteWorkspaceId: opts.remoteWorkspaceId,
+    },
+  });
+}
+
+export async function initTeamTrustPolicy(
+  projectPath: string,
+): Promise<TeamTrustPolicyView> {
+  return invoke<TeamTrustPolicyView>("team_trust_init", { projectPath });
+}
+
+export async function setTeamTrustRemoteQuery(
+  projectPath: string,
+  enabled: boolean,
+): Promise<TeamTrustPolicyView> {
+  return invoke<TeamTrustPolicyView>("team_trust_set_remote_query", {
+    projectPath,
+    request: { enabled },
+  });
+}
+
+export async function setTeamTrustQueryMode(
+  projectPath: string,
+  mode: "allow-all" | "allowlist-only" | "deny-all" | string,
+): Promise<TeamTrustPolicyView> {
+  return invoke<TeamTrustPolicyView>("team_trust_set_query_mode", {
+    projectPath,
+    request: { mode },
+  });
+}
+
+export async function addTeamTrustAllowlist(
+  projectPath: string,
+  opts: { memberId?: string; meshPeerId?: string; note?: string },
+): Promise<TeamTrustPolicyView> {
+  return invoke<TeamTrustPolicyView>("team_trust_allowlist_add", {
+    projectPath,
+    request: {
+      memberId: opts.memberId,
+      meshPeerId: opts.meshPeerId,
+      note: opts.note,
+    },
+  });
+}
+
+export async function listTeamTrustAudit(
+  projectPath: string,
+  limit?: number,
+): Promise<
+  Array<{
+    eventId: string;
+    teamId: string;
+    actorMemberId: string;
+    action: string;
+    detail: string;
+    at: string;
+  }>
+> {
+  return invoke("team_trust_audit_list", {
+    projectPath,
+    limit: limit ?? 30,
+  });
+}
+
+export interface LanChatMessageView {
+  message: {
+    protocol: string;
+    messageId: string;
+    fromPeerId: string;
+    fromLabel: string;
+    text: string;
+    sentAt: string;
+    threadId?: string;
+  };
+  direction: "inbound" | "outbound" | string;
+  peerKey: string;
+  storedAt: string;
+}
+
+export async function lanChatSend(
+  projectPath: string,
+  to: string,
+  text: string,
+  opts?: { fromLabel?: string },
+): Promise<LanChatMessageView> {
+  return invoke<LanChatMessageView>("lan_chat_send", {
+    projectPath,
+    request: {
+      to,
+      text,
+      fromLabel: opts?.fromLabel,
+    },
+  });
+}
+
+export async function lanChatList(
+  projectPath: string,
+  peerKey?: string,
+  limit?: number,
+): Promise<LanChatMessageView[]> {
+  return invoke<LanChatMessageView[]>("lan_chat_list", {
+    projectPath,
+    peerKey: peerKey ?? null,
+    limit: limit ?? null,
   });
 }

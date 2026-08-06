@@ -17,6 +17,10 @@ type ScanWorkspaceResult = {
 	error?: string;
 };
 
+export type ScanConfiguredSessionsResult =
+	| { ok: true; sessions: ScannedSession[] }
+	| { ok: false; sessions: []; error: string };
+
 /** Optional path overrides only — empty means auto-detect on this OS/device. */
 export function sessionDirOverrides(
 	sessionDirs: Settings["sessionDirs"] | undefined,
@@ -36,6 +40,58 @@ export function sessionDirOverrides(
 	};
 }
 
+/** Most-recent-first preview for Home / compact lists. */
+export function pickRecentAgentSessions(
+	sessions: ScannedSession[],
+	limit = 4,
+): ScannedSession[] {
+	return [...sessions]
+		.sort(
+			(a, b) =>
+				new Date(b.lastActiveAt).getTime() - new Date(a.lastActiveAt).getTime(),
+		)
+		.slice(0, Math.max(0, limit));
+}
+
+/**
+ * Auto-detect every agent provider root that exists on this machine/OS,
+ * then return sessions for the open project folder (with ok/error).
+ *
+ * Settings paths are optional overrides only — no per-provider enable flags
+ * required. Missing providers are skipped automatically.
+ */
+export async function scanConfiguredSessionsResult(
+	sessionDirs: Settings["sessionDirs"] | undefined,
+	limit = 100,
+	workspaceCwd?: string | null,
+): Promise<ScanConfiguredSessionsResult> {
+	if (!workspaceCwd?.trim()) {
+		return { ok: true, sessions: [] };
+	}
+
+	try {
+		const result = await invoke<ScanWorkspaceResult>(
+			"scan_workspace_agent_sessions",
+			{
+				workspaceCwd: workspaceCwd.trim(),
+				limit,
+				overrides: sessionDirOverrides(sessionDirs),
+			},
+		);
+		if (!result.success) {
+			const error = result.error?.trim() || "Session scan failed";
+			console.warn("[sessions] workspace scan:", error);
+			return { ok: false, sessions: [], error };
+		}
+		return { ok: true, sessions: result.sessions ?? [] };
+	} catch (error) {
+		const message =
+			error instanceof Error ? error.message : "Session scan failed";
+		console.error("[sessions] workspace scan failed:", error);
+		return { ok: false, sessions: [], error: message };
+	}
+}
+
 /**
  * Auto-detect every agent provider root that exists on this machine/OS,
  * then return sessions for the open project folder.
@@ -48,26 +104,12 @@ export async function scanConfiguredSessions(
 	limit = 100,
 	workspaceCwd?: string | null,
 ): Promise<ScannedSession[]> {
-	if (!workspaceCwd?.trim()) return [];
-
-	try {
-		const result = await invoke<ScanWorkspaceResult>(
-			"scan_workspace_agent_sessions",
-			{
-				workspaceCwd: workspaceCwd.trim(),
-				limit,
-				overrides: sessionDirOverrides(sessionDirs),
-			},
-		);
-		if (!result.success) {
-			console.warn("[sessions] workspace scan:", result.error);
-			return [];
-		}
-		return result.sessions ?? [];
-	} catch (error) {
-		console.error("[sessions] workspace scan failed:", error);
-		return [];
-	}
+	const result = await scanConfiguredSessionsResult(
+		sessionDirs,
+		limit,
+		workspaceCwd,
+	);
+	return result.sessions;
 }
 
 export function hasConfiguredSessionDir(

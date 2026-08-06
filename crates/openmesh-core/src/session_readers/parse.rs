@@ -26,7 +26,7 @@ pub fn one_line(text: &str, limit: usize) -> String {
     }
 }
 
-fn strip_wrappers(text: &str) -> String {
+pub(crate) fn strip_wrappers(text: &str) -> String {
     // Cursor wraps user text in <user_query>...</user_query>
     if let Some(start) = text.find("<user_query>") {
         let after = &text[start + "<user_query>".len()..];
@@ -34,13 +34,16 @@ fn strip_wrappers(text: &str) -> String {
             return after[..end].trim().to_string();
         }
     }
-    // Drop common injected meta wrappers for title selection
+    // Drop common injected meta wrappers for title selection / import.
+    // Grok uses hyphenated <system-reminder>; Cursor often uses underscores.
     let trimmed = text.trim_start();
     for prefix in [
         "<recommended_plugins>",
         "<environment_context",
         "<user_instructions",
         "<system_reminder",
+        "<system-reminder",
+        "<user_info>",
         "<timestamp>",
         "<manually_attached_skills",
     ] {
@@ -51,7 +54,7 @@ fn strip_wrappers(text: &str) -> String {
     text.trim().to_string()
 }
 
-fn content_text(content: &Value) -> String {
+pub(crate) fn content_text(content: &Value) -> String {
     match content {
         Value::String(s) => s.clone(),
         Value::Array(items) => {
@@ -267,7 +270,8 @@ pub fn parse_cursor_transcript(path: &Path) -> SessionHints {
     hints
 }
 
-/// Best-effort display hint only — Cursor irreversibly maps `_` and `/` to `-`.
+/// Best-effort display hint only — Cursor drops `_` and maps `/` to `-`, so
+/// round-trips are lossy (hyphens in original path segments become `/`).
 fn decode_cursor_project_slug(slug: &str) -> String {
     if slug.starts_with("Users-") || slug.starts_with("home-") {
         format!("/{}", slug.replace('-', "/"))
@@ -333,6 +337,7 @@ pub fn parse_gemini_chat(path: &Path) -> SessionHints {
 /// Parse Grok session summary.json (+ optional chat_history.jsonl sibling).
 pub fn parse_grok_session(summary_path: &Path) -> SessionHints {
     let mut hints = SessionHints::default();
+    let mut agent_name: Option<String> = None;
     if let Ok(raw) = std::fs::read_to_string(summary_path) {
         if let Ok(value) = serde_json::from_str::<Value>(&raw) {
             let info = value.get("info").cloned().unwrap_or(Value::Null);
@@ -351,10 +356,8 @@ pub fn parse_grok_session(summary_path: &Path) -> SessionHints {
             if let Some(ts) = value.get("created_at").and_then(|v| v.as_str()) {
                 hints.created_at = Some(ts.to_string());
             }
-            if hints.title.is_none() {
-                if let Some(agent) = value.get("agent_name").and_then(|v| v.as_str()) {
-                    hints.title = Some(one_line(agent, 120));
-                }
+            if let Some(agent) = value.get("agent_name").and_then(|v| v.as_str()) {
+                agent_name = Some(one_line(agent, 120));
             }
         }
     }
@@ -374,12 +377,19 @@ pub fn parse_grok_session(summary_path: &Path) -> SessionHints {
                         continue;
                     };
                     let ty = record.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                    // Skip synthetic context rows Grok stores as type=user.
+                    if record.get("synthetic_reason").is_some() {
+                        continue;
+                    }
                     if ty == "user" || ty == "human" {
-                        let text = record
-                            .get("content")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("");
-                        push_user_title(&mut hints, text);
+                        // Grok user turns use content arrays, not bare strings.
+                        let text = content_text(
+                            record
+                                .get("content")
+                                .or_else(|| record.get("text"))
+                                .unwrap_or(&Value::Null),
+                        );
+                        push_user_title(&mut hints, &text);
                         if hints.title.is_some() {
                             break;
                         }
@@ -387,6 +397,10 @@ pub fn parse_grok_session(summary_path: &Path) -> SessionHints {
                 }
             }
         }
+    }
+    // Prefer summary / first user message; fall back to agent_name.
+    if hints.title.is_none() {
+        hints.title = agent_name;
     }
     hints
 }
@@ -493,5 +507,32 @@ mod tests {
             .as_deref()
             .unwrap_or("")
             .contains("Users/me/demo"));
+    }
+
+    #[test]
+    fn parse_grok_title_from_array_user_query() {
+        let dir = tempdir().unwrap();
+        let sess = dir.path().join("g1");
+        std::fs::create_dir_all(&sess).unwrap();
+        std::fs::write(
+            sess.join("summary.json"),
+            r#"{"info":{"id":"g1","cwd":"/tmp/demo"},"session_summary":"","agent_name":"grok-build"}"#,
+        )
+        .unwrap();
+        let mut f = std::fs::File::create(sess.join("chat_history.jsonl")).unwrap();
+        writeln!(
+            f,
+            r#"{{"type":"user","content":[{{"type":"text","text":"<user_info>\nx\n</user_info>"}}]}}"#,
+        )
+        .unwrap();
+        writeln!(
+            f,
+            r#"{{"type":"user","content":[{{"type":"text","text":"<user_query>\nWire resume roles\n</user_query>"}}]}}"#,
+        )
+        .unwrap();
+        let hints = parse_grok_session(&sess.join("summary.json"));
+        assert_eq!(hints.title.as_deref(), Some("Wire resume roles"));
+        assert_eq!(hints.project_hint.as_deref(), Some("/tmp/demo"));
+        assert_eq!(hints.session_id.as_deref(), Some("g1"));
     }
 }
