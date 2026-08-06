@@ -10,6 +10,23 @@ use super::types::{
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
+/// Mid-turn progress for UI chips (Working / Terminal session runs).
+#[derive(Debug, Clone)]
+pub enum TurnProgressEvent {
+    ToolStart {
+        tool_name: String,
+        tool_call_id: String,
+    },
+    ToolDone {
+        tool_name: String,
+        tool_call_id: String,
+        ok: bool,
+        summary: String,
+    },
+}
+
+pub type TurnProgressCallback = Arc<dyn Fn(TurnProgressEvent) + Send + Sync>;
+
 pub fn run_agent_turn(
     def: &AgentDefinition,
     session: &mut AgentSession,
@@ -27,6 +44,18 @@ pub fn run_agent_turn_cancellable(
     provider: &dyn ChatProvider,
     executor: &dyn ToolExecutor,
     cancel: Option<Arc<AtomicBool>>,
+) -> Result<EngineTurnResult, AgentEngineError> {
+    run_agent_turn_with_progress(def, session, user_text, provider, executor, cancel, None)
+}
+
+pub fn run_agent_turn_with_progress(
+    def: &AgentDefinition,
+    session: &mut AgentSession,
+    user_text: &str,
+    provider: &dyn ChatProvider,
+    executor: &dyn ToolExecutor,
+    cancel: Option<Arc<AtomicBool>>,
+    on_progress: Option<TurnProgressCallback>,
 ) -> Result<EngineTurnResult, AgentEngineError> {
     let tools = filter_tools(&def.tool_allowlist);
     ensure_system_prompt(session, &def.system_prompt);
@@ -134,6 +163,12 @@ pub fn run_agent_turn_cancellable(
                     error: Some("cancelled".into()),
                 });
             }
+            if let Some(cb) = on_progress.as_ref() {
+                cb(TurnProgressEvent::ToolStart {
+                    tool_name: call.name.clone(),
+                    tool_call_id: call.id.clone(),
+                });
+            }
             let allowed = tools.iter().any(|t| t.name == call.name);
             let (ok, summary) = if !allowed {
                 (false, format!("tool not allowed: {}", call.name))
@@ -150,6 +185,14 @@ pub fn run_agent_turn_cancellable(
                 ok,
                 summary: summary.clone(),
             });
+            if let Some(cb) = on_progress.as_ref() {
+                cb(TurnProgressEvent::ToolDone {
+                    tool_name: call.name.clone(),
+                    tool_call_id: call.id.clone(),
+                    ok,
+                    summary: summary.clone(),
+                });
+            }
             session.messages.push(ChatMessage {
                 role: ChatRole::Tool,
                 content: summary,
@@ -268,6 +311,58 @@ mod tests {
         assert!(result.tool_steps[0].ok);
         assert_eq!(result.tool_steps[0].tool_name, "project_info");
         assert_eq!(result.iterations, 2);
+    }
+
+    #[test]
+    fn progress_callback_fires_for_tools() {
+        let provider = ScriptedProvider::new(vec![
+            AssistantTurn {
+                content: String::new(),
+                tool_calls: vec![ToolCallRequest {
+                    id: "call_1".into(),
+                    name: "project_info".into(),
+                    arguments: "{}".into(),
+                }],
+            },
+            AssistantTurn {
+                content: "ok".into(),
+                tool_calls: vec![],
+            },
+        ]);
+        let mut responses = BTreeMap::new();
+        responses.insert("project_info".into(), "{}".into());
+        let executor = StubToolExecutor { responses };
+        let def = AgentDefinition::default_workspace_agent("m");
+        let mut session = AgentSession::default();
+        let events: Arc<std::sync::Mutex<Vec<String>>> =
+            Arc::new(std::sync::Mutex::new(Vec::new()));
+        let events_cb = events.clone();
+        let on_progress: TurnProgressCallback = Arc::new(move |ev| {
+            let mut lock = events_cb.lock().unwrap();
+            match ev {
+                TurnProgressEvent::ToolStart { tool_name, .. } => {
+                    lock.push(format!("start:{tool_name}"));
+                }
+                TurnProgressEvent::ToolDone {
+                    tool_name, ok, ..
+                } => {
+                    lock.push(format!("done:{tool_name}:{ok}"));
+                }
+            }
+        });
+        let result = run_agent_turn_with_progress(
+            &def,
+            &mut session,
+            "x",
+            &provider,
+            &executor,
+            None,
+            Some(on_progress),
+        )
+        .unwrap();
+        assert_eq!(result.tool_steps.len(), 1);
+        let seen = events.lock().unwrap().clone();
+        assert_eq!(seen, vec!["start:project_info", "done:project_info:true"]);
     }
 
     #[test]

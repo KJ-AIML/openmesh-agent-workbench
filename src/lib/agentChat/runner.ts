@@ -20,11 +20,23 @@ export type ChatTurnResult = {
   toolCalls: ChatToolCall[];
 };
 
-/** Lightweight mid-turn status for the in-thread thinking bubble. */
+/** Lightweight mid-turn status for the in-thread thinking bubble + session runs. */
 export type ChatTurnProgress =
   | { kind: "phase"; label: string }
-  | { kind: "tool_start"; title: string }
-  | { kind: "tool_done"; title: string; ok: boolean };
+  | {
+      kind: "tool_start";
+      title: string;
+      toolId?: string;
+      callId?: string;
+    }
+  | {
+      kind: "tool_done";
+      title: string;
+      ok: boolean;
+      toolId?: string;
+      callId?: string;
+      summary?: string;
+    };
 
 export type ChatTurnOptions = {
   settings?: Settings | null;
@@ -91,7 +103,11 @@ export async function runAgentChatTurn(
   if (tools.length > 0) {
     onProgress?.({ kind: "phase", label: "Working with tools…" });
     for (const tool of tools) {
-      onProgress?.({ kind: "tool_start", title: tool.title });
+      onProgress?.({
+        kind: "tool_start",
+        title: tool.title,
+        toolId: tool.id,
+      });
       try {
         const result: AgentToolResult = await tool.run(projectPath, trimmed);
         toolCalls.push({
@@ -100,15 +116,28 @@ export async function runAgentChatTurn(
           ok: result.ok,
           summary: result.summary,
         });
-        onProgress?.({ kind: "tool_done", title: tool.title, ok: result.ok });
+        onProgress?.({
+          kind: "tool_done",
+          title: tool.title,
+          ok: result.ok,
+          toolId: tool.id,
+          summary: result.summary,
+        });
       } catch (e) {
+        const summary = e instanceof Error ? e.message : String(e);
         toolCalls.push({
           toolId: tool.id,
           title: tool.title,
           ok: false,
-          summary: e instanceof Error ? e.message : String(e),
+          summary,
         });
-        onProgress?.({ kind: "tool_done", title: tool.title, ok: false });
+        onProgress?.({
+          kind: "tool_done",
+          title: tool.title,
+          ok: false,
+          toolId: tool.id,
+          summary,
+        });
       }
     }
 
@@ -122,7 +151,9 @@ export async function runAgentChatTurn(
     };
   }
 
-  // Freeform / LLM tool loop via OpenMesh Agent Engine
+  // Freeform / LLM tool loop via OpenMesh Agent Engine.
+  // Mid-turn tool progress is emitted as Tauri `agent-turn-progress` and
+  // forwarded by the Chat page (listenAgentTurnProgress) into onProgress.
   onProgress?.({ kind: "phase", label: "Thinking…" });
   try {
     const result = await runAgentEngineTurn(projectPath, trimmed, {

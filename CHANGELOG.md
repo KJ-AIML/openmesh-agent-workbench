@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Dogfood checklist for desktop **v0.1.28** (`docs/DOGFOOD_v0.1.28.md`) + post-tag smoke doc (`docs/RELEASE_SMOKE.md`)
+- CI/local guard `npm run check:release-workflow` so empty `APPLE_*` / `WINDOWS_*` secret mappings cannot regress in `release.yml`
+
+### Changed
+- Agent Chat: mid-turn Agent Engine tool progress streams into Composer **Working** + Terminal **session runs** (elapsed, expandable output) for shell-like / verify / long tools — not only `/verify`/`/delegate` finals
+
 ## [0.1.28] - 2026-08-06
 
 ### Fixed

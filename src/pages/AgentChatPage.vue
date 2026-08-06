@@ -45,8 +45,10 @@ import {
   cancelAgentEngineTurn,
   extractPatchIds,
   getAgentSecretStatus,
+  listenAgentTurnProgress,
   type AgentToolStep,
 } from "../lib/agentEngineClient";
+import type { UnlistenFn } from "@tauri-apps/api/event";
 import {
   applyVoiceUiActions,
   parseUiActionsFromToolSteps,
@@ -79,11 +81,14 @@ import ChatThinkingBubble from "../components/chat/ChatThinkingBubble.vue";
 import PatchApprovalCard from "../components/chat/PatchApprovalCard.vue";
 import VerifyLogPanel from "../components/chat/VerifyLogPanel.vue";
 import {
+  appendSessionRunOutput,
   completeRunningOfKind,
   completeSessionRun,
+  countWorkingChip,
   createSessionRun,
   listTerminalRuns,
   looksLikeTerminalTool,
+  touchWorkingRunCommand,
   truncateCommand,
   upsertSessionRun,
   type SessionRun,
@@ -203,10 +208,15 @@ const activeSessionRuns = computed(() => {
 });
 
 const statusWorkingCount = computed(() =>
-  activeSessionRuns.value.filter(
-    (r) => r.kind === "working" && r.status === "running",
-  ).length,
+  countWorkingChip(activeSessionRuns.value),
 );
+
+const statusWorkingLabel = computed(() => {
+  const run = activeSessionRuns.value.find(
+    (r) => r.kind === "working" && r.status === "running",
+  );
+  return run?.command || null;
+});
 
 const statusTerminalRuns = computed(() =>
   listTerminalRuns(activeSessionRuns.value),
@@ -297,14 +307,23 @@ function startTerminalRun(opts: {
 }
 
 /** Stable id so progress events + final toolCalls share one Terminal row. */
-function terminalRunIdFor(turnId: string, toolIdOrTitle: string): string {
+function terminalRunIdFor(
+  turnId: string,
+  toolIdOrTitle: string,
+  callId?: string,
+): string {
   const s = toolIdOrTitle.toLowerCase();
   if (s.includes("verify") && verifyRunKey.value) {
     return `term:${verifyRunKey.value}`;
   }
   if (s.includes("verify")) return `term:${turnId}:verify`;
   if (s.includes("delegate")) return `term:${turnId}:delegate`;
+  if (callId) return `term:${turnId}:${callId}`;
   return `term:${turnId}:${s.replace(/\s+/g, "-")}`;
+}
+
+function updateWorkingLabel(label: string) {
+  mutateActiveRuns((runs) => touchWorkingRunCommand(runs, label));
 }
 
 function finishTerminalRun(
@@ -696,6 +715,7 @@ function startLlmStatusRotate() {
 function applyTurnProgress(event: ChatTurnProgress) {
   if (event.kind === "phase") {
     busyLabel.value = event.label;
+    updateWorkingLabel(event.label);
     if (event.label === "Thinking…") {
       // Keep rotating ambient lines for long LLM waits.
       if (!statusRotateTimer) startLlmStatusRotate();
@@ -705,20 +725,18 @@ function applyTurnProgress(event: ChatTurnProgress) {
     }
     return;
   }
+  const toolKey = event.toolId || event.title;
   if (event.kind === "tool_start") {
     stopStatusRotate();
     busyLabel.value = "Working with tools…";
     busyDetail.value = event.title;
-    if (looksLikeTerminalTool(event.title) && activeTurnId.value) {
+    updateWorkingLabel(event.title);
+    if (looksLikeTerminalTool(toolKey) && activeTurnId.value) {
       startTerminalRun({
-        id: terminalRunIdFor(activeTurnId.value, event.title),
+        id: terminalRunIdFor(activeTurnId.value, toolKey, event.callId),
         title: event.title,
         command: event.title,
-        toolId: event.title.toLowerCase().includes("delegate")
-          ? "delegate"
-          : event.title.toLowerCase().includes("verify")
-            ? "verify"
-            : event.title,
+        toolId: toolKey,
       });
     }
     return;
@@ -726,10 +744,14 @@ function applyTurnProgress(event: ChatTurnProgress) {
   // tool_done — keep last tool visible until next event / reply lands
   busyLabel.value = event.ok ? "Finishing…" : "Tool failed…";
   busyDetail.value = event.title;
-  if (looksLikeTerminalTool(event.title) && activeTurnId.value) {
+  updateWorkingLabel(
+    event.ok ? `${event.title} ✓` : `${event.title} ✗`,
+  );
+  if (looksLikeTerminalTool(toolKey) && activeTurnId.value) {
     finishTerminalRun(
-      terminalRunIdFor(activeTurnId.value, event.title),
+      terminalRunIdFor(activeTurnId.value, toolKey, event.callId),
       event.ok ? "done" : "failed",
+      event.summary ? truncateCommand(event.summary, 2400) : undefined,
     );
   }
 }
@@ -868,7 +890,52 @@ async function send(text: string) {
 
   if (!usesLocalTools) startLlmStatusRotate();
 
+  let unlistenProgress: UnlistenFn | null = null;
+  let unlistenVerifyLog: UnlistenFn | null = null;
   try {
+    // Mid-turn Agent Engine tool events → Working / Terminal chips.
+    try {
+      unlistenProgress = await listenAgentTurnProgress((payload) => {
+        if (payload.turnId !== turnId) return;
+        if (payload.kind === "tool_start") {
+          applyTurnProgress({
+            kind: "tool_start",
+            title: payload.toolName,
+            toolId: payload.toolName,
+            callId: payload.toolCallId,
+          });
+          return;
+        }
+        applyTurnProgress({
+          kind: "tool_done",
+          title: payload.toolName,
+          toolId: payload.toolName,
+          callId: payload.toolCallId,
+          ok: !!payload.ok,
+          summary: payload.summary,
+        });
+      });
+    } catch {
+      /* web / non-Tauri */
+    }
+    if (verifyRunKey.value) {
+      try {
+        const { listen } = await import("@tauri-apps/api/event");
+        const key = verifyRunKey.value;
+        unlistenVerifyLog = await listen<{ runKey: string; line: string }>(
+          "agent-run-log",
+          (ev) => {
+            if (ev.payload?.runKey !== key) return;
+            mutateActiveRuns((runs) =>
+              appendSessionRunOutput(runs, `term:${key}`, ev.payload.line),
+            );
+          },
+        );
+      } catch {
+        /* ignore */
+      }
+    }
+
     // Cheap history slice — maps a few strings only; old bubbles stay v-memo'd.
     const history = session.messages
       .filter((m) => m.role === "user" || m.role === "assistant")
@@ -925,6 +992,8 @@ async function send(text: string) {
       finishTerminalRun(`term:${verifyRunKey.value}`, "failed", error.value);
     }
   } finally {
+    void unlistenProgress?.();
+    void unlistenVerifyLog?.();
     stopStatusRotate();
     busy.value = false;
     busyDetail.value = null;
@@ -1340,6 +1409,7 @@ function toggleToolsExpanded(id: string) {
               <template #status>
                 <ComposerStatusBar
                   :working-count="statusWorkingCount"
+                  :working-label="statusWorkingLabel"
                   :terminal-runs="statusTerminalRuns"
                   :shell-tab-count="shellTabs.length"
                   :terminal-panel-open="terminalPanelOpen"

@@ -40,16 +40,17 @@ describe("ComposerStatusBar", () => {
     });
     const wrapper = mount(ComposerStatusBar, {
       props: {
-        workingCount: 1,
+        workingCount: 2,
+        workingLabel: "grep src",
         terminalRuns: [run],
         shellTabCount: 0,
         showCanvas: true,
       },
     });
 
-    expect(wrapper.find('[data-testid="composer-status-working"]').exists()).toBe(
-      true,
-    );
+    const working = wrapper.find('[data-testid="composer-status-working"]');
+    expect(working.exists()).toBe(true);
+    expect(working.attributes("title")).toMatch(/grep src/);
     expect(
       wrapper.find('[data-testid="composer-status-terminal-badge"]').text(),
     ).toBe("1");

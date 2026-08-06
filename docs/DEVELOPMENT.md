@@ -156,13 +156,26 @@ npm run tauri:build
 
 Artifacts under `src-tauri/target/release/bundle/` (and platform-specific subdirs).
 
+### Release smoke + workflow guard
+
+After tagging, use the short human checklist in [RELEASE_SMOKE.md](./RELEASE_SMOKE.md).  
+Dogfood the installed build with [DOGFOOD_v0.1.28.md](./DOGFOOD_v0.1.28.md).
+
+**Do not** map unset `APPLE_*` / `WINDOWS_*` secrets into the tauri-action `env:` block. Empty secrets become `""` and break macOS codesign (`SecKeychainItemImport`). Local + CI guard:
+
+```bash
+npm run check:release-workflow
+```
+
+CI workflow `.github/workflows/ci.yml` runs that script when `release.yml` (or the guard) changes.
+
 ### Follow-up checklist — real Apple sign + notarize
 
 Do **not** invent fake signing. When a paid Apple Developer account and certs exist:
 
 1. Export a **Developer ID Application** certificate as `.p12` and base64-encode it for CI.
 2. Create an [app-specific password](https://support.apple.com/en-us/102654) for notarytool.
-3. Add GitHub Actions **secrets** (names must match; already wired in `release.yml` `env:`):
+3. Add GitHub Actions **secrets** (names below). **Only then** wire the matching keys into `release.yml` tauri-action `env:` (they are intentionally **not** pre-wired — see workflow comments + `npm run check:release-workflow`).
 
    | Secret | Purpose |
    |--------|---------|
@@ -175,8 +188,9 @@ Do **not** invent fake signing. When a paid Apple Developer account and certs ex
 
 4. In `src-tauri/tauri.conf.json` → `bundle.macOS`: set `hardenedRuntime` to `true`; remove or override `signingIdentity: "-"` (env `APPLE_SIGNING_IDENTITY` takes precedence when set).
 5. Before notarizing, extend `Entitlements.plist` with WebView JIT keys Tauri needs under hardened runtime (`com.apple.security.cs.allow-jit`, `allow-unsigned-executable-memory`, and usually `allow-dyld-environment-variables`) in addition to mic audio-input.
-6. Re-run Release on a `v*` tag; confirm `spctl -a -vv /Applications/OpenMesh.app` accepts the notarized app **without** `xattr`.
-7. Optional Windows: `WINDOWS_CERTIFICATE` + `WINDOWS_CERTIFICATE_PASSWORD` for Authenticode.
+6. Update `scripts/check-release-workflow.mjs` allowlist intentionally when enabling real cert env mappings.
+7. Re-run Release on a `v*` tag; confirm `spctl -a -vv /Applications/OpenMesh.app` accepts the notarized app **without** `xattr`.
+8. Optional Windows: `WINDOWS_CERTIFICATE` + `WINDOWS_CERTIFICATE_PASSWORD` for Authenticode.
 
 ---
 

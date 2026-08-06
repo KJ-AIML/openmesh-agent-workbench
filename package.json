@@ -19,6 +19,7 @@
     "test:e2e": "PLAYWRIGHT_CHROMIUM_USE_HEADLESS_SHELL=0 playwright test",
     "test:e2e:ui": "PLAYWRIGHT_CHROMIUM_USE_HEADLESS_SHELL=0 playwright test --ui",
     "test:e2e:install": "playwright install chromium",
+    "check:release-workflow": "node scripts/check-release-workflow.mjs",
     "verify": "npm run typecheck && npm run lint && npm run test",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",

@@ -8,6 +8,8 @@ import type { SessionRun } from "../../lib/agentChat/sessionRuns";
 
 const props = defineProps<{
   workingCount: number;
+  /** Current tool / phase label for the Working chip tooltip. */
+  workingLabel?: string | null;
   terminalRuns: SessionRun[];
   /** Open shell tabs in the Chat terminal panel. */
   shellTabCount?: number;
@@ -64,8 +66,16 @@ const terminalAria = computed(() => {
       type="button"
       class="composer-status__btn composer-status__btn--working"
       data-testid="composer-status-working"
-      :aria-label="`${workingCount} working`"
-      :title="`${workingCount} working`"
+      :aria-label="
+        workingLabel
+          ? `${workingCount} working — ${workingLabel}`
+          : `${workingCount} working`
+      "
+      :title="
+        workingLabel
+          ? `${workingCount} working — ${workingLabel}`
+          : `${workingCount} working`
+      "
       @click="emit('focus-working')"
     >
       <Loader2 :size="14" class="composer-status__spin" aria-hidden="true" />

@@ -1,25 +1,32 @@
 import { describe, expect, it } from "vitest";
 import {
+  appendSessionRunOutput,
   completeRunningOfKind,
   completeSessionRun,
   countRunning,
+  countWorkingChip,
   createSessionRun,
   formatElapsed,
   listTerminalRuns,
   looksLikeTerminalTool,
   sessionHasCanvasSignal,
+  touchWorkingRunCommand,
   truncateCommand,
   upsertSessionRun,
 } from "@/lib/agentChat/sessionRuns";
 
 describe("sessionRuns helpers", () => {
-  it("recognizes verify/delegate-style terminal tools", () => {
+  it("recognizes verify/delegate/shell-like terminal tools", () => {
     expect(looksLikeTerminalTool("verify")).toBe(true);
     expect(looksLikeTerminalTool("Verify recipe")).toBe(true);
     expect(looksLikeTerminalTool("delegate")).toBe(true);
     expect(looksLikeTerminalTool("Delegate to CLI")).toBe(true);
+    expect(looksLikeTerminalTool("grep")).toBe(true);
+    expect(looksLikeTerminalTool("git_diff")).toBe(true);
+    expect(looksLikeTerminalTool("run_recipe")).toBe(true);
     expect(looksLikeTerminalTool("pilot_status")).toBe(false);
     expect(looksLikeTerminalTool("read_file")).toBe(false);
+    expect(looksLikeTerminalTool("list_dir")).toBe(false);
   });
 
   it("truncates and formats elapsed time", () => {
@@ -30,7 +37,7 @@ describe("sessionRuns helpers", () => {
     expect(formatElapsed(0, 90_000, 30_000)).toBe("30s");
   });
 
-  it("upserts and completes runs; counts running terminals", () => {
+  it("upserts and completes runs; counts working chip richly", () => {
     let runs = [
       createSessionRun({
         id: "working:1",
@@ -51,6 +58,10 @@ describe("sessionRuns helpers", () => {
     );
     expect(countRunning(runs, "working")).toBe(1);
     expect(countRunning(runs, "terminal")).toBe(1);
+    expect(countWorkingChip(runs)).toBe(2);
+
+    runs = touchWorkingRunCommand(runs, "grep src");
+    expect(runs.find((r) => r.id === "working:1")?.command).toBe("grep src");
 
     runs = completeSessionRun(runs, "term:v1", {
       status: "done",
@@ -58,11 +69,16 @@ describe("sessionRuns helpers", () => {
       messageId: "msg-1",
     });
     expect(countRunning(runs, "terminal")).toBe(0);
+    expect(countWorkingChip(runs)).toBe(1);
     expect(listTerminalRuns(runs)[0]?.output).toBe("ok");
     expect(listTerminalRuns(runs)[0]?.messageId).toBe("msg-1");
 
+    runs = appendSessionRunOutput(runs, "term:v1", "line2");
+    expect(listTerminalRuns(runs)[0]?.output).toBe("ok\nline2");
+
     runs = completeRunningOfKind(runs, "working", "cancelled");
     expect(countRunning(runs, "working")).toBe(0);
+    expect(countWorkingChip(runs)).toBe(0);
     expect(runs.find((r) => r.id === "working:1")?.status).toBe("cancelled");
   });
 

@@ -1,7 +1,7 @@
 # OpenMesh Desktop — Docs Index
 
 **Product:** OpenMesh Agent Workbench (desktop)  
-**Version baseline:** `0.1.27`  
+**Version baseline:** `0.1.28`  
 **Status:** early / alpha — local-first dogfood, not a finished cloud mesh product
 
 Start here if the app feels big. These docs map **what exists in code today**, not a roadmap pitch.
@@ -13,6 +13,8 @@ Start here if the app feels big. These docs map **what exists in code today**, n
 | If you want… | Read |
 |--------------|------|
 | What the app can do (user bible) | [PRODUCT_GUIDE.md](./PRODUCT_GUIDE.md) |
+| Fillable dogfood pass/fail (v0.1.28) | [DOGFOOD_v0.1.28.md](./DOGFOOD_v0.1.28.md) |
+| Post-tag release smoke (human + CI) | [RELEASE_SMOKE.md](./RELEASE_SMOKE.md) |
 | Honest “not yet / never claim this” | [LIMITATIONS.md](./LIMITATIONS.md) |
 | macOS DMG “damaged” / won’t open | [LIMITATIONS.md — Gatekeeper](./LIMITATIONS.md#macos-gatekeeper-damaged--wont-open) |
 | Run / test / build / release signing checklist | [DEVELOPMENT.md](./DEVELOPMENT.md) |
@@ -54,7 +56,8 @@ Sidebar: Work (Home → Context) · Team/Mesh (Continuity) · Agents (Sessions) 
 | Path | Notes |
 |------|--------|
 | [`development/`](./development/) | Versioned execution plans, handoffs, unlock matrix — useful history; many claims are superseded |
-| [`dogfood-checklist.md`](./dogfood-checklist.md) | v0.3 storage QA — historical; see RC handoff + PRODUCT_GUIDE |
+| [`DOGFOOD_v0.1.28.md`](./DOGFOOD_v0.1.28.md) | **Current** fillable dogfood for desktop v0.1.28 |
+| [`dogfood-checklist.md`](./dogfood-checklist.md) | v0.3 storage QA — historical; prefer DOGFOOD_v0.1.28 + PRODUCT_GUIDE |
 | `release-notes-v0.*`, `storage-*`, `tauri-*`, `post-v0.1.0-*` | Point-in-time notes from early releases |
 
 When a plan contradicts these capability docs, **prefer the capability docs + CHANGELOG + code**.

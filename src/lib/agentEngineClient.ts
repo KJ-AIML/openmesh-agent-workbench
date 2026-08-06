@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 export type AgentSecretStatus = {
   configured: boolean;
@@ -62,6 +63,24 @@ export async function testAgentProvider(opts: {
       baseUrl: opts.baseUrl,
       apiKey: opts.apiKey,
     },
+  });
+}
+
+export type AgentTurnProgressPayload = {
+  kind: "tool_start" | "tool_done";
+  turnId: string;
+  toolName: string;
+  toolCallId?: string;
+  ok?: boolean;
+  summary?: string;
+};
+
+/** Subscribe to mid-turn Agent Engine tool progress (Tauri event). */
+export async function listenAgentTurnProgress(
+  handler: (payload: AgentTurnProgressPayload) => void,
+): Promise<UnlistenFn> {
+  return listen<AgentTurnProgressPayload>("agent-turn-progress", (event) => {
+    if (event.payload) handler(event.payload);
   });
 }
 

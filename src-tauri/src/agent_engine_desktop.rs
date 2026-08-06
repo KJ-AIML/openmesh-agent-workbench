@@ -4,12 +4,12 @@ use openmesh_core::agent_engine::{
     apply_patch, cancel_recipe_run, cancel_turn, enrich_system_prompt, format_patch_summary,
     get_recipe, list_recipes, list_recent_runs, load_chat_sessions, load_inventory, probe_provider,
     read_patch, record_delegate_launch, register_turn, reject_patch, remove_turn,
-    resolve_provider_kind, rollback_patch, run_agent_turn_cancellable, run_recipe_with_patch,
+    resolve_provider_kind, rollback_patch, run_agent_turn_with_progress, run_recipe_with_patch,
     save_chat_sessions, suggest_verify_recipe, tools_for_mode, write_delegate_brief,
-    AgentDefinition, AgentSecretStore,
-    AgentSession, CascadingSecretStore, ChatMessage, ChatRole, EngineTurnResult, LogCallback,
-    OpenAiCompatibleProvider, PatchRecord, ProviderConfig, ProviderProbeResult, Recipe,
-    RecipeRunResult, StoredChatSession, ToolExecutor, WorkspaceToolExecutor,
+    AgentDefinition, AgentSecretStore, AgentSession, CascadingSecretStore, ChatMessage, ChatRole,
+    EngineTurnResult, LogCallback, OpenAiCompatibleProvider, PatchRecord, ProviderConfig,
+    ProviderProbeResult, Recipe, RecipeRunResult, StoredChatSession, ToolExecutor,
+    TurnProgressCallback, TurnProgressEvent, WorkspaceToolExecutor,
 };
 use openmesh_core::storage::{default_settings, read_global, Settings};
 use serde::{Deserialize, Serialize};
@@ -132,6 +132,7 @@ pub struct AgentUiMessage {
 /// default sync command path executes inline inside `webview.on_message`,
 /// which freezes the macOS window (rainbow beachball) for the whole turn.
 fn agent_engine_turn_blocking(
+    app: tauri::AppHandle,
     project_path: String,
     request: AgentEngineTurnRequest,
 ) -> Result<EngineTurnResult, String> {
@@ -217,13 +218,43 @@ fn agent_engine_turn_blocking(
             )
         });
     let cancel = register_turn(&turn_id);
-    let result = run_agent_turn_cancellable(
+    let app_progress = app.clone();
+    let turn_id_progress = turn_id.clone();
+    let on_progress: TurnProgressCallback = Arc::new(move |ev| {
+        let payload = match &ev {
+            TurnProgressEvent::ToolStart {
+                tool_name,
+                tool_call_id,
+            } => json!({
+                "kind": "tool_start",
+                "turnId": turn_id_progress,
+                "toolName": tool_name,
+                "toolCallId": tool_call_id,
+            }),
+            TurnProgressEvent::ToolDone {
+                tool_name,
+                tool_call_id,
+                ok,
+                summary,
+            } => json!({
+                "kind": "tool_done",
+                "turnId": turn_id_progress,
+                "toolName": tool_name,
+                "toolCallId": tool_call_id,
+                "ok": ok,
+                "summary": summary,
+            }),
+        };
+        let _ = app_progress.emit("agent-turn-progress", payload);
+    });
+    let result = run_agent_turn_with_progress(
         &def,
         &mut session,
         &request.question,
         &provider_client,
         &executor,
         Some(cancel),
+        Some(on_progress),
     );
     remove_turn(&turn_id);
     result.map_err(|e| e.to_string())
@@ -231,11 +262,12 @@ fn agent_engine_turn_blocking(
 
 #[tauri::command]
 pub async fn agent_engine_turn(
+    app: tauri::AppHandle,
     project_path: String,
     request: AgentEngineTurnRequest,
 ) -> Result<EngineTurnResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        agent_engine_turn_blocking(project_path, request)
+        agent_engine_turn_blocking(app, project_path, request)
     })
     .await
     .map_err(|e| format!("agent engine turn failed to join: {e}"))?

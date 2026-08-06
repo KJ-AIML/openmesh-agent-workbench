@@ -18,7 +18,10 @@ pub mod turn_cancel;
 pub mod types;
 pub mod workspace_tools;
 
-pub use engine_loop::{run_agent_turn, run_agent_turn_cancellable};
+pub use engine_loop::{
+    run_agent_turn, run_agent_turn_cancellable, run_agent_turn_with_progress, TurnProgressCallback,
+    TurnProgressEvent,
+};
 pub use chat_store::{
     load_chat_sessions, save_chat_sessions, ChatImportProvenance, StoredChatMessage,
     StoredChatSession,

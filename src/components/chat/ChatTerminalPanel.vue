@@ -60,6 +60,7 @@ const emit = defineEmits<{
 
 const panelEl = ref<HTMLElement | null>(null);
 const nowTick = ref(Date.now());
+const expandedRunIds = ref<Set<string>>(new Set());
 let tickTimer: ReturnType<typeof setInterval> | null = null;
 
 const internalDock = ref<TerminalDock>(readDock());
@@ -170,6 +171,17 @@ function statusLabel(run: SessionRun): string {
   if (run.status === "failed") return "Failed";
   if (run.status === "cancelled") return "Cancelled";
   return "Done";
+}
+
+function toggleRunOutput(id: string) {
+  const next = new Set(expandedRunIds.value);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  expandedRunIds.value = next;
+}
+
+function isRunExpanded(id: string): boolean {
+  return expandedRunIds.value.has(id);
 }
 
 function paneBounds(): { maxWidth: number; maxHeight: number } {
@@ -405,11 +417,12 @@ function endResize() {
       <div v-if="terminalRuns.length" class="term-panel__runs">
         <h3 class="term-panel__runs-title">Session runs</h3>
         <ul class="term-panel__run-list" role="list">
-          <li v-for="run in terminalRuns" :key="run.id">
+          <li v-for="run in terminalRuns" :key="run.id" class="term-panel__run-item">
             <button
               type="button"
               class="term-panel__run-btn"
               :class="{ 'is-running': run.status === 'running' }"
+              data-testid="term-session-run"
               @click="emit('select-run', run)"
             >
               <SquareTerminal :size="13" aria-hidden="true" />
@@ -424,6 +437,24 @@ function endResize() {
                 <span>{{ elapsedFor(run) }}</span>
               </span>
             </button>
+            <button
+              v-if="run.output"
+              type="button"
+              class="term-panel__run-expand"
+              data-testid="term-session-run-expand"
+              :aria-expanded="isRunExpanded(run.id)"
+              :aria-label="
+                isRunExpanded(run.id) ? 'Hide output' : 'Show output'
+              "
+              @click.stop="toggleRunOutput(run.id)"
+            >
+              {{ isRunExpanded(run.id) ? "Hide output" : "Show output" }}
+            </button>
+            <pre
+              v-if="run.output && isRunExpanded(run.id)"
+              class="term-panel__run-output"
+              data-testid="term-session-run-output"
+            >{{ run.output }}</pre>
           </li>
         </ul>
       </div>
@@ -686,7 +717,7 @@ function endResize() {
 
 .term-panel__runs {
   flex-shrink: 0;
-  max-height: 96px;
+  max-height: 180px;
   overflow: auto;
   padding: 0.4rem 0.55rem 0.55rem;
   border-top: 1px solid var(--border);
@@ -708,6 +739,44 @@ function endResize() {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
+}
+
+.term-panel__run-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.term-panel__run-expand {
+  align-self: flex-start;
+  margin-left: 1.6rem;
+  border: none;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-size: 0.62rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0 0.15rem;
+}
+
+.term-panel__run-expand:hover {
+  color: var(--foreground);
+}
+
+.term-panel__run-output {
+  margin: 0 0 0.2rem 1.6rem;
+  max-height: 88px;
+  overflow: auto;
+  padding: 0.35rem 0.45rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--surface-3);
+  color: var(--muted-foreground);
+  font-size: 0.62rem;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
 }
 
 .term-panel__run-btn {

@@ -5,6 +5,7 @@
 **Last Updated:** 2026-01-15
 
 > **Current product docs:** [`docs/README.md`](./README.md) · [`PRODUCT_GUIDE.md`](./PRODUCT_GUIDE.md) · [`DEVELOPMENT.md`](./DEVELOPMENT.md)  
+> **Current desktop dogfood (v0.1.28):** [`DOGFOOD_v0.1.28.md`](./DOGFOOD_v0.1.28.md)  
 > **Current RC / 1.0 path:** use [`docs/development/handoff-dogfood-rc-1.0.md`](development/handoff-dogfood-rc-1.0.md) (post v0.1.21). This v0.3 checklist remains historical for early storage QA.
 
 ---

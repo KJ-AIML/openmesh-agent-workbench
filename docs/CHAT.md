@@ -172,9 +172,12 @@ Code: `src/lib/agentChat/resumeIntoChat.ts`.
 
 ## Dogfood
 
+Full fillable checklist: [DOGFOOD_v0.1.28.md](./DOGFOOD_v0.1.28.md) (§1 Composer, §2 Terminal).
+
 1. Configure Provider + key + Test connection  
 2. Ask: “What’s in this project?” or `/project`  
 3. `/read README.md` (or a real relative path)  
 4. Switch Plan → ask for a small patch proposal → Reject (don’t need to apply)  
 5. Import a scanned session via Sessions → Continue in Chat  
-6. Confirm messages survive app restart (disk under `.openmesh/agent/chats/`)
+6. Confirm messages survive app restart (disk under `.openmesh/agent/chats/`)  
+7. During a multi-tool Ask/Plan turn, confirm Working chip + Terminal session-run rows update mid-turn (elapsed + expandable output when present)

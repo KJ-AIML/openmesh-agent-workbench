@@ -17,9 +17,18 @@ name: Release
 #   Gatekeeper quarantine (see release body + scripts/macos-unquarantine.sh).
 #   Windows users may see SmartScreen.
 #
-# When Apple / Windows certs are available, add these GitHub Actions secrets
-# AND pass them in the tauri-action `env:` block (do not pre-wire empty secrets —
-# an empty APPLE_CERTIFICATE makes the bundler run `security import` and fail):
+# REGRESSION GUARD (v0.1.27 → v0.1.28):
+#   NEVER add APPLE_* / WINDOWS_* to the tauri-action `env:` block below until
+#   the corresponding GitHub Actions secrets are non-empty. Missing secrets
+#   become empty strings; an empty APPLE_CERTIFICATE makes tauri run
+#   `security import` and fail with SecKeychainItemImport after a good compile.
+#   Guard script (local + CI): `npm run check:release-workflow`
+#   Docs: docs/RELEASE_SMOKE.md · docs/DEVELOPMENT.md
+#
+# When Apple / Windows certs are available:
+#   1. Add these GitHub Actions secrets (real values only)
+#   2. THEN pass them in the tauri-action `env:` block
+#   3. Update scripts/check-release-workflow.mjs allowlist intentionally
 #   macOS sign + notarize:
 #     APPLE_CERTIFICATE          — base64 .p12 Developer ID Application cert
 #     APPLE_CERTIFICATE_PASSWORD — password for that .p12

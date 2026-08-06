@@ -139,10 +139,12 @@ IPC: `agent_secret_status|set|clear`.
 
 ## Dogfood
 
+Full fillable checklist: [DOGFOOD_v0.1.28.md](./DOGFOOD_v0.1.28.md) (§5 Appearance, §6 Updates).
+
 1. Overview — confirm checklist items  
 2. Provider — save key → Test connection → green/usable result  
 3. Extensions — list builtins; toggle one; start a chat turn and look for skill influence  
 4. Sessions — leave overrides blank; confirm Sessions page still scans  
-5. Appearance — change theme; toggle Top navbar tabs (hide Sprint, confirm titlebar updates; last tab stays on); reload  
+5. Appearance — change theme/density; toggle Top navbar tabs (hide Sprint, confirm titlebar updates; last tab stays on); reload  
+6. About / Updates — version matches current tag · Check for updates · read unsigned-build note  
 
-6. About — version matches `0.1.26` (or current) · read unsigned-build note  

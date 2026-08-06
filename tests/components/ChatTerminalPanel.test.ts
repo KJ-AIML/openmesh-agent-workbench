@@ -194,12 +194,14 @@ describe("ChatTerminalPanel", () => {
     expect(wrapper.emitted("open-external")).toBeTruthy();
   });
 
-  it("lists session runs", async () => {
+  it("lists session runs and expands output", async () => {
     const run = createSessionRun({
       id: "term:1",
       kind: "terminal",
       title: "Verify",
       command: "npm run typecheck",
+      output: "typecheck ok\nline 2",
+      status: "done",
     });
     const wrapper = mount(ChatTerminalPanel, {
       props: {
@@ -212,7 +214,14 @@ describe("ChatTerminalPanel", () => {
     });
     expect(wrapper.text()).toContain("Verify");
     expect(wrapper.text()).toContain("npm run typecheck");
-    await wrapper.find(".term-panel__run-btn").trigger("click");
+    expect(wrapper.find('[data-testid="term-session-run-output"]').exists()).toBe(
+      false,
+    );
+    await wrapper.find('[data-testid="term-session-run-expand"]').trigger("click");
+    expect(wrapper.find('[data-testid="term-session-run-output"]').text()).toContain(
+      "typecheck ok",
+    );
+    await wrapper.find('[data-testid="term-session-run"]').trigger("click");
     expect(wrapper.emitted("select-run")?.[0]?.[0]).toMatchObject({
       id: "term:1",
     });

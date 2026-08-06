@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - '.github/workflows/release.yml'
+      - '.github/workflows/ci.yml'
+      - 'scripts/check-release-workflow.mjs'
+      - 'package.json'
+
+jobs:
+  release-workflow-guard:
+    name: release.yml secret mapping guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Fail if empty APPLE_*/WINDOWS_* secrets are wired
+        run: node scripts/check-release-workflow.mjs

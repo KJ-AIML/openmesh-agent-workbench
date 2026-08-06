@@ -1,9 +1,10 @@
 /**
  * Session-scoped agent/terminal run tracker for Chat composer status chips.
  *
- * v1 limit: tracks in-memory verify recipes, /delegate launches, and the
- * active agent turn — not OS PTY / IDE multiplex terminals. External
- * terminals opened by delegate are fire-and-forget (not supervised).
+ * Tracks in-memory verify recipes, /delegate launches, Agent Engine tool-loop
+ * progress (shell-like / long tools), and the active agent turn — not OS PTY /
+ * IDE multiplex terminals. External terminals opened by delegate are
+ * fire-and-forget (not supervised).
  */
 
 export type SessionRunKind = "working" | "terminal";
@@ -35,17 +36,35 @@ export type CreateSessionRunInput = {
   output?: string;
 };
 
-/** Tool ids / titles that surface as Terminal chips (not full OS supervision). */
+/**
+ * Tool ids / titles that surface as Terminal session-run rows.
+ * Keep read-only peek tools (read_file, list_dir, project_info) on Working only.
+ */
 export function looksLikeTerminalTool(toolIdOrTitle: string): boolean {
-  const s = toolIdOrTitle.trim().toLowerCase();
+  const s = toolIdOrTitle.trim().toLowerCase().replace(/\s+/g, "_");
   if (!s) return false;
-  return (
+  if (
     s === "verify" ||
     s === "delegate" ||
+    s === "grep" ||
+    s === "git_diff" ||
+    s === "git_status" ||
+    s === "git_log" ||
+    s === "run_recipe" ||
+    s === "shell" ||
+    s === "bash" ||
+    s === "terminal"
+  ) {
+    return true;
+  }
+  return (
     s.includes("verify") ||
     s.includes("delegate") ||
     s.includes("recipe") ||
-    s.includes("terminal")
+    s.includes("terminal") ||
+    s.includes("shell") ||
+    s.startsWith("run_") ||
+    s.startsWith("git_")
   );
 }
 
@@ -118,6 +137,26 @@ export function completeSessionRun(
   return next;
 }
 
+/** Append streamed log lines to an existing run (e.g. verify agent-run-log). */
+export function appendSessionRunOutput(
+  runs: SessionRun[],
+  id: string,
+  chunk: string,
+  maxChars = 2400,
+): SessionRun[] {
+  const idx = runs.findIndex((r) => r.id === id);
+  if (idx < 0) return runs;
+  const prev = runs[idx];
+  const merged = `${prev.output ?? ""}${prev.output ? "\n" : ""}${chunk}`;
+  const output =
+    merged.length > maxChars
+      ? `…${merged.slice(merged.length - maxChars + 1)}`
+      : merged;
+  const next = runs.slice();
+  next[idx] = { ...prev, output };
+  return next;
+}
+
 export function countRunning(
   runs: SessionRun[],
   kind?: SessionRunKind,
@@ -125,6 +164,19 @@ export function countRunning(
   return runs.filter(
     (r) => r.status === "running" && (kind == null || r.kind === kind),
   ).length;
+}
+
+/**
+ * Working chip count: active agent turn + in-flight non-terminal tools
+ * that we track as working rows (engine mid-turn richness).
+ */
+export function countWorkingChip(runs: SessionRun[]): number {
+  const working = countRunning(runs, "working");
+  if (working === 0) return 0;
+  // While a turn is active, surface at least the turn; bump when extra
+  // terminal-like tools are also running so the chip feels alive.
+  const terminalRunning = countRunning(runs, "terminal");
+  return Math.max(1, working + terminalRunning);
 }
 
 export function listTerminalRuns(
@@ -179,4 +231,21 @@ export function completeRunningOfKind(
     return { ...r, status, endedAt };
   });
   return changed ? next : runs;
+}
+
+/** Update the active working run's command/label (mid-turn tool detail). */
+export function touchWorkingRunCommand(
+  runs: SessionRun[],
+  command: string,
+): SessionRun[] {
+  const idx = runs.findIndex(
+    (r) => r.kind === "working" && r.status === "running",
+  );
+  if (idx < 0) return runs;
+  const prev = runs[idx];
+  const nextCmd = truncateCommand(command, 120);
+  if (prev.command === nextCmd) return runs;
+  const next = runs.slice();
+  next[idx] = { ...prev, command: nextCmd };
+  return next;
 }

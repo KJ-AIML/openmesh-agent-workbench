@@ -27,6 +27,7 @@ vi.mock("@/lib/agentEngineClient", () => ({
   },
   cancelAgentEngineTurn: vi.fn(async () => true),
   cancelAgentRecipe: vi.fn(async () => true),
+  listenAgentTurnProgress: vi.fn(async () => () => {}),
   loadDurableChats: vi.fn(async () => []),
   saveDurableChats: vi.fn(async () => {}),
 }));
