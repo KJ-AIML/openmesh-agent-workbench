@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.30] - 2026-08-06
+
+### Added
+- **Settings → About — Download & install**: when a newer GitHub Release has a matching installer for this OS/arch, download the platform asset (progress via Tauri/`reqwest`) and open the installer (macOS `.dmg`, Windows `.exe`/`.msi`, Linux AppImage/deb). Does **not** silently replace the running app.
+- Honest copy for **unsigned** preview builds (macOS Gatekeeper / `xattr -cr`, Windows SmartScreen)
+
+### Documentation
+- `docs/SETTINGS.md` — Download & install + dogfood steps for Updates
+
 ## [0.1.29] - 2026-08-06
 
 ### Added

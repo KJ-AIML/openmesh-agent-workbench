@@ -108,7 +108,11 @@ Reset / data management controls (destructive actions confirm in UI).
 
 - App version from package / Tauri config
 - GitHub releases update check (`SettingsUpdatesPanel.vue`, `src/lib/updates/`)
+- When a newer release has a matching installer for this OS/arch: primary **Download & install** downloads the asset (Tauri/`reqwest`) and opens it (macOS `.dmg` via `open`, Windows `.exe`/`.msi`, Linux AppImage/deb). Does **not** silently replace the running app.
+- If assets are still uploading: Install disabled with “Installers not ready yet…”; **Open release** still works.
+- Empty release body: show “Assets ready — see GitHub…” when installers exist (notes do not block install).
 - Copy notes that **preview builds are unsigned** (macOS Gatekeeper “damaged” → `xattr -cr` / right-click Open; Windows SmartScreen)
+- IPC: `get_host_arch`, `download_and_open_update`; progress event `update-download-progress`
 
 ---
 
@@ -146,5 +150,5 @@ Full fillable checklist: [DOGFOOD_v0.1.28.md](./DOGFOOD_v0.1.28.md) (§5 Appeara
 3. Extensions — list builtins; toggle one; start a chat turn and look for skill influence  
 4. Sessions — leave overrides blank; confirm Sessions page still scans  
 5. Appearance — change theme/density; toggle Top navbar tabs (hide Sprint, confirm titlebar updates; last tab stays on); reload  
-6. About / Updates — version matches current tag · Check for updates · read unsigned-build note  
+6. About / Updates — version matches current tag · Check for updates · **Download & install** when available · confirm installer opens · read unsigned-build / Gatekeeper note  
 

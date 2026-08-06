@@ -1,3 +1,5 @@
+import type { ReleaseAsset } from "./releaseAssets";
+import { emptyNotesFallback } from "./releaseAssets";
 import { isPrereleaseVersion, normalizeVersion } from "./semver";
 
 export const GITHUB_OWNER = "KJ-AIML";
@@ -12,7 +14,16 @@ export type GithubRelease = {
   htmlUrl: string;
   publishedAt: string | null;
   body: string;
+  /** Notes shown in Settings — body excerpt, or asset-aware fallback when empty. */
+  notesDisplay: string;
   prerelease: boolean;
+  assets: ReleaseAsset[];
+};
+
+type RawAsset = {
+  name?: string | null;
+  browser_download_url?: string | null;
+  size?: number | null;
 };
 
 type RawRelease = {
@@ -23,6 +34,7 @@ type RawRelease = {
   body?: string | null;
   draft?: boolean;
   prerelease?: boolean;
+  assets?: RawAsset[] | null;
 };
 
 export class GithubReleaseError extends Error {
@@ -40,9 +52,28 @@ export class GithubReleaseError extends Error {
   }
 }
 
+function mapAssets(raw: RawAsset[] | null | undefined): ReleaseAsset[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ReleaseAsset[] = [];
+  for (const item of raw) {
+    const name = String(item?.name ?? "").trim();
+    const browserDownloadUrl = String(item?.browser_download_url ?? "").trim();
+    if (!name || !browserDownloadUrl) continue;
+    out.push({
+      name,
+      browserDownloadUrl,
+      size: typeof item?.size === "number" && item.size >= 0 ? item.size : 0,
+    });
+  }
+  return out;
+}
+
 function mapRelease(raw: RawRelease): GithubRelease | null {
   const tagName = String(raw.tag_name ?? "").trim();
   if (!tagName) return null;
+  const body = String(raw.body ?? "").trim();
+  const assets = mapAssets(raw.assets);
+  const excerpt = excerptReleaseNotes(body);
   return {
     tagName,
     version: normalizeVersion(tagName),
@@ -51,8 +82,10 @@ function mapRelease(raw: RawRelease): GithubRelease | null {
       String(raw.html_url ?? "").trim() ||
       `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases/tag/${encodeURIComponent(tagName)}`,
     publishedAt: raw.published_at ?? null,
-    body: String(raw.body ?? "").trim(),
+    body,
+    notesDisplay: excerpt || emptyNotesFallback(assets),
     prerelease: Boolean(raw.prerelease),
+    assets,
   };
 }
 

@@ -1,10 +1,10 @@
 import { getAppVersion } from "./appVersion";
 import {
-  excerptReleaseNotes,
   fetchLatestRelease,
   type GithubRelease,
   GithubReleaseError,
 } from "./githubReleases";
+import type { ReleaseAsset } from "./releaseAssets";
 import { isUpdateAvailable } from "./semver";
 
 export const UPDATE_CHECK_STORAGE_KEY = "openmesh.updateCheck.v1";
@@ -27,6 +27,8 @@ export type PersistedUpdateCheck = {
   publishedAt: string | null;
   name: string;
   bodyExcerpt: string;
+  /** Installer assets from the latest release (may be empty while CI uploads). */
+  assets?: ReleaseAsset[];
 };
 
 export type UpdateCheckResult =
@@ -126,7 +128,8 @@ export async function checkForUpdates(
       htmlUrl: latest.htmlUrl,
       publishedAt: latest.publishedAt,
       name: latest.name,
-      bodyExcerpt: excerptReleaseNotes(latest.body),
+      bodyExcerpt: latest.notesDisplay,
+      assets: latest.assets,
     };
     writePersistedUpdateCheck(persisted);
     return updateAvailable

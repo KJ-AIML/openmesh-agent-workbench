@@ -3,6 +3,7 @@ mod agent_engine_desktop;
 mod canvas_desktop;
 mod extensions_desktop;
 mod pty_desktop;
+mod update_desktop;
 mod voice;
 mod voice_desktop;
 
@@ -1280,6 +1281,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             get_host_os,
+            update_desktop::get_host_arch,
+            update_desktop::download_and_open_update,
             validate_path,
             open_folder,
             get_git_status,

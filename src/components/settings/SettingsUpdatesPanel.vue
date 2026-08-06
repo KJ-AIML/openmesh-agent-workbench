@@ -1,7 +1,23 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
-import { ArrowUpRight, CheckCircle2, Loader2, RefreshCw } from "lucide-vue-next";
+import { computed, onMounted, onUnmounted, ref } from "vue";
+import {
+  ArrowUpRight,
+  CheckCircle2,
+  Download,
+  Loader2,
+  RefreshCw,
+} from "lucide-vue-next";
 import { getAppVersion } from "../../lib/updates/appVersion";
+import {
+  downloadAndOpenInstaller,
+  formatBytes,
+  installButtonLabel,
+  listenDownloadProgress,
+  resolveInstallTarget,
+  type DownloadProgress,
+  type InstallUpdateStatus,
+} from "../../lib/updates/installUpdate";
+import { releaseHasInstallerAssets } from "../../lib/updates/releaseAssets";
 import {
   checkForUpdates,
   hasKnownUpdate,
@@ -21,6 +37,16 @@ const status = ref<UpdateCheckStatus>("idle");
 const errorMessage = ref("");
 const persisted = ref<PersistedUpdateCheck | null>(readPersistedUpdateCheck());
 
+const installStatus = ref<InstallUpdateStatus>("idle");
+const installError = ref("");
+const installNextSteps = ref("");
+const progress = ref<DownloadProgress | null>(null);
+const selectedAssetName = ref("");
+const installersReady = ref(false);
+const installUnsupported = ref(false);
+
+let unlistenProgress: (() => void) | null = null;
+
 const updateAvailable = computed(() =>
   hasKnownUpdate(persisted.value, appVersion),
 );
@@ -39,8 +65,62 @@ const publishedLabel = computed(() => {
   }
 });
 
+const notesText = computed(() => {
+  const excerpt = persisted.value?.bodyExcerpt?.trim() ?? "";
+  if (excerpt) return excerpt;
+  if (installersReady.value) return "Assets ready — see GitHub for full notes.";
+  return "Release notes are not available yet.";
+});
+
+const progressLabel = computed(() => {
+  const p = progress.value;
+  if (!p) return "";
+  if (p.percent != null) {
+    const total =
+      p.totalBytes != null ? ` · ${formatBytes(p.receivedBytes)} / ${formatBytes(p.totalBytes)}` : "";
+    return `${p.percent}%${total}`;
+  }
+  if (p.receivedBytes > 0) return formatBytes(p.receivedBytes);
+  return "Starting…";
+});
+
+const installBusy = computed(
+  () =>
+    installStatus.value === "resolving" ||
+    installStatus.value === "downloading" ||
+    installStatus.value === "opening",
+);
+
+const showInstallButton = computed(
+  () => updateAvailable.value && !installUnsupported.value,
+);
+
 function syncBadge() {
   emit("badge", updateAvailable.value);
+}
+
+async function refreshInstallTarget() {
+  const assets = persisted.value?.assets ?? [];
+  installersReady.value = releaseHasInstallerAssets(assets);
+  installUnsupported.value = false;
+  selectedAssetName.value = "";
+
+  if (!updateAvailable.value) return;
+
+  const target = await resolveInstallTarget(assets);
+  if (target.status === "unsupported") {
+    installUnsupported.value = true;
+    installStatus.value = "unsupported";
+    return;
+  }
+  if (target.status === "assets_missing") {
+    installStatus.value = "assets_missing";
+    return;
+  }
+  selectedAssetName.value = target.asset.name;
+  if (installStatus.value === "assets_missing" || installStatus.value === "unsupported") {
+    installStatus.value = "idle";
+  }
 }
 
 async function runCheck() {
@@ -56,6 +136,7 @@ async function runCheck() {
   persisted.value = result.persisted;
   status.value = result.status;
   syncBadge();
+  await refreshInstallTarget();
 }
 
 function openRelease() {
@@ -65,21 +146,81 @@ function openRelease() {
   openExternalUrl(url);
 }
 
+async function runInstall() {
+  installError.value = "";
+  installNextSteps.value = "";
+  progress.value = null;
+  installStatus.value = "resolving";
+
+  const assets = persisted.value?.assets ?? [];
+  const target = await resolveInstallTarget(assets);
+  if (target.status === "unsupported") {
+    installUnsupported.value = true;
+    installStatus.value = "unsupported";
+    installError.value = "This platform is not supported for in-app install.";
+    return;
+  }
+  if (target.status === "assets_missing") {
+    installStatus.value = "assets_missing";
+    installError.value =
+      "Installers not ready yet — try again shortly (CI may still be uploading).";
+    return;
+  }
+
+  selectedAssetName.value = target.asset.name;
+  installStatus.value = "downloading";
+
+  try {
+    unlistenProgress?.();
+    unlistenProgress = await listenDownloadProgress((p) => {
+      progress.value = p;
+    });
+    const result = await downloadAndOpenInstaller(target.asset);
+    installStatus.value = "opening";
+    installNextSteps.value = result.nextSteps;
+    installStatus.value = "opened";
+    if (!result.opened) {
+      installError.value = "Downloaded, but the installer did not open automatically.";
+    }
+  } catch (err) {
+    installStatus.value = "failed";
+    installError.value =
+      err instanceof Error ? err.message : String(err || "Install failed.");
+  } finally {
+    unlistenProgress?.();
+    unlistenProgress = null;
+  }
+}
+
 onMounted(async () => {
   if (updateAvailable.value) {
     status.value = "update_available";
   }
   syncBadge();
-  const quiet = await maybeBackgroundUpdateCheck(appVersion);
-  if (quiet) {
-    persisted.value = quiet;
-    if (hasKnownUpdate(quiet, appVersion)) {
-      status.value = "update_available";
-    } else if (status.value === "idle") {
-      // Keep idle unless user already checked this session.
+
+  // Older localStorage rows lack `assets` — refresh so Install can resolve.
+  const needsAssetRefresh =
+    updateAvailable.value && !Array.isArray(persisted.value?.assets);
+
+  if (needsAssetRefresh) {
+    await runCheck();
+  } else {
+    await refreshInstallTarget();
+    const quiet = await maybeBackgroundUpdateCheck(appVersion);
+    if (quiet) {
+      persisted.value = quiet;
+      if (hasKnownUpdate(quiet, appVersion)) {
+        status.value = "update_available";
+      }
+      syncBadge();
+      await refreshInstallTarget();
     }
-    syncBadge();
   }
+});
+
+onUnmounted(() => {
+  unlistenProgress?.();
+  unlistenProgress = null;
 });
 </script>
 
@@ -88,8 +229,9 @@ onMounted(async () => {
     <div>
       <p class="settings-updates__title">About &amp; updates</p>
       <p class="settings-updates__desc">
-        Compare this build to the latest GitHub release. Updates open in your
-        browser — OpenMesh does not auto-install.
+        Compare this build to the latest GitHub release. When an installer is
+        ready for this Mac or PC, you can download and open it from here —
+        OpenMesh does not silently replace the running app.
       </p>
     </div>
 
@@ -110,7 +252,7 @@ onMounted(async () => {
       <button
         type="button"
         class="btn-secondary inline-flex items-center gap-1.5"
-        :disabled="status === 'checking'"
+        :disabled="status === 'checking' || installBusy"
         @click="runCheck"
       >
         <Loader2 v-if="status === 'checking'" class="h-3.5 w-3.5 animate-spin" />
@@ -150,25 +292,109 @@ onMounted(async () => {
           <span v-if="publishedLabel"> · {{ publishedLabel }}</span>
         </p>
       </div>
-      <p v-if="persisted.bodyExcerpt" class="settings-updates__notes">
-        {{ persisted.bodyExcerpt }}
+      <p class="settings-updates__notes">
+        {{ notesText }}
       </p>
-      <p v-else class="text-caption text-muted">
-        No release notes on GitHub for this tag.
+
+      <p
+        v-if="installStatus === 'assets_missing'"
+        class="text-caption"
+        style="color: var(--accent-amber)"
+      >
+        Installers not ready yet — try again shortly. You can still open the
+        release page.
       </p>
+      <p
+        v-else-if="installUnsupported"
+        class="text-caption text-muted"
+      >
+        In-app install isn’t available on this platform — use Open release.
+      </p>
+      <p
+        v-else-if="selectedAssetName"
+        class="text-caption text-muted"
+      >
+        Installer for this machine: <code class="text-[0.95em]">{{ selectedAssetName }}</code>
+      </p>
+
       <div class="flex flex-wrap gap-2">
-        <button type="button" class="btn-primary inline-flex items-center gap-1.5" @click="openRelease">
+        <button
+          v-if="showInstallButton"
+          type="button"
+          class="btn-primary inline-flex items-center gap-1.5"
+          :disabled="installBusy || installStatus === 'assets_missing'"
+          @click="runInstall"
+        >
+          <Loader2
+            v-if="installBusy"
+            class="h-3.5 w-3.5 animate-spin"
+          />
+          <Download v-else class="h-3.5 w-3.5" />
+          {{ installButtonLabel(installStatus) }}
+        </button>
+        <button
+          type="button"
+          class="btn-secondary inline-flex items-center gap-1.5"
+          :disabled="installBusy"
+          @click="openRelease"
+        >
           Open release
           <ArrowUpRight class="h-3.5 w-3.5" />
         </button>
-        <button type="button" class="btn-secondary" @click="openRelease">
+        <button
+          type="button"
+          class="btn-secondary"
+          :disabled="installBusy"
+          @click="openRelease"
+        >
           View on GitHub
         </button>
       </div>
+
+      <div
+        v-if="installStatus === 'downloading'"
+        class="settings-updates__progress"
+      >
+        <div class="settings-updates__progress-bar">
+          <div
+            class="settings-updates__progress-fill"
+            :style="{
+              width:
+                progress?.percent != null
+                  ? `${Math.min(100, progress.percent)}%`
+                  : '30%',
+              opacity: progress?.percent != null ? 1 : 0.55,
+            }"
+          />
+        </div>
+        <p class="text-caption text-muted mt-1">
+          Downloading{{ selectedAssetName ? ` ${selectedAssetName}` : "" }}
+          <span v-if="progressLabel"> — {{ progressLabel }}</span>
+        </p>
+      </div>
+
+      <div
+        v-if="installStatus === 'failed'"
+        class="settings-updates__state settings-updates__state--err"
+      >
+        <p>{{ installError || "Download or install failed." }}</p>
+      </div>
+
+      <div
+        v-if="installStatus === 'opened' && installNextSteps"
+        class="settings-updates__state settings-updates__state--ok"
+      >
+        <CheckCircle2 class="h-4 w-4 flex-shrink-0" style="color: var(--accent-green)" />
+        <p class="settings-updates__notes" style="white-space: pre-wrap">
+          {{ installNextSteps }}
+        </p>
+      </div>
+
       <p class="text-caption text-muted">
         Preview builds are unsigned. On macOS, “damaged” usually means Gatekeeper —
         run <code class="text-[0.95em]">xattr -cr /Applications/OpenMesh.app</code> or
-        right-click → Open. Windows may show SmartScreen.
+        right-click → Open. Windows may show SmartScreen. This flow opens the
+        installer; it does not replace the running app in place.
       </p>
     </div>
 
@@ -263,5 +489,19 @@ onMounted(async () => {
   line-height: 1.45;
   color: var(--muted-foreground);
   white-space: pre-wrap;
+}
+
+.settings-updates__progress-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border) 80%, transparent);
+  overflow: hidden;
+}
+
+.settings-updates__progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-amber, #d4a017);
+  transition: width 0.2s ease;
 }
 </style>
