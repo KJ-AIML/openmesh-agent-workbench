@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.29] - 2026-08-06
+
 ### Added
 - Dogfood checklist for desktop **v0.1.28** (`docs/DOGFOOD_v0.1.28.md`) + post-tag smoke doc (`docs/RELEASE_SMOKE.md`)
 - CI/local guard `npm run check:release-workflow` so empty `APPLE_*` / `WINDOWS_*` secret mappings cannot regress in `release.yml`
