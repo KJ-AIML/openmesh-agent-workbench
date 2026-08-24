@@ -164,10 +164,7 @@ fn run_ask(args: &AgentAskArgs, cwd: &Path) -> i32 {
         }
     };
 
-    let model = args
-        .model
-        .clone()
-        .unwrap_or_else(|| "gpt-4o-mini".into());
+    let model = args.model.clone().unwrap_or_else(|| "gpt-4o-mini".into());
     let (provider, base_url) =
         resolve_provider_kind(Some(&args.provider), args.base_url.as_deref());
     let mut def = AgentDefinition::default_workspace_agent(&model);

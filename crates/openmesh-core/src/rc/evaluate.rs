@@ -37,7 +37,13 @@ fn chk(
     }
 }
 
-fn row(id: &str, area: &str, surface: &str, status: RcCheckStatus, evidence: &str) -> RcRegressionRow {
+fn row(
+    id: &str,
+    area: &str,
+    surface: &str,
+    status: RcCheckStatus,
+    evidence: &str,
+) -> RcRegressionRow {
     RcRegressionRow {
         id: id.into(),
         area: area.into(),
@@ -68,8 +74,8 @@ fn freeze_policy() -> RcFreezePolicy {
 
 /// Evaluate RC readiness for a project workspace.
 pub fn build_rc_pack(project_path: &str) -> Result<RcPack, RcEvaluateError> {
-    let project: Project = read_project(project_path, "project.json")
-        .ok_or(RcEvaluateError::ProjectNotInitialized)?;
+    let project: Project =
+        read_project(project_path, "project.json").ok_or(RcEvaluateError::ProjectNotInitialized)?;
     let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
     let mut checks = Vec::new();
     let mut matrix = Vec::new();
@@ -193,7 +199,9 @@ pub fn build_rc_pack(project_path: &str) -> Result<RcPack, RcEvaluateError> {
     // P1: trust-admin
     match read_trust_policy(project_path) {
         Ok(p)
-            if p.secret_topics_fail_closed && !p.allow_secret_export && p.sync_require_selective =>
+            if p.secret_topics_fail_closed
+                && !p.allow_secret_export
+                && p.sync_require_selective =>
         {
             checks.push(chk(
                 "rc-trust",
@@ -388,7 +396,11 @@ pub fn build_rc_pack(project_path: &str) -> Result<RcPack, RcEvaluateError> {
             } else {
                 RcCheckStatus::Warn
             },
-            if present { "configured" } else { "optional missing" },
+            if present {
+                "configured"
+            } else {
+                "optional missing"
+            },
         ));
     }
 

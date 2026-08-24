@@ -12,8 +12,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 const MAX_PATCH_BYTES: usize = 256 * 1024;
-const EMPTY_HASH: &str =
-    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+const EMPTY_HASH: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -82,10 +81,7 @@ fn ensure_dir(path: &Path) -> Result<(), String> {
 }
 
 fn new_id(prefix: &str) -> String {
-    format!(
-        "{prefix}-{}",
-        uuid_like()
-    )
+    format!("{prefix}-{}", uuid_like())
 }
 
 fn uuid_like() -> String {
@@ -184,7 +180,10 @@ fn current_base_hash(project_path: &str, rel: &str) -> Result<(String, Option<St
         return Ok((EMPTY_HASH.to_string(), None));
     }
     let bytes = fs::read(&joined).map_err(|e| e.to_string())?;
-    Ok((sha256_hex(&bytes), Some(String::from_utf8_lossy(&bytes).into_owned())))
+    Ok((
+        sha256_hex(&bytes),
+        Some(String::from_utf8_lossy(&bytes).into_owned()),
+    ))
 }
 
 /// Propose a patch from tool arguments JSON.
@@ -312,10 +311,7 @@ pub fn apply_patch(project_path: &str, patch_id: &str) -> Result<PatchRecord, St
         } else {
             atomic_write(&backup_file, "")?;
             // sidecar marker
-            atomic_write(
-                &backup_file.with_extension("created"),
-                "1",
-            )?;
+            atomic_write(&backup_file.with_extension("created"), "1")?;
         }
         if let Some(parent) = target.parent() {
             ensure_dir(parent)?;
@@ -431,11 +427,7 @@ mod tests {
 
     fn temp_project() -> String {
         let n = COUNTER.fetch_add(1, Ordering::SeqCst);
-        let dir = std::env::temp_dir().join(format!(
-            "openmesh-patch-{}-{}",
-            std::process::id(),
-            n
-        ));
+        let dir = std::env::temp_dir().join(format!("openmesh-patch-{}-{}", std::process::id(), n));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         let path = dir.to_string_lossy().to_string();
@@ -503,7 +495,10 @@ mod tests {
             r#"{"summary":"x","files":[{"path":".env","newContent":"x=1\n"}]}"#,
         )
         .unwrap_err();
-        assert!(err.contains("sensitive") || err.contains("Invalid"), "{err}");
+        assert!(
+            err.contains("sensitive") || err.contains("Invalid"),
+            "{err}"
+        );
 
         let err2 = propose_patch_from_args(
             &project,

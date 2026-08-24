@@ -152,27 +152,28 @@
 // Ledger APIs are core-only in this track. CLI, Tauri, and Desktop do not expose
 // WorkEvent ledger commands yet.
 
+pub mod agent_engine;
 pub mod answer_receipt;
+pub mod app_actions;
 pub mod authority_freshness;
 pub mod authority_gate;
 pub mod authority_policy;
-pub mod handoff;
-pub mod mesh;
-pub mod online_proxy;
-pub mod team_cloud;
-pub mod trust_admin;
+pub mod canvas;
 pub mod connectors;
+pub mod handoff;
+pub mod lan;
+pub mod mesh;
+pub mod oauth;
+pub mod online_proxy;
 pub mod org_graph;
+pub mod pending_proxy_question;
 pub mod pilot;
 pub mod rc;
-pub mod pending_proxy_question;
-pub mod lan;
-pub mod agent_engine;
-pub mod app_actions;
-pub mod canvas;
 pub mod relay;
 pub mod return_digest;
 pub mod team;
+pub mod team_cloud;
+pub mod trust_admin;
 
 pub mod context;
 pub mod context_pack;
@@ -201,6 +202,7 @@ pub mod proxy_prompt_context;
 pub mod proxy_question;
 pub mod proxy_runtime;
 pub mod proxy_runtime_axga;
+pub mod proxy_server;
 pub mod session_readers;
 pub mod signals;
 pub mod storage;

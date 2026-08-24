@@ -4,7 +4,10 @@ import {
   resolveToolsForMessage,
   type AgentToolResult,
 } from "./tools";
-import { runAgentEngineTurn } from "../agentEngineClient";
+import {
+  runAgentEngineTurn,
+  type EngineRouteMetadata,
+} from "../agentEngineClient";
 import type { Settings } from "../../types";
 import { chatModelId, isChatProviderReady } from "./ready";
 
@@ -18,6 +21,9 @@ export type ChatToolCall = {
 export type ChatTurnResult = {
   assistantText: string;
   toolCalls: ChatToolCall[];
+  route?: EngineRouteMetadata;
+  model?: string;
+  iterations?: number;
 };
 
 /** Lightweight mid-turn status for the in-thread thinking bubble + session runs. */
@@ -40,6 +46,8 @@ export type ChatTurnProgress =
 
 export type ChatTurnOptions = {
   settings?: Settings | null;
+  /** Runtime readiness for the selected direct provider route. */
+  runtimeReady?: boolean | null;
   history?: { role: string; content: string }[];
   /** Fired for UI status only — must stay sync/cheap (no stringify/IO). */
   onProgress?: (event: ChatTurnProgress) => void;
@@ -63,6 +71,7 @@ export async function runAgentChatTurn(
     settingsOrOpts !== null &&
     typeof settingsOrOpts === "object" &&
     ("settings" in settingsOrOpts ||
+      "runtimeReady" in settingsOrOpts ||
       "history" in settingsOrOpts ||
       "onProgress" in settingsOrOpts ||
       "mode" in settingsOrOpts ||
@@ -74,14 +83,6 @@ export async function runAgentChatTurn(
   const settings = opts.settings;
   const hist = opts.history ?? history;
   const onProgress = opts.onProgress;
-
-  if (settings !== undefined && !isChatProviderReady(settings)) {
-    return {
-      assistantText:
-        "Chat is locked until provider, API key, and default model are configured in Settings.",
-      toolCalls: [],
-    };
-  }
 
   const trimmed = userMessage.trim();
   if (!trimmed) {
@@ -151,6 +152,18 @@ export async function runAgentChatTurn(
     };
   }
 
+  const routeNotReady =
+    opts.runtimeReady !== undefined
+      ? opts.runtimeReady !== true
+      : settings !== undefined && !isChatProviderReady(settings);
+  if (settings !== undefined && routeNotReady) {
+    return {
+      assistantText:
+        "Workspace chat is available. Configure the selected provider, API key, and model in Settings to enable free-form model replies.",
+      toolCalls: [],
+    };
+  }
+
   // Freeform / LLM tool loop via OpenMesh Agent Engine.
   // Mid-turn tool progress is emitted as Tauri `agent-turn-progress` and
   // forwarded by the Chat page (listenAgentTurnProgress) into onProgress.
@@ -177,24 +190,29 @@ export async function runAgentChatTurn(
       });
     }
 
-    const errPrefix = result.error ? `${result.error}\n\n` : "";
+    const errPrefix =
+      result.error && result.error !== "provider_request_failed"
+        ? `${result.error}\n\n`
+        : "";
     return {
       assistantText: `${errPrefix}${result.assistantText}`,
       toolCalls,
+      route: result.route ?? undefined,
+      model: result.model,
+      iterations: result.iterations,
     };
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
+  } catch {
     return {
       assistantText:
-        `Agent Engine error: ${msg}\n\n` +
-        "Check Settings → Provider (API key + model). Slash tools still work without the LLM.\n\n" +
+        "Agent Engine error: provider request failed (details redacted).\n\n" +
+        "Check Settings → Provider (provider key + model). Slash tools still work without the LLM.\n\n" +
         listToolsHelp(),
       toolCalls: [
         {
           toolId: "agent_engine",
           title: "Agent Engine",
           ok: false,
-          summary: msg,
+          summary: "provider request failed (details redacted)",
         },
       ],
     };

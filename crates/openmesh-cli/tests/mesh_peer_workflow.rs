@@ -49,8 +49,8 @@ fn top_level_help_lists_mesh() {
 
 #[test]
 fn mesh_peer_help_lists_add_list_show() {
-    let help = String::from_utf8_lossy(&run_raw(&["mesh", "peer", "--help"]).stdout)
-        .to_ascii_lowercase();
+    let help =
+        String::from_utf8_lossy(&run_raw(&["mesh", "peer", "--help"]).stdout).to_ascii_lowercase();
     for sub in ["add", "list", "show"] {
         assert!(help.contains(sub), "missing {sub}");
     }
@@ -82,9 +82,7 @@ fn peer_add_list_show_json_workflow() {
     let added: Value = serde_json::from_slice(&add.stdout).expect("json");
     assert_eq!(added["peerId"], "yo");
     assert_eq!(added["label"], "Yo");
-    assert!(project
-        .join(".openmesh/mesh/peers/yo.json")
-        .exists());
+    assert!(project.join(".openmesh/mesh/peers/yo.json").exists());
 
     let list = run(&["mesh", "peer", "list", "--json"], &project);
     assert!(list.status.success());
@@ -101,12 +99,16 @@ fn peer_add_list_show_json_workflow() {
 fn peer_add_duplicate_is_conflict() {
     let project = temp_project("dup");
     let first = run(
-        &["mesh", "peer", "add", "--label", "Yo", "--id", "yo", "--json"],
+        &[
+            "mesh", "peer", "add", "--label", "Yo", "--id", "yo", "--json",
+        ],
         &project,
     );
     assert!(first.status.success());
     let second = run(
-        &["mesh", "peer", "add", "--label", "Yo", "--id", "yo", "--json"],
+        &[
+            "mesh", "peer", "add", "--label", "Yo", "--id", "yo", "--json",
+        ],
         &project,
     );
     assert_eq!(second.status.code(), Some(3));

@@ -35,9 +35,24 @@ It is **not** a finished E2E-encrypted WAN mesh, multi-tenant cloud admin, or Wh
 | Group | Tabs | Reality |
 |-------|------|---------|
 | **You** | Pending, Digest | Pending proxy questions; return digest window |
-| **Team** | Workspace, Trust, Connectors, Org | Local team registry; trust policy/allowlist/audit; connector list; org graph from team |
+| **Team** | Team, Trust, Connectors, Org | Local team registry; trust policy/allowlist/audit; connector list; org graph from team |
 | **Mesh** | Peers, LAN, Chat, Relay, Proxy | Peer registry; LAN serve/discover/send/ask; human LAN chat; relay audit; Continuity Proxy live ask |
 | **Gate** | Pilot, RC | Readiness / RC evaluation packs |
+
+### LAN dogfood guide (Desktop)
+
+On **Peers / Team / Trust / LAN**, Continuity shows a short step strip:
+
+**Peers → Team → Trust → LAN**
+
+| Step | Action |
+|------|--------|
+| 1 Peers | Register peer; optional `host:port` for presence / chat |
+| 2 Team | Init local workspace; add/remove members; link mesh peer |
+| 3 Trust | Init policy; remote-query toggle; allowlist mode; trust/remove peers; audit |
+| 4 LAN | Start listener; discover / manual probe; ask / chat |
+
+Honest alpha: same-LAN HTTP trust model — **no WAN / cloud relay**, **no finished-product E2E crypto claim**.
 
 ---
 
@@ -115,11 +130,19 @@ audit/
 
 ## Team & Trust
 
-| Surface | Status |
-|---------|--------|
-| Team workspace | **Real** local registry (init, members, link mesh peer). Not multi-tenant cloud admin |
-| Team cloud sync | **Scaffold only** (`team cloud sync-scaffold` dry-run — no remote upload). Not a Continuity tab |
-| Trust admin | **Real** local policy: remote-query toggle, allowlist modes, secrets fail-closed, admin audit. **Not** finished-product E2E mesh crypto; no IdP/SSO |
+| Surface | Desktop | Status |
+|---------|---------|--------|
+| Team init + roster | Continuity → Team | **Real** local registry |
+| Add / remove members | Continuity → Team | **Real** (cannot remove last owner) |
+| Link member → mesh peer | Peer dropdown on add | **Real**; presence dot when peer has `lanAddress` |
+| Team cloud sync | — | **CLI scaffold only** (`team cloud sync-scaffold`) — not a Continuity tab |
+| Trust init | Continuity → Trust | **Real** (requires team first; empty state routes to Team) |
+| Remote query toggle | Trust | **Real** + audit |
+| Allowlist mode | Trust (`allow-all` / `allowlist-only` / `deny-all`) | **Real** |
+| Allowlist add / remove | Trust (“Trust this peer”) | **Real** + audit; peer picker + presence when LAN known |
+| Secrets / export / IdP | — | Secrets fail-closed in policy; **no** IdP/SSO; **not** finished-product E2E mesh crypto |
+
+Typical LAN dogfood: enable remote query → **allowlist-only** → trust the peer → start LAN listener.
 
 ---
 
@@ -157,7 +180,10 @@ Gate tabs evaluate readiness packs (`pilot` / `rc`) for dogfood / RC checklists.
 | LAN serve/discover/send/ask | `lan …` | LAN tab |
 | LAN chat / presence poll | core only | Chat + presence UI |
 | Online proxy ask | `online-proxy …` | Proxy tab |
-| Team / trust / connectors / org / pilot / rc | matching commands | matching tabs |
+| Team init / members add·remove | `team …` | Team tab (desktop-complete for registry) |
+| Trust init / modes / allowlist add·remove / audit | `trust-admin …` | Trust tab (desktop-complete for local policy) |
+| Team cloud sync scaffold | `team cloud sync-scaffold` | **CLI only** (not a Continuity tab) |
+| Connectors / org / pilot / rc | matching commands | matching tabs |
 
 ---
 
@@ -174,13 +200,16 @@ Treat this file + CHANGELOG as current. The 0.1.22 plan has a banner pointing he
 
 ## Dogfood
 
+Fillable checklist: [DOGFOOD_v0.1.40.md](./DOGFOOD_v0.1.40.md) (Continuity Team/Trust/LAN).
+
 **Same machine (two temp projects) / two LAN hosts:**
 
-1. Project A: Continuity → LAN → start listener  
-2. Project B: discover or enter `host:41778`  
-3. CLI on A: pack + approve a package; Desktop B/A: send over LAN → confirm quarantine on receive  
-4. Live ask a simple read-only question (peer needs API key)  
-5. Chat tab: send a short message both ways  
-6. Confirm presence flips live/unreachable when you stop serve  
+1. Both sides: Continuity guided path **Peers → Team → Trust → LAN**
+2. Project A: register peer (B’s LAN address if known) → init Team → init Trust → allowlist B → **Start listener**
+3. Project B: same (mirror) or discover / enter `host:41778`
+4. Optional CLI on A: pack + approve a package; Desktop: send over LAN → quarantine on receive
+5. Live ask a simple read-only question (peer needs API key)
+6. Chat tab: send a short message both ways
+7. Confirm presence flips live/unreachable when you stop serve
 
 Expect UDP discover to be empty on some VPN/loopback setups — use manual address.

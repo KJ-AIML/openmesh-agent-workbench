@@ -5,9 +5,7 @@ use crate::relay::contract::{
     is_package_approved, validate_package_id_for_storage, validate_relay_package, RelayAuditKind,
     RelayPackage, RELAY_APPROVED_DIR,
 };
-use crate::relay::package::{
-    read_staging_package, staging_package_path, RelayPackageError,
-};
+use crate::relay::package::{read_staging_package, staging_package_path, RelayPackageError};
 use crate::storage::{get_project_dir, read_project, Project};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -42,9 +40,8 @@ pub fn read_approved_package(
     package_id: &str,
 ) -> Result<RelayPackage, RelayApproveError> {
     let _ = load_project(project_path)?;
-    validate_package_id_for_storage(package_id).map_err(|e| {
-        RelayApproveError::Package(RelayPackageError::Validation(e))
-    })?;
+    validate_package_id_for_storage(package_id)
+        .map_err(|e| RelayApproveError::Package(RelayPackageError::Validation(e)))?;
     let path = approved_package_path(project_path, package_id);
     if !path.exists() {
         return Err(RelayApproveError::Package(RelayPackageError::NotFound(
@@ -130,10 +127,7 @@ fn load_project(project_path: &str) -> Result<Project, RelayApproveError> {
         .ok_or(RelayApproveError::ProjectNotInitialized)
 }
 
-fn write_json_atomic<T: serde::Serialize>(
-    path: &Path,
-    value: &T,
-) -> Result<(), RelayApproveError> {
+fn write_json_atomic<T: serde::Serialize>(path: &Path, value: &T) -> Result<(), RelayApproveError> {
     let parent = path.parent().ok_or(RelayApproveError::Io)?;
     fs::create_dir_all(parent).map_err(|_| RelayApproveError::Io)?;
     let temp = path.with_extension(APPROVED_TEMP);

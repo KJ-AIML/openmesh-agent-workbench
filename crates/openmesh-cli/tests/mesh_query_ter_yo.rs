@@ -68,13 +68,25 @@ fn ter_asks_yo_offline_proxy_read_only() {
     .success());
 
     assert!(run(
-        &["signal", "progress", "--summary", "Yo finished offline work", "--json"],
+        &[
+            "signal",
+            "progress",
+            "--summary",
+            "Yo finished offline work",
+            "--json"
+        ],
         &yo
     )
     .status
     .success());
     assert!(run(
-        &["signal", "decision", "--summary", "Ship mesh query alpha", "--json"],
+        &[
+            "signal",
+            "decision",
+            "--summary",
+            "Ship mesh query alpha",
+            "--json"
+        ],
         &yo
     )
     .status
@@ -187,9 +199,7 @@ fn ter_asks_yo_offline_proxy_read_only() {
         let count = std::fs::read_dir(&events_dir).unwrap().count();
         assert_eq!(count, 0, "remote query must not write work events");
     }
-    assert!(ter
-        .join(".openmesh/mesh/queries/mq-teryo-1.json")
-        .exists());
+    assert!(ter.join(".openmesh/mesh/queries/mq-teryo-1.json").exists());
 }
 
 #[test]

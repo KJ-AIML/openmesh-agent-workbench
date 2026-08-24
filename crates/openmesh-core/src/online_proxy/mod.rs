@@ -11,8 +11,8 @@ pub mod storage;
 pub use ask::{ask_online_proxy, OnlineProxyAskError, OnlineProxyAskRequest};
 pub use contract::{
     validate_evidence_freshness_statement, validate_online_proxy_answer,
-    validate_online_proxy_config, EvidenceFreshnessStatement, OnlineProxyAnswer,
-    OnlineProxyConfig, OnlineProxyMode, ONLINE_PROXY_PROTOCOL_VERSION,
+    validate_online_proxy_config, EvidenceFreshnessStatement, OnlineProxyAnswer, OnlineProxyConfig,
+    OnlineProxyMode, ONLINE_PROXY_PROTOCOL_VERSION,
 };
 pub use storage::{
     config_path, online_proxy_dir, read_answer, read_config, write_answer, write_config,

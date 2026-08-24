@@ -53,7 +53,8 @@ pub fn bind_http_listener(
         }
         Err(_) => {
             let ephemeral = format!("{host}:0");
-            let l = TcpListener::bind(&ephemeral).map_err(|e| LanServerError::Bind(e.to_string()))?;
+            let l =
+                TcpListener::bind(&ephemeral).map_err(|e| LanServerError::Bind(e.to_string()))?;
             let port = l
                 .local_addr()
                 .map(|a| a.port())
@@ -113,7 +114,8 @@ fn handle_connection(
                     }
                 }
                 if let Some(header_end) = find_header_end(&buf[..total]) {
-                    let (method, path, content_length) = parse_request_line_and_length(&buf[..header_end])?;
+                    let (method, path, content_length) =
+                        parse_request_line_and_length(&buf[..header_end])?;
                     let body_start = header_end;
                     while total < body_start + content_length {
                         if total >= buf.len() {
@@ -139,12 +141,7 @@ fn handle_connection(
                     return write_response(&mut stream, status, content_type, &resp_body);
                 }
                 if total > 64 * 1024 && find_header_end(&buf[..total]).is_none() {
-                    return write_response(
-                        &mut stream,
-                        400,
-                        "text/plain",
-                        b"bad request headers",
-                    );
+                    return write_response(&mut stream, 400, "text/plain", b"bad request headers");
                 }
             }
             Err(_) => break,
@@ -154,9 +151,7 @@ fn handle_connection(
 }
 
 fn find_header_end(buf: &[u8]) -> Option<usize> {
-    buf.windows(4)
-        .position(|w| w == b"\r\n\r\n")
-        .map(|i| i + 4)
+    buf.windows(4).position(|w| w == b"\r\n\r\n").map(|i| i + 4)
 }
 
 fn parse_request_line_and_length(header_bytes: &[u8]) -> Result<(String, String, usize), String> {
@@ -197,7 +192,11 @@ fn route_request(
         ("POST", "/v1/relay/package") => handle_relay_package(body, identity),
         ("POST", "/v1/mesh/ask") => handle_mesh_ask(body, identity),
         ("POST", "/v1/chat/message") => handle_chat_message(body, identity),
-        _ => (404, b"{\"error\":\"not found\"}".to_vec(), "application/json"),
+        _ => (
+            404,
+            b"{\"error\":\"not found\"}".to_vec(),
+            "application/json",
+        ),
     }
 }
 
@@ -249,7 +248,10 @@ fn handle_relay_package(body: &[u8], identity: &LanHttpIdentity) -> (u16, Vec<u8
         &pkg,
         &now,
         Some("lan-peer"),
-        &format!("received via LAN HTTP from peer {}", identity.beacon.peer_id),
+        &format!(
+            "received via LAN HTTP from peer {}",
+            identity.beacon.peer_id
+        ),
     ) {
         Ok(stored) => json_ok(&serde_json::json!({
             "ok": true,
@@ -354,8 +356,12 @@ mod tests {
     use super::*;
     use crate::lan::client::{ask_peer, health_check, send_package_to_peer};
     use crate::lan::contract::DEFAULT_HTTP_PORT;
-    use crate::mesh::{MeshEnvelope, MeshEvidenceItem, MeshEvidenceSourceKind, MeshPeerRef, MeshSensitivityMax};
-    use crate::relay::contract::{RelayPackage, RelayPolicySnapshot, RELAY_PACKAGE_PROTOCOL_VERSION};
+    use crate::mesh::{
+        MeshEnvelope, MeshEvidenceItem, MeshEvidenceSourceKind, MeshPeerRef, MeshSensitivityMax,
+    };
+    use crate::relay::contract::{
+        RelayPackage, RelayPolicySnapshot, RELAY_PACKAGE_PROTOCOL_VERSION,
+    };
     use crate::storage::init_project;
     use std::sync::atomic::AtomicBool;
 
@@ -488,7 +494,12 @@ mod tests {
             .exists());
 
         // Without a configured peer API key, live ask must fail closed (not LocalScaffold).
-        let ask_err = ask_peer("127.0.0.1", port, "What is in progress?", Some("low-impact"));
+        let ask_err = ask_peer(
+            "127.0.0.1",
+            port,
+            "What is in progress?",
+            Some("low-impact"),
+        );
         match ask_err {
             Err(crate::lan::client::LanClientError::Peer { status, body }) => {
                 assert_eq!(status, 503);

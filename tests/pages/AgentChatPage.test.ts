@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { mount, flushPromises } from "@vue/test-utils";
+import { enableAutoUnmount, mount, flushPromises } from "@vue/test-utils";
 import { nextTick, ref } from "vue";
 
 vi.mock("vue-router", () => ({
@@ -125,8 +125,11 @@ vi.mock("@/lib/store", () => ({
 }));
 
 import AgentChatPage from "@/pages/AgentChatPage.vue";
+import { __test_setRawSessions } from "@/lib/agentChat/chatSessions";
 
 describe("AgentChatPage", () => {
+  enableAutoUnmount(afterEach);
+
   beforeEach(() => {
     vi.clearAllMocks();
     openTerminal.mockResolvedValue({ success: true, isMock: true });
@@ -145,16 +148,18 @@ describe("AgentChatPage", () => {
     // Fresh storage per test — chatSessions falls back to memory when needed.
     try {
       localStorage.clear();
+      localStorage.removeItem("openmesh.chat.v1:/tmp/test");
     } catch {
       /* happy-dom may warn; memory fallback still isolates via empty load */
     }
+    __test_setRawSessions("/tmp/test", "[]");
   });
 
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  it("shows provider gate when chat is not ready", async () => {
+  it("keeps the Chat surface available when the provider is not ready", async () => {
     mockStore.settings.value.provider = {
       name: "",
       apiKeyConfigured: false,
@@ -164,7 +169,9 @@ describe("AgentChatPage", () => {
     const wrapper = mount(AgentChatPage);
     await flushPromises();
     await nextTick();
-    expect(wrapper.text()).toContain("Set up provider before chat");
+    expect(wrapper.text()).toContain("Chat");
+    expect(wrapper.find("textarea").exists()).toBe(true);
+    expect(wrapper.text()).not.toContain("Set up provider before chat");
   });
 
   it("renders Chat shell with slim composer when ready", async () => {
@@ -226,6 +233,41 @@ describe("AgentChatPage", () => {
       true,
     );
     expect(wrapper.find(".chat__column").exists()).toBe(true);
+  });
+
+  it("does not show a stale route after a failed turn", async () => {
+    runAgentChatTurn
+      .mockResolvedValueOnce({
+        assistantText: "first reply",
+        toolCalls: [],
+        route: {
+          transport: "direct-provider",
+          providerLabel: "OpenAI",
+          endpointKind: "provider-default",
+          outcome: "completed",
+        },
+        model: "mock-model",
+        iterations: 1,
+      })
+      .mockRejectedValueOnce(new Error("provider URL leaked"));
+
+    const wrapper = mount(AgentChatPage);
+    await flushPromises();
+    await nextTick();
+    const textarea = wrapper.find("textarea");
+
+    await textarea.setValue("first");
+    await wrapper.find("button.chat-composer__send").trigger("click");
+    await vi.waitFor(() => expect(wrapper.text()).toContain("first reply"));
+    expect(wrapper.find('[data-testid="chat-route-summary"]').exists()).toBe(true);
+
+    await textarea.setValue("second");
+    await wrapper.find("button.chat-composer__send").trigger("click");
+    await vi.waitFor(() =>
+      expect(wrapper.text()).toContain("Agent Engine request failed"),
+    );
+    expect(wrapper.find('[data-testid="chat-route-summary"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("provider URL leaked");
   });
 
   it("optimistic send shows user message before mocked agent resolves", async () => {
@@ -290,6 +332,14 @@ describe("AgentChatPage", () => {
     runAgentChatTurn.mockResolvedValue({
       assistantText: "assistant says hi",
       toolCalls: [],
+      route: {
+        transport: "direct-provider",
+        providerLabel: "OpenAI",
+        endpointKind: "provider-default",
+        outcome: "completed",
+      },
+      model: "mock-model",
+      iterations: 1,
     });
 
     const writeText = vi.fn().mockResolvedValue(undefined);
@@ -308,6 +358,12 @@ describe("AgentChatPage", () => {
     await vi.waitFor(() => {
       expect(wrapper.text()).toContain("assistant says hi");
     });
+    expect(wrapper.find('[data-testid="chat-route-summary"]').text()).toContain(
+      "Direct provider",
+    );
+    expect(wrapper.find('[data-testid="chat-route-summary"]').text()).toContain(
+      "OpenAI",
+    );
 
     const copyBtns = wrapper.findAll('button[aria-label="Copy message"]');
     const forkBtns = wrapper.findAll(
@@ -327,5 +383,10 @@ describe("AgentChatPage", () => {
     await nextTick();
     expect(wrapper.findAll(".chat__rail-row").length).toBe(sessionsBefore + 1);
     expect(wrapper.text()).toMatch(/Fork of/);
+
+    await wrapper.find('[data-testid="chat-clear"]').trigger("click");
+    expect(wrapper.find('[data-testid="chat-route-summary"]').exists()).toBe(
+      false,
+    );
   });
 });

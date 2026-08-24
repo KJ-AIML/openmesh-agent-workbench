@@ -11,7 +11,7 @@ pub use auto_ui::{
 };
 pub use board::{
     board_add_sticky, board_connect, create_board, delete_board, list_boards, load_board,
-    parse_board_document, save_board_scene, sanitize_board_id, upsert_board, BoardDocument,
+    parse_board_document, sanitize_board_id, save_board_scene, upsert_board, BoardDocument,
     BoardError, BOARD_ENGINE_EXCALIDRAW, BOARD_SCHEMA,
 };
 pub use model::{CanvasDocument, CanvasEdge, CanvasNode, CanvasRevision};

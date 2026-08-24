@@ -26,6 +26,4 @@ pub use discovery::{
     session_matches_workspace, DetectedProviderRoot, ScannedForeignSession, SessionScanOverrides,
 };
 pub use redact::redact_secrets;
-pub use transcript::{
-    read_foreign_transcript, ForeignTranscript, ForeignTranscriptMessage,
-};
+pub use transcript::{read_foreign_transcript, ForeignTranscript, ForeignTranscriptMessage};

@@ -157,6 +157,32 @@ pub struct Settings {
     /// Cloud STT preferences (separate from chat LLM model).
     #[serde(default)]
     pub voice: VoiceSettings,
+    /// Legacy local proxy settings retained while the built-in runtime owns the connection.
+    #[serde(default)]
+    pub oauth: OAuthSettings,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OAuthSettings {
+    #[serde(default = "default_oauth_management_port")]
+    pub management_port: u16,
+    /// Legacy route flag; Agent Engine now uses the direct Provider settings path.
+    #[serde(default)]
+    pub sidecar_enabled: bool,
+}
+
+impl Default for OAuthSettings {
+    fn default() -> Self {
+        Self {
+            management_port: default_oauth_management_port(),
+            sidecar_enabled: false,
+        }
+    }
+}
+
+fn default_oauth_management_port() -> u16 {
+    8317
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -189,6 +215,19 @@ pub struct ProviderSettings {
     /// Optional OpenAI-compatible API base URL (e.g. https://api.x.ai/v1). Never stores the key.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_base_url: Option<String>,
+}
+
+impl Default for ProviderSettings {
+    fn default() -> Self {
+        Self {
+            name: None,
+            api_key_configured: false,
+            default_model: None,
+            fallback_model: None,
+            usage_tracking_enabled: false,
+            api_base_url: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -933,6 +972,7 @@ pub fn default_settings() -> Settings {
             stt_model: Some("openai/whisper-large-v3".into()),
             stt_language: None,
         },
+        oauth: OAuthSettings::default(),
     }
 }
 

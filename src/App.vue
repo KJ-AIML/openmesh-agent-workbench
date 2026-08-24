@@ -26,6 +26,7 @@ import {
   cancelAgentRecipe,
   runAgentRecipe,
 } from "./lib/agentEngineClient";
+import QuotaStatusBar from "./components/QuotaStatusBar.vue";
 import { useSidebarVisibility } from "./lib/useSidebarVisibility";
 import { useSidebarPeek } from "./lib/useSidebarPeek";
 import { getCommands, type Command } from "./lib/commands";
@@ -81,7 +82,7 @@ let unsubAudit: (() => void) | null = null;
 /** Session hide preference — cleared when a new action is audited. */
 const actionTrailHidden = ref(false);
 const actionTrailHasContent = computed(() => {
-  auditTick.value;
+  void auditTick.value;
   return listActionAudit(1).length > 0 || !!peekUndoIntent();
 });
 const showActionTrail = computed(
@@ -431,6 +432,10 @@ const pageLabels: Record<string, string> = {
   "/sprint": "Sprint",
   "/agent-chat": "Chat",
   "/agent-sessions": "Agent Sessions",
+  "/oauth": "OAuth Connections",
+  "/proxy-runtime": "Proxy Runtime",
+  "/proxy-providers": "Provider Configuration",
+  "/usage": "Usage Analytics",
   "/continuity": "Continuity",
   "/context": "Context",
   "/settings": "Settings",
@@ -542,6 +547,8 @@ defineExpose({ openPalette });
             </template>
           </nav>
         </header>
+
+        <QuotaStatusBar />
 
         <main class="shell__content animate-fade-in">
           <router-view />

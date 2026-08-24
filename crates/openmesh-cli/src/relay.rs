@@ -220,14 +220,8 @@ fn run_show(args: &RelayShowArgs, cwd: &Path) -> i32 {
                 println!("package_id={}", p.package_id);
                 println!("sensitivity_max={}", p.sensitivity_max.as_str());
                 println!("envelopes={}", p.envelopes.len());
-                println!(
-                    "approved={}",
-                    p.approved_at.as_deref().unwrap_or("no")
-                );
-                println!(
-                    "content_hash={}",
-                    p.content_hash.as_deref().unwrap_or("-")
-                );
+                println!("approved={}", p.approved_at.as_deref().unwrap_or("no"));
+                println!("content_hash={}", p.content_hash.as_deref().unwrap_or("-"));
             }
             0
         }
@@ -242,12 +236,7 @@ fn run_approve(args: &RelayApproveArgs, cwd: &Path) -> i32 {
     };
     let project_path = resolved.path.to_string_lossy().to_string();
     let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-    match approve_relay_package(
-        &project_path,
-        &args.package_id,
-        &now,
-        &args.approved_by,
-    ) {
+    match approve_relay_package(&project_path, &args.package_id, &now, &args.approved_by) {
         Ok(pkg) => {
             if args.json {
                 println!("{}", serde_json::to_value(&pkg).unwrap_or(json!({})));
@@ -302,13 +291,8 @@ fn run_receive(args: &RelayReceiveArgs, cwd: &Path) -> i32 {
         cwd.join(&args.relay_root)
     };
     let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-    match receive_package_from_relay_root(
-        &project_path,
-        &args.package_id,
-        &root,
-        &now,
-        Some("cli"),
-    ) {
+    match receive_package_from_relay_root(&project_path, &args.package_id, &root, &now, Some("cli"))
+    {
         Ok(pkg) => {
             if args.json {
                 println!("{}", serde_json::to_value(&pkg).unwrap_or(json!({})));

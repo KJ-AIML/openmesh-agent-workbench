@@ -134,10 +134,7 @@ pub fn validate_connector_descriptor(
         return Err(ConnectorValidationError::InvalidRole);
     }
     if let Some(r) = &d.external_ref {
-        if r.trim().is_empty()
-            || r.len() > MAX_NAME_BYTES
-            || r.contains("..")
-            || r.starts_with('/')
+        if r.trim().is_empty() || r.len() > MAX_NAME_BYTES || r.contains("..") || r.starts_with('/')
         {
             return Err(ConnectorValidationError::InvalidExternalRef);
         }

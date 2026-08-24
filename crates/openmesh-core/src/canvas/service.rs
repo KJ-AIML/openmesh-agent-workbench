@@ -99,11 +99,7 @@ pub fn connect_nodes(
     if !doc.nodes.iter().any(|n| n.id == from) || !doc.nodes.iter().any(|n| n.id == to) {
         return Err(CanvasError::Invalid("unknown node id".into()));
     }
-    if doc
-        .edges
-        .iter()
-        .any(|e| e.from == from && e.to == to)
-    {
+    if doc.edges.iter().any(|e| e.from == from && e.to == to) {
         return Ok(doc);
     }
     doc.edges.push(CanvasEdge {
@@ -127,8 +123,7 @@ pub fn delete_node(
     if doc.nodes.len() == before {
         return Err(CanvasError::NotFound(node_id.into()));
     }
-    doc.edges
-        .retain(|e| e.from != node_id && e.to != node_id);
+    doc.edges.retain(|e| e.from != node_id && e.to != node_id);
     doc.bump(format!("delete node {node_id}"));
     save_canvas(project_path, &doc)?;
     Ok(doc)

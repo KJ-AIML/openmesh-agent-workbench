@@ -390,6 +390,13 @@ onUnmounted(() => {
         </p>
       </div>
 
+      <div
+        v-if="installStatus === 'opened' && installError"
+        class="settings-updates__state settings-updates__state--err"
+      >
+        <p>{{ installError }}</p>
+      </div>
+
       <p class="text-caption text-muted">
         Preview builds are unsigned. On macOS, “damaged” usually means Gatekeeper —
         run <code class="text-[0.95em]">xattr -cr /Applications/OpenMesh.app</code> or

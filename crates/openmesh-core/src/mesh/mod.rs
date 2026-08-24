@@ -18,8 +18,8 @@ pub mod view;
 pub use contract::{
     validate_envelope_id_for_storage, validate_mesh_envelope, validate_mesh_peer_ref, MeshEnvelope,
     MeshEvidenceItem, MeshEvidenceSourceKind, MeshPeerRef, MeshSensitivityMax, MeshValidationError,
-    MESH_DIR, MESH_ENVELOPE_PROTOCOL_VERSION, MESH_INBOX_DIR, MESH_OUTBOX_DIR, MESH_PEERS_DIR,
-    MAX_ENVELOPE_ID_BYTES, MAX_EVIDENCE_ITEMS, MAX_PEER_LABEL_BYTES,
+    MAX_ENVELOPE_ID_BYTES, MAX_EVIDENCE_ITEMS, MAX_PEER_LABEL_BYTES, MESH_DIR,
+    MESH_ENVELOPE_PROTOCOL_VERSION, MESH_INBOX_DIR, MESH_OUTBOX_DIR, MESH_PEERS_DIR,
 };
 pub use export::{
     build_mesh_export_envelope, export_mesh_envelope_to_outbox, outbox_dir, outbox_envelope_path,

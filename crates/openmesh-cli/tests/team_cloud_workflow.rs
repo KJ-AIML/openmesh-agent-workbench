@@ -52,7 +52,15 @@ fn team_cloud_init_show_sync_scaffold() {
     .success());
 
     assert!(run(
-        &["team", "init", "--name", "Lab", "--owner-label", "Ter", "--json"],
+        &[
+            "team",
+            "init",
+            "--name",
+            "Lab",
+            "--owner-label",
+            "Ter",
+            "--json"
+        ],
         &p,
     )
     .status

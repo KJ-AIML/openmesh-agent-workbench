@@ -82,7 +82,11 @@ fn online_proxy_init_status_ask_show() {
         &["online-proxy", "init", "--owner-label", "Ter", "--json"],
         &project,
     );
-    assert!(init.status.success(), "{}", String::from_utf8_lossy(&init.stderr));
+    assert!(
+        init.status.success(),
+        "{}",
+        String::from_utf8_lossy(&init.stderr)
+    );
     assert!(project.join(".openmesh/online-proxy/config.json").exists());
 
     let status = run(&["online-proxy", "status", "--json"], &project);

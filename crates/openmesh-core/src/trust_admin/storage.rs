@@ -70,7 +70,8 @@ pub fn init_trust_policy(project_path: &str) -> Result<TeamTrustPolicy, TrustAdm
     if policy_path(project_path).exists() {
         return Err(TrustAdminStorageError::AlreadyExists);
     }
-    let team = read_team_workspace(project_path).map_err(|_| TrustAdminStorageError::TeamRequired)?;
+    let team =
+        read_team_workspace(project_path).map_err(|_| TrustAdminStorageError::TeamRequired)?;
     let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
     let admins: Vec<String> = team
         .members

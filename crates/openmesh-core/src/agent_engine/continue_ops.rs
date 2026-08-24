@@ -1,6 +1,7 @@
 //! Continue-mode helpers: tasks, handoffs, session links, gated mesh query.
 
 use super::patch::{append_run, list_recent_runs};
+use crate::authority_policy::FreshnessTier;
 use crate::continuity::{
     current_state_projection_path, load_continuity_input_snapshot, read_current_state_projection,
     rebuild_current_state_projection,
@@ -11,9 +12,10 @@ use crate::handoff::{
 };
 use crate::mesh::query::{query_remote_peer_proxy, MeshRemoteQueryRequest};
 use crate::return_digest::build_pending_questions_view;
-use crate::storage::{atomic_write, get_project_dir, now_iso, read_project, write_project, Project, Task};
+use crate::storage::{
+    atomic_write, get_project_dir, now_iso, read_project, write_project, Project, Task,
+};
 use crate::trust_admin::{evaluate_remote_query, read_trust_policy, QueryPermission};
-use crate::authority_policy::FreshnessTier;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::fs;
@@ -46,8 +48,7 @@ pub fn list_session_links(project_path: &str) -> Result<Vec<SessionLink>, String
 }
 
 pub fn link_session(project_path: &str, arguments_json: &str) -> Result<String, String> {
-    let args: serde_json::Value =
-        serde_json::from_str(arguments_json).unwrap_or(json!({}));
+    let args: serde_json::Value = serde_json::from_str(arguments_json).unwrap_or(json!({}));
     let chat_session_id = args
         .get("chatSessionId")
         .or_else(|| args.get("chat_session_id"))
@@ -121,7 +122,11 @@ pub fn update_task(project_path: &str, arguments_json: &str) -> Result<String, S
     if let Some(notes) = args.get("notes").and_then(|v| v.as_str()) {
         task.notes = Some(notes.to_string());
     }
-    if let Some(next) = args.get("nextAction").or_else(|| args.get("next_action")).and_then(|v| v.as_str()) {
+    if let Some(next) = args
+        .get("nextAction")
+        .or_else(|| args.get("next_action"))
+        .and_then(|v| v.as_str())
+    {
         task.next_action = Some(next.to_string());
     }
     task.updated_at = now_iso();
@@ -149,8 +154,7 @@ pub fn pending_questions_json(project_path: &str) -> Result<String, String> {
 }
 
 pub fn create_handoff_draft(project_path: &str, arguments_json: &str) -> Result<String, String> {
-    let args: serde_json::Value =
-        serde_json::from_str(arguments_json).unwrap_or(json!({}));
+    let args: serde_json::Value = serde_json::from_str(arguments_json).unwrap_or(json!({}));
     let recipient_label = args
         .get("recipient")
         .and_then(|v| v.as_str())
@@ -228,8 +232,7 @@ pub fn create_handoff_draft(project_path: &str, arguments_json: &str) -> Result<
 }
 
 pub fn approve_handoff(project_path: &str, arguments_json: &str) -> Result<String, String> {
-    let args: serde_json::Value =
-        serde_json::from_str(arguments_json).unwrap_or(json!({}));
+    let args: serde_json::Value = serde_json::from_str(arguments_json).unwrap_or(json!({}));
     let id = args
         .get("handoffId")
         .or_else(|| args.get("id"))
@@ -251,8 +254,7 @@ pub fn approve_handoff(project_path: &str, arguments_json: &str) -> Result<Strin
 }
 
 pub fn mesh_query(project_path: &str, arguments_json: &str) -> Result<String, String> {
-    let args: serde_json::Value =
-        serde_json::from_str(arguments_json).unwrap_or(json!({}));
+    let args: serde_json::Value = serde_json::from_str(arguments_json).unwrap_or(json!({}));
     let peer = args
         .get("peer")
         .and_then(|v| v.as_str())
@@ -352,11 +354,8 @@ mod tests {
 
     fn temp_project() -> String {
         let n = COUNTER.fetch_add(1, Ordering::SeqCst);
-        let dir = std::env::temp_dir().join(format!(
-            "openmesh-continue-{}-{}",
-            std::process::id(),
-            n
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("openmesh-continue-{}-{}", std::process::id(), n));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         let path = dir.to_string_lossy().to_string();
@@ -385,10 +384,7 @@ mod tests {
         assert_eq!(links[0].chat_session_id, "chat-1");
         assert_eq!(links[0].foreign_tool, "codex");
         assert_eq!(links[0].foreign_session_id, "sess-9");
-        assert_eq!(
-            links[0].foreign_session_path.as_deref(),
-            Some("/tmp/x")
-        );
+        assert_eq!(links[0].foreign_session_path.as_deref(), Some("/tmp/x"));
 
         // Upsert same pair replaces rather than duplicates.
         let _ = link_session(
@@ -461,27 +457,17 @@ mod tests {
     #[test]
     fn create_handoff_draft_and_approve() {
         let project = temp_project();
-        let draft = create_handoff_draft(
-            &project,
-            r#"{"recipient":"Yo","role":"engineer"}"#,
-        )
-        .unwrap();
+        let draft =
+            create_handoff_draft(&project, r#"{"recipient":"Yo","role":"engineer"}"#).unwrap();
         assert!(draft.contains("handoffId"), "{draft}");
         let v: serde_json::Value = serde_json::from_str(&draft).unwrap();
         let id = v["handoffId"].as_str().unwrap().to_string();
         assert_eq!(v["status"].as_str().unwrap_or(""), "draft");
 
         let brief = v["briefPath"].as_str().unwrap();
-        assert!(
-            Path::new(brief).exists(),
-            "brief should exist at {brief}"
-        );
+        assert!(Path::new(brief).exists(), "brief should exist at {brief}");
 
-        let approved = approve_handoff(
-            &project,
-            &format!(r#"{{"handoffId":"{id}"}}"#),
-        )
-        .unwrap();
+        let approved = approve_handoff(&project, &format!(r#"{{"handoffId":"{id}"}}"#)).unwrap();
         assert!(approved.contains(&id), "{approved}");
         assert!(
             approved.contains("approved") || approved.contains("Approved"),
@@ -513,7 +499,8 @@ mod tests {
         assert!(!run_id.is_empty());
         let runs = list_recent_runs(&project, 5).unwrap();
         assert!(
-            runs.iter().any(|r| r.kind == "delegate_launch" && r.id == run_id),
+            runs.iter()
+                .any(|r| r.kind == "delegate_launch" && r.id == run_id),
             "{runs:?}"
         );
         let _ = fs::remove_dir_all(&project);

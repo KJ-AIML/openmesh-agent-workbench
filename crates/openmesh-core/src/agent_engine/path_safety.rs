@@ -34,6 +34,8 @@ pub fn deny_sensitive_path(path: &Path) -> Result<(), String> {
             | "credentials.json"
             | "secrets.json"
             | "agent-api-key"
+            | "oauth-management-secret"
+            | "oauth-sidecar-client-key"
             | "id_rsa"
             | "id_ed25519"
             | "id_ecdsa"
@@ -75,7 +77,10 @@ pub fn resolve_file_in_workspace(project_path: &str, relative: &str) -> Result<P
 }
 
 /// Resolve a path for write (file may not exist yet); parent must stay in workspace.
-pub fn resolve_write_target(project_path: &str, relative: &str) -> Result<(PathBuf, String), String> {
+pub fn resolve_write_target(
+    project_path: &str,
+    relative: &str,
+) -> Result<(PathBuf, String), String> {
     let root = workspace_root(project_path)?;
     let rel = normalize_rel(relative)?;
     deny_sensitive_path(Path::new(&rel))?;
@@ -125,10 +130,7 @@ pub fn resolve_dir_in_workspace(project_path: &str, relative: &str) -> Result<Pa
 
 /// SHA-256 hex (no extra crate dependency).
 pub fn sha256_hex(data: &[u8]) -> String {
-    sha256(data)
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect()
+    sha256(data).iter().map(|b| format!("{b:02x}")).collect()
 }
 
 fn sha256(data: &[u8]) -> [u8; 32] {
@@ -256,6 +258,8 @@ mod tests {
         assert!(deny_sensitive_path(Path::new("credentials.json")).is_err());
         assert!(deny_sensitive_path(Path::new("secrets.json")).is_err());
         assert!(deny_sensitive_path(Path::new("agent-api-key")).is_err());
+        assert!(deny_sensitive_path(Path::new("oauth-management-secret")).is_err());
+        assert!(deny_sensitive_path(Path::new("oauth-sidecar-client-key")).is_err());
         assert!(deny_sensitive_path(Path::new("id_rsa")).is_err());
         assert!(deny_sensitive_path(Path::new("id_ed25519")).is_err());
         assert!(deny_sensitive_path(Path::new("certs/server.pem")).is_err());

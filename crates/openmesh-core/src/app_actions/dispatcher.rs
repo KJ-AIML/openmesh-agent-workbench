@@ -29,10 +29,7 @@ pub fn dispatch_intent_in_mode<H: AppActionHandler>(
     mode: AgentMode,
 ) -> ActionResult {
     if let Err(err) = may_dispatch(mode, &intent.action, confirmed) {
-        let result = ActionResult::failure(
-            format!("Blocked: {}", intent.action.label()),
-            err,
-        );
+        let result = ActionResult::failure(format!("Blocked: {}", intent.action.label()), err);
         record_result(intent, &result, None);
         return result;
     }
@@ -41,11 +38,7 @@ pub fn dispatch_intent_in_mode<H: AppActionHandler>(
         Ok(summary) => {
             let undo = push_undo(intent.action.clone(), &summary);
             let applied = ActionResult::success(summary, intent.action.clone());
-            record_result(
-                intent,
-                &applied,
-                undo.map(|u| u.id),
-            );
+            record_result(intent, &applied, undo.map(|u| u.id));
             applied
         }
         Err(err) => {

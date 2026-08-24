@@ -3,8 +3,8 @@
 use crate::continuity::current_state::ContinuityError;
 use crate::continuity::readers::ContinuityInputSnapshot;
 use crate::domain::{
-    CurrentStateProjection, PendingAttentionItem, PendingAttentionReason,
-    PendingAttentionStatus, WorkSignal, WorkSignalKind,
+    CurrentStateProjection, PendingAttentionItem, PendingAttentionReason, PendingAttentionStatus,
+    WorkSignal, WorkSignalKind,
 };
 use crate::pending_proxy_question::{list_pending_proxy_questions, PendingProxyQuestion};
 use crate::return_digest::contract::{
@@ -53,9 +53,8 @@ pub fn build_pending_questions_view(
             }
         }
         Err(_) => {
-            limitations.push(
-                "proxy pending directory unreadable; proxy questions omitted".to_string(),
-            );
+            limitations
+                .push("proxy pending directory unreadable; proxy questions omitted".to_string());
         }
     }
 

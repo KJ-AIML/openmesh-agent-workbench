@@ -12,10 +12,9 @@ pub mod storage;
 pub use builder::{build_handoff_note, BuildHandoffRequest, HandoffBuildError};
 pub use contract::{
     validate_handoff_id_for_storage, validate_handoff_note, validate_recipient_fields,
-    validate_window_fields, HandoffFreshness,
-    HandoffNote, HandoffRecipient, HandoffSection, HandoffSectionItem, HandoffStatus,
-    HandoffValidationError, HANDOFF_NOTE_PROTOCOL_VERSION, MAX_HANDOFF_ID_BYTES,
-    MAX_HANDOFF_ITEM_SUMMARY_BYTES, MAX_HANDOFF_LIMITATION_BYTES,
+    validate_window_fields, HandoffFreshness, HandoffNote, HandoffRecipient, HandoffSection,
+    HandoffSectionItem, HandoffStatus, HandoffValidationError, HANDOFF_NOTE_PROTOCOL_VERSION,
+    MAX_HANDOFF_ID_BYTES, MAX_HANDOFF_ITEM_SUMMARY_BYTES, MAX_HANDOFF_LIMITATION_BYTES,
     MAX_HANDOFF_RECIPIENT_LABEL_BYTES, MAX_HANDOFF_SECTION_ITEMS, MAX_HANDOFF_WARNINGS,
     WORK_EVENT_HANDOFF_KIND,
 };

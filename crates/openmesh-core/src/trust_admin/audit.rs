@@ -46,7 +46,9 @@ pub enum AuditError {
 }
 
 fn audit_path(project_path: &str) -> PathBuf {
-    get_project_dir(project_path).join(TRUST_ADMIN_DIR).join(AUDIT_FILE)
+    get_project_dir(project_path)
+        .join(TRUST_ADMIN_DIR)
+        .join(AUDIT_FILE)
 }
 
 pub fn append_audit_event(project_path: &str, event: &AdminAuditEvent) -> Result<(), AuditError> {

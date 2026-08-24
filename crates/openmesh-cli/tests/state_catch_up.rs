@@ -474,8 +474,8 @@ fn cli_state_and_catch_up_do_not_touch_tauri_or_desktop_surface() {
     let tauri_content = fs::read_to_string(&tauri_lib).expect("read tauri lib");
     assert_eq!(
         tauri_content.matches("#[tauri::command]").count(),
-        53,
-        "Tauri command count must remain 53 (get_host_os)"
+        56,
+        "Tauri command count must remain 56 (current desktop surface)"
     );
     for term in [
         "run_state",

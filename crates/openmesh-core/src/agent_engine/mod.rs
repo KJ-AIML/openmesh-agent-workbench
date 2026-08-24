@@ -18,13 +18,17 @@ pub mod turn_cancel;
 pub mod types;
 pub mod workspace_tools;
 
-pub use engine_loop::{
-    run_agent_turn, run_agent_turn_cancellable, run_agent_turn_with_progress, TurnProgressCallback,
-    TurnProgressEvent,
-};
 pub use chat_store::{
     load_chat_sessions, save_chat_sessions, ChatImportProvenance, StoredChatMessage,
     StoredChatSession,
+};
+pub use continue_ops::{
+    approve_handoff, create_handoff_draft, link_session, list_session_links, mesh_query,
+    pending_questions_json, record_delegate_launch, update_task, write_delegate_brief, SessionLink,
+};
+pub use engine_loop::{
+    run_agent_turn, run_agent_turn_cancellable, run_agent_turn_with_progress, TurnProgressCallback,
+    TurnProgressEvent,
 };
 pub use extensions::{
     build_skills_prompt_section, enrich_system_prompt, install_from_path, load_inventory,
@@ -38,34 +42,30 @@ pub use patch::{
     apply_patch, format_patch_summary, list_recent_runs, propose_patch_from_args, read_patch,
     reject_patch, rollback_patch, AgentRunRecord, PatchRecord, PatchStatus,
 };
-pub use recipes::{
-    cancel_recipe_run, ensure_default_recipes, get_recipe, list_recipes, run_recipe,
-    run_recipe_with_patch, suggest_verify_recipe, LogCallback,
-    Recipe, RecipeRunResult,
-};
-pub use continue_ops::{
-    approve_handoff, create_handoff_draft, link_session, list_session_links, mesh_query,
-    pending_questions_json, record_delegate_launch, update_task, write_delegate_brief, SessionLink,
-};
-pub use workspace_tools::WorkspaceToolExecutor;
 pub use provider::{
     build_request_body, parse_chat_completion, probe_provider, resolve_provider_kind,
     AssistantTurn, ChatProvider, OpenAiCompatibleProvider, ProviderConfig, ProviderProbeResult,
     ScriptedProvider,
 };
+pub use recipes::{
+    cancel_recipe_run, ensure_default_recipes, get_recipe, list_recipes, run_recipe,
+    run_recipe_with_patch, suggest_verify_recipe, LogCallback, Recipe, RecipeRunResult,
+};
 pub use registry::{
     act_tool_names, ask_tool_names, builtin_tool_specs, default_tool_names, delegate_tool_names,
     filter_tools, plan_tool_names, tools_for_mode, StubToolExecutor, ToolExecutor,
 };
-pub use turn_cancel::{cancel_turn, register_turn, remove_turn};
 pub use secrets::{
     AgentSecretStore, CascadingSecretStore, EnvSecretStore, FileSecretStore, MemorySecretStore,
 };
+pub use turn_cancel::{cancel_turn, register_turn, remove_turn};
 pub use types::{
     AgentDefinition, AgentEngineError, AgentProviderKind, AgentSession, ChatMessage, ChatRole,
+    EngineEndpointKind, EngineRouteMetadata, EngineRouteTransport, EngineTurnOutcome,
     EngineTurnResult, ToolCallRequest, ToolSpec, ToolStep, AGENT_ENGINE_PROTOCOL,
-    DEFAULT_MAX_TOOL_ITERATIONS, DEFAULT_MAX_TOOLS_PER_ITERATION, DEFAULT_SYSTEM_PROMPT,
+    DEFAULT_MAX_TOOLS_PER_ITERATION, DEFAULT_MAX_TOOL_ITERATIONS, DEFAULT_SYSTEM_PROMPT,
 };
+pub use workspace_tools::WorkspaceToolExecutor;
 
 #[cfg(test)]
 mod provider_parse_tests {
@@ -119,8 +119,7 @@ mod provider_parse_tests {
         assert_eq!(kind, AgentProviderKind::OpenAiCompatible);
         assert_eq!(base.as_deref(), Some("https://api.x.ai/v1"));
 
-        let (kind, base) =
-            resolve_provider_kind(Some("openai"), Some("https://example.com/v1"));
+        let (kind, base) = resolve_provider_kind(Some("openai"), Some("https://example.com/v1"));
         assert_eq!(kind, AgentProviderKind::OpenAiCompatible);
         assert_eq!(base.as_deref(), Some("https://example.com/v1"));
     }
@@ -135,9 +134,72 @@ mod provider_parse_tests {
         )
         .expect("probe returns structured result");
         assert!(!result.ok);
-        assert!(result.error.as_deref().unwrap_or("").contains("Coding Plan"));
+        assert!(result
+            .error
+            .as_deref()
+            .unwrap_or("")
+            .contains("Coding Plan"));
         assert_eq!(result.latency_ms, 0);
         assert!(result.reply_preview.is_none());
+    }
+
+    #[test]
+    fn route_metadata_is_safe_and_serializes_without_endpoint_details() {
+        let route = EngineRouteMetadata::for_selection(
+            AgentProviderKind::OpenAiCompatible,
+            Some("anthropic"),
+            false,
+            EngineTurnOutcome::Completed,
+        );
+        assert_eq!(route.transport, EngineRouteTransport::DirectProvider);
+        assert_eq!(route.provider_label, "OpenAI-compatible");
+        assert_eq!(route.endpoint_kind, EngineEndpointKind::ProviderDefault);
+        let json = serde_json::to_value(&route).unwrap();
+        assert_eq!(json["transport"], "direct-provider");
+        assert_eq!(json["providerLabel"], "OpenAI-compatible");
+        assert_eq!(json["endpointKind"], "provider-default");
+        assert!(serde_json::to_string(&json)
+            .unwrap()
+            .find("127.0.0.1")
+            .is_none());
+        assert!(serde_json::to_string(&json)
+            .unwrap()
+            .find("anthropic")
+            .is_none());
+
+        let direct = EngineRouteMetadata::for_selection(
+            AgentProviderKind::OpenAiCompatible,
+            Some("xai"),
+            false,
+            EngineTurnOutcome::Failed,
+        );
+        assert_eq!(direct.provider_label, "xAI");
+        assert_eq!(direct.endpoint_kind, EngineEndpointKind::ProviderDefault);
+        assert_eq!(
+            EngineTurnOutcome::from_error(Some("max_tools:9")),
+            EngineTurnOutcome::BudgetLimited
+        );
+        assert_eq!(
+            EngineTurnOutcome::from_error(Some("cancelled")),
+            EngineTurnOutcome::Cancelled
+        );
+    }
+
+    #[test]
+    fn provider_endpoints_reject_credentials_and_redact_display_values() {
+        let mut def = AgentDefinition::default_workspace_agent("model");
+        def.provider = AgentProviderKind::OpenAiCompatible;
+        def.base_url = Some("https://user:pass@example.com/v1?token=secret".into());
+        let error = ProviderConfig::from_definition(&def, "key").unwrap_err();
+        assert!(error.to_string().contains("must not contain credentials"));
+
+        def.base_url = Some("https://example.com/private/v1?secret=1".into());
+        let error = ProviderConfig::from_definition(&def, "key").unwrap_err();
+        assert!(error.to_string().contains("must not contain credentials"));
+
+        def.base_url = Some("file:///tmp/provider".into());
+        let error = ProviderConfig::from_definition(&def, "key").unwrap_err();
+        assert!(error.to_string().contains("must use http or https"));
     }
 
     #[test]

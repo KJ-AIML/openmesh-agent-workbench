@@ -18,10 +18,12 @@ vi.mock("@/lib/continuityClient", () => ({
   getTeamTrustPolicy: vi.fn(),
   initTeamWorkspace: vi.fn(),
   addTeamMember: vi.fn(),
+  removeTeamMember: vi.fn(),
   initTeamTrustPolicy: vi.fn(),
   setTeamTrustRemoteQuery: vi.fn(),
   setTeamTrustQueryMode: vi.fn(),
   addTeamTrustAllowlist: vi.fn(),
+  removeTeamTrustAllowlist: vi.fn(),
   listTeamTrustAudit: vi.fn(),
   listConnectors: vi.fn(),
   getOrgGraph: vi.fn(),
@@ -256,5 +258,136 @@ describe("ContinuityPage", () => {
 
     expect(getOnlineProxyStatus).toHaveBeenCalledWith("/tmp/test");
     expect(wrapper.text()).toContain("Initialize Continuity Proxy");
+  });
+
+  it("Peers tab shows LAN dogfood guide Peers → Team → Trust → LAN", async () => {
+    const wrapper = mount(ContinuityPage);
+    await flushPromises();
+
+    await wrapper
+      .findAll('[role="tab"]')
+      .find((b) => b.text().trim() === "Mesh")!
+      .trigger("click");
+    await nextTick();
+    await flushPromises();
+
+    const flow = wrapper.find('[aria-label="LAN dogfood steps"]');
+    expect(flow.exists()).toBe(true);
+    expect(flow.text()).toMatch(/Peers/);
+    expect(flow.text()).toMatch(/Team/);
+    expect(flow.text()).toMatch(/Trust/);
+    expect(flow.text()).toMatch(/LAN/);
+    expect(wrapper.text()).toMatch(/Trusted-LAN alpha/);
+    expect(wrapper.text()).toContain("No peers yet");
+  });
+
+  it("Team tab empty state offers Initialize team", async () => {
+    const wrapper = mount(ContinuityPage);
+    await flushPromises();
+
+    await wrapper
+      .findAll('[role="tab"]')
+      .find((b) => b.text().trim() === "Team")!
+      .trigger("click");
+    await nextTick();
+    // Group Team → first tab is Team (workspace)
+    await flushPromises();
+
+    expect(getTeamWorkspace).toHaveBeenCalledWith("/tmp/test");
+    expect(wrapper.text()).toContain("Initialize team");
+    expect(wrapper.text()).toMatch(/local team registry/i);
+  });
+
+  it("Trust tab without team routes to Team init", async () => {
+    const wrapper = mount(ContinuityPage);
+    await flushPromises();
+
+    await wrapper
+      .findAll('[role="tab"]')
+      .find((b) => b.text().trim() === "Team")!
+      .trigger("click");
+    await nextTick();
+    await wrapper
+      .findAll('[role="tab"]')
+      .find((b) => b.text().includes("Trust"))!
+      .trigger("click");
+    await flushPromises();
+    await nextTick();
+
+    expect(getTeamTrustPolicy).toHaveBeenCalledWith("/tmp/test");
+    expect(wrapper.text()).toContain("Team required first");
+    expect(wrapper.text()).toContain("Go to Team → Init");
+  });
+
+  it("Trust tab with policy shows allowlist controls and audit", async () => {
+    (getTeamWorkspace as any).mockResolvedValue({
+      protocolVersion: "1.0",
+      teamId: "team-p1",
+      displayName: "Lab",
+      hostWorkspaceId: "p1",
+      members: [
+        {
+          memberId: "owner-local",
+          label: "Test Project",
+          role: "owner",
+          joinedAt: "2026-08-06T01:00:00Z",
+        },
+      ],
+      createdAt: "2026-08-06T01:00:00Z",
+      updatedAt: "2026-08-06T01:00:00Z",
+      limitations: [],
+    });
+    (getTeamTrustPolicy as any).mockResolvedValue({
+      protocolVersion: "1.0",
+      teamId: "team-p1",
+      remoteQueryEnabled: true,
+      queryAllowlistMode: "allowlist-only",
+      queryAllowlist: [{ meshPeerId: "yo", addedAt: "2026-08-06T01:01:00Z" }],
+      secretTopicsFailClosed: true,
+      allowSecretExport: false,
+      syncRequireSelective: true,
+      adminMemberIds: ["owner-local"],
+      limitations: [],
+    });
+    (listTeamTrustAudit as any).mockResolvedValue([
+      {
+        eventId: "aud-1",
+        teamId: "team-p1",
+        actorMemberId: "owner-local",
+        action: "allowlist-add",
+        detail: "peer=Some(yo)",
+        at: "2026-08-06T01:01:00Z",
+      },
+    ]);
+    (listMeshPeers as any).mockResolvedValue([
+      {
+        peerId: "yo",
+        label: "Yo",
+        lanAddress: "127.0.0.1:41778",
+        createdAt: "2026-08-06T01:00:00Z",
+        updatedAt: "2026-08-06T01:00:00Z",
+      },
+    ]);
+
+    const wrapper = mount(ContinuityPage);
+    await flushPromises();
+
+    await wrapper
+      .findAll('[role="tab"]')
+      .find((b) => b.text().trim() === "Team")!
+      .trigger("click");
+    await nextTick();
+    await wrapper
+      .findAll('[role="tab"]')
+      .find((b) => b.text().includes("Trust"))!
+      .trigger("click");
+    await flushPromises();
+    await nextTick();
+
+    expect(wrapper.text()).toContain("Trust this peer on LAN");
+    expect(wrapper.text()).toContain("Trust this peer");
+    expect(wrapper.text()).toContain("allowlist-only");
+    expect(wrapper.text()).toContain("Admin audit");
+    expect(wrapper.text()).toMatch(/allowlist-add/);
   });
 });

@@ -52,7 +52,12 @@ fn pilot_check_before_team_not_ready() {
     .success());
     let out = run(&["pilot", "check", "--json"], &p);
     // exit 2 when not pilot_ready
-    assert_eq!(out.status.code(), Some(2), "{}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(
+        out.status.code(),
+        Some(2),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
     let pack: Value = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(pack["pilotReady"], false);
     assert!(pack["failCount"].as_u64().unwrap() >= 1);
@@ -77,7 +82,15 @@ fn pilot_check_with_team_and_trust_ready() {
     .status
     .success());
     assert!(run(
-        &["team", "init", "--name", "Pilot", "--owner-label", "Ter", "--json"],
+        &[
+            "team",
+            "init",
+            "--name",
+            "Pilot",
+            "--owner-label",
+            "Ter",
+            "--json"
+        ],
         &p,
     )
     .status

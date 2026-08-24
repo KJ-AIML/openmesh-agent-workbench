@@ -37,11 +37,7 @@ pub fn mode_allows(mode: AgentMode, action: &AppAction) -> bool {
 /// Whether dispatch may proceed given mode + confirm ticket.
 pub fn may_dispatch(mode: AgentMode, action: &AppAction, confirmed: bool) -> Result<(), String> {
     if !mode_allows(mode, action) {
-        return Err(format!(
-            "mode {:?} cannot run {}",
-            mode,
-            action.label()
-        ));
+        return Err(format!("mode {:?} cannot run {}", mode, action.label()));
     }
     let policy = action.confirmation_policy();
     match policy {

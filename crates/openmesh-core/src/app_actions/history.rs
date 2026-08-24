@@ -28,9 +28,7 @@ pub fn inverse_for(action: &AppAction) -> Option<AppAction> {
         AppAction::SetComposer { .. } => Some(AppAction::SetComposer {
             text: String::new(),
         }),
-        AppAction::SetMode { .. } => Some(AppAction::SetMode {
-            mode: "ask".into(),
-        }),
+        AppAction::SetMode { .. } => Some(AppAction::SetMode { mode: "ask".into() }),
         AppAction::OpenCanvas { .. } => Some(AppAction::Navigate {
             route: "/agent-chat".into(),
         }),

@@ -3,7 +3,7 @@ import { ref, computed, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useStore } from "../lib/useStore";
 import type { ScannedSession } from "../lib/adapters/types";
-import { scanConfiguredSessions } from "../lib/scanConfiguredSessions";
+import { scanConfiguredSessionsResult } from "../lib/scanConfiguredSessions";
 import { readForeignSessionTranscript } from "../lib/adapters/agentSessionAdapter";
 import {
   buildResumedChatSession,
@@ -124,12 +124,18 @@ async function handleScanSessions() {
   scanError.value = null;
 
   try {
-    const allScanned = await scanConfiguredSessions(
+    const scan = await scanConfiguredSessionsResult(
       settings.value.sessionDirs,
       100,
       workspaceCwd,
     );
+    if (!scan.ok) {
+      scannedSessions.value = [];
+      scanError.value = scan.error;
+      return;
+    }
 
+    const allScanned = scan.sessions;
     scannedSessions.value = allScanned;
     lastScanTime.value = new Date().toISOString();
 

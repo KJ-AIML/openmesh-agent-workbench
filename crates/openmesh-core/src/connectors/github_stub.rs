@@ -20,7 +20,9 @@ pub enum GithubStubError {
 ///
 /// Produces deterministic offline items derived from `external_ref` / connector id.
 /// Does **not** call GitHub network APIs and does **not** mutate any SoR.
-pub fn collect_github_stub(descriptor: &ConnectorDescriptor) -> Result<ConnectorRun, GithubStubError> {
+pub fn collect_github_stub(
+    descriptor: &ConnectorDescriptor,
+) -> Result<ConnectorRun, GithubStubError> {
     if !matches!(descriptor.kind, ConnectorKind::GithubStub) {
         return Err(GithubStubError::WrongKind);
     }

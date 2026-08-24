@@ -235,6 +235,12 @@ export type Settings = {
 		/** ISO-639-1 hint: en, th, … Empty = auto */
 		sttLanguage?: string;
 	};
+	oauth?: {
+		/** Legacy local proxy management port retained for settings migration. */
+		managementPort: number;
+		/** Legacy flag retained for settings migration; Agent Engine uses Provider settings. */
+		sidecarEnabled?: boolean;
+	};
 };
 
 export type AppState = {

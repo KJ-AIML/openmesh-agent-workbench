@@ -1,9 +1,7 @@
 //! Combined LAN serve: beacon advertiser + HTTP server lifecycle.
 
 use crate::lan::beacon::spawn_beacon_advertiser;
-use crate::lan::contract::{
-    LanBeacon, LanServeStatus, DEFAULT_UDP_PORT, LAN_PROTOCOL,
-};
+use crate::lan::contract::{LanBeacon, LanServeStatus, DEFAULT_UDP_PORT, LAN_PROTOCOL};
 use crate::lan::server::{bind_http_listener, spawn_http_server, LanHttpIdentity};
 use crate::profile::read_work_proxy_profile;
 use crate::storage::{get_project_dir, read_project, Project};
@@ -60,8 +58,8 @@ pub fn start_lan_serve(
     udp_port: u16,
     owner_label_override: Option<&str>,
 ) -> Result<LanServeHandle, LanServeError> {
-    let project: Project = read_project(project_path, "project.json")
-        .ok_or(LanServeError::ProjectNotInitialized)?;
+    let project: Project =
+        read_project(project_path, "project.json").ok_or(LanServeError::ProjectNotInitialized)?;
 
     {
         let guard = active_slot()
@@ -86,9 +84,8 @@ pub fn start_lan_serve(
     let started_at = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
 
     // preferred_http_port == 0 → bind ephemeral immediately; else try preferred then fallback.
-    let (listener, http_port) =
-        bind_http_listener(http_host, preferred_http_port)
-            .map_err(|e| LanServeError::Bind(e.to_string()))?;
+    let (listener, http_port) = bind_http_listener(http_host, preferred_http_port)
+        .map_err(|e| LanServeError::Bind(e.to_string()))?;
 
     let beacon = LanBeacon {
         protocol: LAN_PROTOCOL.into(),
@@ -229,9 +226,7 @@ fn reconcile_persisted_status(project_path: &str) -> Option<LanServeStatus> {
     }
     let mut cleared = status;
     cleared.running = false;
-    cleared.note = Some(
-        "Stale serve status cleared (no listener on recorded host:port)".into(),
-    );
+    cleared.note = Some("Stale serve status cleared (no listener on recorded host:port)".into());
     let _ = persist_status(project_path, &cleared);
     Some(cleared)
 }
@@ -270,7 +265,8 @@ fn persist_status(project_path: &str, status: &LanServeStatus) -> Result<(), Lan
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| LanServeError::Io(e.to_string()))?;
     }
-    let mut json = serde_json::to_string_pretty(status).map_err(|e| LanServeError::Io(e.to_string()))?;
+    let mut json =
+        serde_json::to_string_pretty(status).map_err(|e| LanServeError::Io(e.to_string()))?;
     json.push('\n');
     let temp = path.with_extension("tmp");
     {

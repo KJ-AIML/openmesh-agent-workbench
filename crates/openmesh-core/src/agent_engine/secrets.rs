@@ -10,7 +10,10 @@ pub trait AgentSecretStore: Send + Sync {
     fn set_api_key(&self, key: &str) -> Result<(), AgentEngineError>;
     fn clear_api_key(&self) -> Result<(), AgentEngineError>;
     fn is_configured(&self) -> Result<bool, AgentEngineError> {
-        Ok(self.get_api_key()?.map(|k| !k.trim().is_empty()).unwrap_or(false))
+        Ok(self
+            .get_api_key()?
+            .map(|k| !k.trim().is_empty())
+            .unwrap_or(false))
     }
 }
 
@@ -33,19 +36,29 @@ impl MemorySecretStore {
 
 impl AgentSecretStore for MemorySecretStore {
     fn get_api_key(&self) -> Result<Option<String>, AgentEngineError> {
-        Ok(self.key.lock().map_err(|e| AgentEngineError::Io(e.to_string()))?.clone())
+        Ok(self
+            .key
+            .lock()
+            .map_err(|e| AgentEngineError::Io(e.to_string()))?
+            .clone())
     }
 
     fn set_api_key(&self, key: &str) -> Result<(), AgentEngineError> {
         if key.trim().is_empty() {
             return Err(AgentEngineError::MissingApiKey);
         }
-        *self.key.lock().map_err(|e| AgentEngineError::Io(e.to_string()))? = Some(key.to_string());
+        *self
+            .key
+            .lock()
+            .map_err(|e| AgentEngineError::Io(e.to_string()))? = Some(key.to_string());
         Ok(())
     }
 
     fn clear_api_key(&self) -> Result<(), AgentEngineError> {
-        *self.key.lock().map_err(|e| AgentEngineError::Io(e.to_string()))? = None;
+        *self
+            .key
+            .lock()
+            .map_err(|e| AgentEngineError::Io(e.to_string()))? = None;
         Ok(())
     }
 }
@@ -56,7 +69,11 @@ pub struct EnvSecretStore;
 
 impl AgentSecretStore for EnvSecretStore {
     fn get_api_key(&self) -> Result<Option<String>, AgentEngineError> {
-        for var in ["OPENMESH_AGENT_API_KEY", "OPENAI_API_KEY", "DEEPSEEK_API_KEY"] {
+        for var in [
+            "OPENMESH_AGENT_API_KEY",
+            "OPENAI_API_KEY",
+            "DEEPSEEK_API_KEY",
+        ] {
             if let Ok(v) = std::env::var(var) {
                 if !v.trim().is_empty() {
                     return Ok(Some(v));
@@ -73,9 +90,7 @@ impl AgentSecretStore for EnvSecretStore {
     }
 
     fn clear_api_key(&self) -> Result<(), AgentEngineError> {
-        Err(AgentEngineError::Io(
-            "EnvSecretStore is read-only".into(),
-        ))
+        Err(AgentEngineError::Io("EnvSecretStore is read-only".into()))
     }
 }
 
@@ -111,7 +126,8 @@ impl AgentSecretStore for FileSecretStore {
         if !self.path.exists() {
             return Ok(None);
         }
-        let raw = fs::read_to_string(&self.path).map_err(|e| AgentEngineError::Io(e.to_string()))?;
+        let raw =
+            fs::read_to_string(&self.path).map_err(|e| AgentEngineError::Io(e.to_string()))?;
         let trimmed = raw.trim();
         if trimmed.is_empty() {
             Ok(None)
@@ -127,7 +143,8 @@ impl AgentSecretStore for FileSecretStore {
         if let Some(parent) = self.path.parent() {
             fs::create_dir_all(parent).map_err(|e| AgentEngineError::Io(e.to_string()))?;
         }
-        let mut f = fs::File::create(&self.path).map_err(|e| AgentEngineError::Io(e.to_string()))?;
+        let mut f =
+            fs::File::create(&self.path).map_err(|e| AgentEngineError::Io(e.to_string()))?;
         f.write_all(key.trim().as_bytes())
             .map_err(|e| AgentEngineError::Io(e.to_string()))?;
         #[cfg(unix)]

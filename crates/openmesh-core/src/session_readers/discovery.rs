@@ -44,21 +44,18 @@ pub fn normalize_tool(tool: &str) -> Option<&'static str> {
 
 /// Sensible default directory for each provider (may not exist yet).
 pub fn default_session_dir(tool: &str) -> Option<PathBuf> {
-    candidate_session_dirs(tool)
-        .into_iter()
-        .next()
-        .or_else(|| {
-            let home = dirs::home_dir()?;
-            match normalize_tool(tool)? {
-                "codex" => Some(home.join(".codex").join("sessions")),
-                "claude" => Some(home.join(".claude").join("projects")),
-                "opencode" => Some(home.join(".local").join("share").join("opencode")),
-                "cursor" => Some(home.join(".cursor").join("projects")),
-                "gemini" => Some(home.join(".gemini").join("tmp")),
-                "grok" => Some(home.join(".grok").join("sessions")),
-                _ => None,
-            }
-        })
+    candidate_session_dirs(tool).into_iter().next().or_else(|| {
+        let home = dirs::home_dir()?;
+        match normalize_tool(tool)? {
+            "codex" => Some(home.join(".codex").join("sessions")),
+            "claude" => Some(home.join(".claude").join("projects")),
+            "opencode" => Some(home.join(".local").join("share").join("opencode")),
+            "cursor" => Some(home.join(".cursor").join("projects")),
+            "gemini" => Some(home.join(".gemini").join("tmp")),
+            "grok" => Some(home.join(".grok").join("sessions")),
+            _ => None,
+        }
+    })
 }
 
 /// OS/env-aware candidate roots for a provider (first existing wins at detect time).
@@ -176,7 +173,9 @@ fn dir_exists(path: &Path) -> bool {
 ///
 /// Settings overrides win when the path exists; otherwise the first existing
 /// candidate from env/home/XDG/local-data is used. Missing providers are skipped.
-pub fn detect_provider_roots(overrides: Option<&SessionScanOverrides>) -> Vec<DetectedProviderRoot> {
+pub fn detect_provider_roots(
+    overrides: Option<&SessionScanOverrides>,
+) -> Vec<DetectedProviderRoot> {
     let empty = SessionScanOverrides::default();
     let overrides = overrides.unwrap_or(&empty);
     let tools = ["codex", "claude", "opencode", "cursor", "gemini", "grok"];
@@ -339,10 +338,12 @@ fn build_session(
         .and_then(|n| n.to_str())
         .unwrap_or("unknown")
         .to_string();
-    let session_id = hints
-        .session_id
-        .clone()
-        .unwrap_or_else(|| path.file_stem().and_then(|s| s.to_str()).unwrap_or(&file_name).to_string());
+    let session_id = hints.session_id.clone().unwrap_or_else(|| {
+        path.file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or(&file_name)
+            .to_string()
+    });
     let title = hints
         .title
         .clone()
@@ -371,9 +372,7 @@ trait SessionHintsExt {
 
 impl SessionHintsExt for SessionHints {
     fn summary_preview_or(&self, title: &str) -> Option<String> {
-        self.preview
-            .clone()
-            .or_else(|| Some(redact_secrets(title)))
+        self.preview.clone().or_else(|| Some(redact_secrets(title)))
     }
 }
 
@@ -473,7 +472,11 @@ fn newest_codex_state_db(home: &Path) -> Option<PathBuf> {
     best.map(|(_, p)| p)
 }
 
-fn scan_codex_sqlite(home: &Path, db_path: &Path, limit: usize) -> Option<Vec<ScannedForeignSession>> {
+fn scan_codex_sqlite(
+    home: &Path,
+    db_path: &Path,
+    limit: usize,
+) -> Option<Vec<ScannedForeignSession>> {
     let conn = rusqlite::Connection::open_with_flags(
         db_path,
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
@@ -631,9 +634,7 @@ fn scan_cursor(root: &Path, limit: usize) -> Vec<ScannedForeignSession> {
             // Prefer agent-transcripts/<uuid>/<uuid>.jsonl
             let parent = p.parent();
             let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("");
-            let in_transcripts = p
-                .components()
-                .any(|c| c.as_os_str() == "agent-transcripts");
+            let in_transcripts = p.components().any(|c| c.as_os_str() == "agent-transcripts");
             let not_subagent = !p.components().any(|c| c.as_os_str() == "subagents");
             in_transcripts
                 && not_subagent
@@ -1065,9 +1066,8 @@ mod tests {
         let dir = tempdir().unwrap();
         let nested = dir.path().join("2026/08/03");
         fs::create_dir_all(&nested).unwrap();
-        let path = nested.join(
-            "rollout-2026-08-03T00-00-00-019fc37f-b1eb-7303-b5a3-70a5d303d7de.jsonl",
-        );
+        let path =
+            nested.join("rollout-2026-08-03T00-00-00-019fc37f-b1eb-7303-b5a3-70a5d303d7de.jsonl");
         let mut f = fs::File::create(&path).unwrap();
         writeln!(
             f,
@@ -1118,13 +1118,9 @@ mod tests {
         )
         .unwrap();
 
-        let sessions = scan_agent_sessions(
-            "claude-code",
-            dir.path().to_str().unwrap(),
-            Some(10),
-            None,
-        )
-        .unwrap();
+        let sessions =
+            scan_agent_sessions("claude-code", dir.path().to_str().unwrap(), Some(10), None)
+                .unwrap();
         assert_eq!(sessions.len(), 1);
         assert_eq!(sessions[0].title, "Continue the PR");
         assert_eq!(sessions[0].project_hint.as_deref(), Some("/Users/me/demo"));
@@ -1209,7 +1205,11 @@ mod tests {
         // Subagent dump must be ignored
         let sub = transcript_dir.join("subagents");
         fs::create_dir_all(&sub).unwrap();
-        fs::write(sub.join(format!("{session_id}.jsonl")), "{\"role\":\"user\"}\n").unwrap();
+        fs::write(
+            sub.join(format!("{session_id}.jsonl")),
+            "{\"role\":\"user\"}\n",
+        )
+        .unwrap();
 
         let projects_root = dir.path().join("projects");
         let sessions = scan_agent_sessions(

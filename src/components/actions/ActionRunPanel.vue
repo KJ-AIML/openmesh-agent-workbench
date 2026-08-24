@@ -24,11 +24,11 @@ onMounted(() => {
 onUnmounted(() => unsub?.());
 
 const entries = computed(() => {
-  tick.value;
+  void tick.value;
   return listActionAudit(8);
 });
 const canUndo = computed(() => {
-  tick.value;
+  void tick.value;
   return !!peekUndoIntent();
 });
 </script>

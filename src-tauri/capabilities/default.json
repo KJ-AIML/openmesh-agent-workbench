@@ -30,7 +30,11 @@
         "$HOME/.ssh",
         "$HOME/.ssh/**",
         "$CONFIG/openmesh/agent-api-key",
-        "$HOME/.config/openmesh/agent-api-key"
+        "$CONFIG/openmesh/oauth-management-secret",
+        "$CONFIG/openmesh/oauth-sidecar-client-key",
+        "$HOME/.config/openmesh/agent-api-key",
+        "$HOME/.config/openmesh/oauth-management-secret",
+        "$HOME/.config/openmesh/oauth-sidecar-client-key"
       ]
     }
   ]

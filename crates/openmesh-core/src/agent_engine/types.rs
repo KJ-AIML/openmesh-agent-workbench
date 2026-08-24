@@ -123,6 +123,89 @@ pub struct ToolStep {
     pub summary: String,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum EngineRouteTransport {
+    DirectProvider,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum EngineEndpointKind {
+    ProviderDefault,
+    CustomCompatible,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum EngineTurnOutcome {
+    Completed,
+    Failed,
+    Cancelled,
+    BudgetLimited,
+}
+
+impl EngineTurnOutcome {
+    pub fn from_error(error: Option<&str>) -> Self {
+        match error {
+            None => Self::Completed,
+            Some("cancelled") => Self::Cancelled,
+            Some(value) if value.starts_with("max_iterations:") => Self::BudgetLimited,
+            Some(value) if value.starts_with("max_tools:") => Self::BudgetLimited,
+            Some(_) => Self::Failed,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct EngineRouteMetadata {
+    pub transport: EngineRouteTransport,
+    /// Safe transport/provider label; never a raw endpoint or OAuth account name.
+    pub provider_label: String,
+    pub endpoint_kind: EngineEndpointKind,
+    pub outcome: EngineTurnOutcome,
+}
+
+impl EngineRouteMetadata {
+    pub fn for_selection(
+        provider: AgentProviderKind,
+        provider_name: Option<&str>,
+        custom_base_url: bool,
+        outcome: EngineTurnOutcome,
+    ) -> Self {
+        let provider_label = if custom_base_url {
+            "Custom compatible"
+        } else {
+            match provider_name
+                .unwrap_or_default()
+                .trim()
+                .to_ascii_lowercase()
+                .as_str()
+            {
+                name if name.contains("deepseek") => "DeepSeek",
+                name if name.contains("xai") || name.contains("grok") => "xAI",
+                _ => match provider {
+                    AgentProviderKind::DeepSeek => "DeepSeek",
+                    AgentProviderKind::OpenAiCompatible => "OpenAI-compatible",
+                    AgentProviderKind::OpenAi => "OpenAI",
+                },
+            }
+        };
+
+        Self {
+            transport: EngineRouteTransport::DirectProvider,
+            provider_label: provider_label.into(),
+            endpoint_kind: if custom_base_url {
+                EngineEndpointKind::CustomCompatible
+            } else {
+                EngineEndpointKind::ProviderDefault
+            },
+            outcome,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct EngineTurnResult {
@@ -134,6 +217,8 @@ pub struct EngineTurnResult {
     pub refused: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub route: Option<EngineRouteMetadata>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

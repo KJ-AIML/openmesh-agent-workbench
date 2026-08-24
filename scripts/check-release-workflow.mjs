@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global process */
 /**
  * Fail if release.yml maps APPLE_* / WINDOWS_* secrets into env.
  *

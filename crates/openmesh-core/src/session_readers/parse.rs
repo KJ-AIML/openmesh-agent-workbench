@@ -319,7 +319,11 @@ pub fn parse_gemini_chat(path: &Path) -> SessionHints {
             if role != "user" && role != "user_message" {
                 continue;
             }
-            let text = content_text(msg.get("content").or_else(|| msg.get("text")).unwrap_or(msg));
+            let text = content_text(
+                msg.get("content")
+                    .or_else(|| msg.get("text"))
+                    .unwrap_or(msg),
+            );
             push_user_title(&mut hints, &text);
             if hints.title.is_some() {
                 break;
@@ -362,9 +366,7 @@ pub fn parse_grok_session(summary_path: &Path) -> SessionHints {
         }
     }
 
-    let history = summary_path
-        .parent()
-        .map(|p| p.join("chat_history.jsonl"));
+    let history = summary_path.parent().map(|p| p.join("chat_history.jsonl"));
     if let Some(history) = history {
         if history.is_file() {
             if let Ok(file) = File::open(&history) {
@@ -462,7 +464,9 @@ mod tests {
     #[test]
     fn parses_codex_meta_and_user() {
         let dir = tempdir().unwrap();
-        let path = dir.path().join("rollout-2026-08-03T00-00-00-019fc37f-b1eb-7303-b5a3-70a5d303d7de.jsonl");
+        let path = dir
+            .path()
+            .join("rollout-2026-08-03T00-00-00-019fc37f-b1eb-7303-b5a3-70a5d303d7de.jsonl");
         let mut f = std::fs::File::create(&path).unwrap();
         writeln!(
             f,

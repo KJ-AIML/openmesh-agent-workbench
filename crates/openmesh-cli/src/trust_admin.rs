@@ -3,8 +3,9 @@
 use chrono::Utc;
 use clap::{Args, Subcommand, ValueEnum};
 use openmesh_core::trust_admin::{
-    append_audit_event, init_trust_policy, list_audit_events, read_trust_policy, update_trust_policy,
-    AdminAuditEvent, AuditAction, QueryAllowEntry, QueryAllowlistMode, TrustAdminStorageError,
+    append_audit_event, init_trust_policy, list_audit_events, read_trust_policy,
+    update_trust_policy, AdminAuditEvent, AuditAction, QueryAllowEntry, QueryAllowlistMode,
+    TrustAdminStorageError,
 };
 use serde_json::json;
 use std::path::Path;
@@ -278,10 +279,7 @@ fn run_allow_add(args: &AllowlistAddArgs, cwd: &Path) -> i32 {
                 &p.team_id,
                 &args.actor,
                 AuditAction::AllowlistAdd,
-                &format!(
-                    "member={:?} peer={:?}",
-                    args.member_id, args.mesh_peer_id
-                ),
+                &format!("member={:?} peer={:?}", args.member_id, args.mesh_peer_id),
             );
             print_policy(&p, args.json);
             0
@@ -325,10 +323,7 @@ fn run_allow_remove(args: &AllowlistRemoveArgs, cwd: &Path) -> i32 {
                 &p.team_id,
                 &args.actor,
                 AuditAction::AllowlistRemove,
-                &format!(
-                    "member={:?} peer={:?}",
-                    args.member_id, args.mesh_peer_id
-                ),
+                &format!("member={:?} peer={:?}", args.member_id, args.mesh_peer_id),
             );
             print_policy(&p, args.json);
             0

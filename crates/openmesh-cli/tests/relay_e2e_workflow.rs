@@ -82,7 +82,11 @@ fn relay_pack_approve_send_receive_audit() {
         ],
         &a,
     );
-    assert!(export.status.success(), "{}", String::from_utf8_lossy(&export.stderr));
+    assert!(
+        export.status.success(),
+        "{}",
+        String::from_utf8_lossy(&export.stderr)
+    );
 
     let pack = run(
         &[
@@ -96,7 +100,11 @@ fn relay_pack_approve_send_receive_audit() {
         ],
         &a,
     );
-    assert!(pack.status.success(), "{}", String::from_utf8_lossy(&pack.stderr));
+    assert!(
+        pack.status.success(),
+        "{}",
+        String::from_utf8_lossy(&pack.stderr)
+    );
     assert!(a.join(".openmesh/relay/staging/pkg-relay-1.json").exists());
 
     // Unapproved send should fail
@@ -121,10 +129,22 @@ fn relay_pack_approve_send_receive_audit() {
     assert!(!bad_send.status.success());
 
     let approve = run(
-        &["relay", "approve", "--id", "pkg-relay-1", "--by", "ter", "--json"],
+        &[
+            "relay",
+            "approve",
+            "--id",
+            "pkg-relay-1",
+            "--by",
+            "ter",
+            "--json",
+        ],
         &a,
     );
-    assert!(approve.status.success(), "{}", String::from_utf8_lossy(&approve.stderr));
+    assert!(
+        approve.status.success(),
+        "{}",
+        String::from_utf8_lossy(&approve.stderr)
+    );
     assert!(a.join(".openmesh/relay/approved/pkg-relay-1.json").exists());
 
     let send = run(
@@ -139,7 +159,11 @@ fn relay_pack_approve_send_receive_audit() {
         ],
         &a,
     );
-    assert!(send.status.success(), "{}", String::from_utf8_lossy(&send.stderr));
+    assert!(
+        send.status.success(),
+        "{}",
+        String::from_utf8_lossy(&send.stderr)
+    );
     assert!(relay_root.join("drop/pkg-relay-1.json").exists());
     assert!(a.join(".openmesh/relay/sent/pkg-relay-1.json").exists());
 
@@ -155,7 +179,11 @@ fn relay_pack_approve_send_receive_audit() {
         ],
         &b,
     );
-    assert!(recv.status.success(), "{}", String::from_utf8_lossy(&recv.stderr));
+    assert!(
+        recv.status.success(),
+        "{}",
+        String::from_utf8_lossy(&recv.stderr)
+    );
     assert!(b.join(".openmesh/relay/received/pkg-relay-1.json").exists());
 
     let audit = run(&["relay", "audit", "--json"], &a);

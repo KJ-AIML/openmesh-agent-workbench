@@ -88,19 +88,22 @@ fn static_runbook() -> Vec<RunbookStep> {
         RunbookStep {
             id: "r-trust".into(),
             title: "Initialize trust/privacy policy".into(),
-            command_or_action: "trust-admin init && trust-admin set-query-mode --mode allowlist-only".into(),
+            command_or_action:
+                "trust-admin init && trust-admin set-query-mode --mode allowlist-only".into(),
             purpose: "Fail-closed secrets + controlled remote query".into(),
         },
         RunbookStep {
             id: "r-cloud".into(),
             title: "Optional team cloud scaffold".into(),
-            command_or_action: "team cloud init --mode local-sim && team cloud sync-scaffold".into(),
+            command_or_action: "team cloud init --mode local-sim && team cloud sync-scaffold"
+                .into(),
             purpose: "Selective sync dry-run only".into(),
         },
         RunbookStep {
             id: "r-connector".into(),
             title: "Optional evidence connector".into(),
-            command_or_action: "connector register --id gh-lab --kind github-stub --ref org/repo".into(),
+            command_or_action: "connector register --id gh-lab --kind github-stub --ref org/repo"
+                .into(),
             purpose: "Evidence producer only — not SoR".into(),
         },
         RunbookStep {

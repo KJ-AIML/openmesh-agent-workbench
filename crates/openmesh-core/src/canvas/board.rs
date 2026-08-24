@@ -61,7 +61,9 @@ pub fn sanitize_board_id(id: &str) -> Result<String, BoardError> {
         return Err(BoardError::Invalid("id is required".into()));
     }
     if trimmed.contains("..") || trimmed.contains('/') || trimmed.contains('\\') {
-        return Err(BoardError::Invalid("id must not contain path segments".into()));
+        return Err(BoardError::Invalid(
+            "id must not contain path segments".into(),
+        ));
     }
     let safe: String = trimmed
         .chars()
@@ -127,7 +129,8 @@ pub fn parse_board_document(value: &Value) -> Result<BoardDocument, BoardError> 
     if !doc.scene.is_object() {
         return Err(BoardError::Invalid("scene must be a JSON object".into()));
     }
-    let scene_bytes = serde_json::to_vec(&doc.scene).map_err(|e| BoardError::Invalid(e.to_string()))?;
+    let scene_bytes =
+        serde_json::to_vec(&doc.scene).map_err(|e| BoardError::Invalid(e.to_string()))?;
     if scene_bytes.len() > MAX_SCENE_JSON_BYTES {
         return Err(BoardError::Invalid(format!(
             "scene too large (max {MAX_SCENE_JSON_BYTES} bytes)"
@@ -195,8 +198,7 @@ pub fn upsert_board(project_path: &Path, value: &Value) -> Result<BoardDocument,
     let path = board_file(project_path, &doc.id)?;
     let dir = boards_dir(project_path);
     fs::create_dir_all(&dir).map_err(|e| BoardError::Io(e.to_string()))?;
-    let raw =
-        serde_json::to_string_pretty(&doc).map_err(|e| BoardError::Invalid(e.to_string()))?;
+    let raw = serde_json::to_string_pretty(&doc).map_err(|e| BoardError::Invalid(e.to_string()))?;
     fs::write(&path, raw).map_err(|e| BoardError::Io(e.to_string()))?;
     Ok(doc)
 }
@@ -223,10 +225,7 @@ fn element_id() -> String {
     format!("el-{}", now_ms())
 }
 
-fn resolve_board(
-    project_path: &Path,
-    board_id: Option<&str>,
-) -> Result<BoardDocument, BoardError> {
+fn resolve_board(project_path: &Path, board_id: Option<&str>) -> Result<BoardDocument, BoardError> {
     if let Some(id) = board_id.map(str::trim).filter(|s| !s.is_empty()) {
         return load_board(project_path, id);
     }
@@ -316,7 +315,10 @@ fn find_text_element<'a>(elements: &'a [Value], label: &str) -> Option<&'a Value
             && el
                 .get("text")
                 .and_then(|t| t.as_str())
-                .map(|t| t.trim().to_ascii_lowercase() == needle || t.to_ascii_lowercase().contains(&needle))
+                .map(|t| {
+                    t.trim().to_ascii_lowercase() == needle
+                        || t.to_ascii_lowercase().contains(&needle)
+                })
                 .unwrap_or(false)
             && el.get("isDeleted").and_then(|d| d.as_bool()) != Some(true)
     })
@@ -332,7 +334,9 @@ pub fn board_connect(
     let from_label = from_label.trim();
     let to_label = to_label.trim();
     if from_label.is_empty() || to_label.is_empty() {
-        return Err(BoardError::Invalid("from and to labels are required".into()));
+        return Err(BoardError::Invalid(
+            "from and to labels are required".into(),
+        ));
     }
     let mut doc = resolve_board(project_path, board_id)?;
     let elements = scene_elements_mut(&mut doc)?;

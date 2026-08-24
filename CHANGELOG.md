@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.40] - 2026-08-24
+
+### Added
+- OpenMesh-owned built-in proxy runtime shared by the Tauri desktop app and standalone CLI.
+- OpenAI-compatible chat, Responses, models, embeddings, Claude messages, Gemini translation, streaming, aliases, fallback routing, account priority, and management APIs.
+- Native OpenMesh OAuth foundations for Codex, Claude, Antigravity, Grok, and Kimi with encrypted OS credential-manager storage and refresh handling.
+- Proxy provider/account management, usage analytics, quota-status surfaces, provider capability UI, and browser/E2E coverage.
+
+### Changed
+- Removed runtime dependence on EasyCLI/CLIProxyAPI processes; legacy sidecar-shaped fields remain only as migration compatibility data.
+- Added Tauri desktop lifecycle integration and standalone `openmesh-cli proxy serve` / `proxy auth` commands.
+
+### Documentation
+- Added the built-in proxy parity matrix and explicit deferred-provider/security limitations.
+
 ## [0.1.30] - 2026-08-06
 
 ### Added

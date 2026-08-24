@@ -2,23 +2,49 @@
 
 use openmesh_core::agent_engine::{
     apply_patch, cancel_recipe_run, cancel_turn, enrich_system_prompt, format_patch_summary,
-    get_recipe, list_recipes, list_recent_runs, load_chat_sessions, load_inventory, probe_provider,
+    get_recipe, list_recent_runs, list_recipes, load_chat_sessions, load_inventory, probe_provider,
     read_patch, record_delegate_launch, register_turn, reject_patch, remove_turn,
     resolve_provider_kind, rollback_patch, run_agent_turn_with_progress, run_recipe_with_patch,
     save_chat_sessions, suggest_verify_recipe, tools_for_mode, write_delegate_brief,
-    AgentDefinition, AgentSecretStore, AgentSession, CascadingSecretStore, ChatMessage, ChatRole,
-    EngineTurnResult, LogCallback, OpenAiCompatibleProvider, PatchRecord, ProviderConfig,
-    ProviderProbeResult, Recipe, RecipeRunResult, StoredChatSession, ToolExecutor,
-    TurnProgressCallback, TurnProgressEvent, WorkspaceToolExecutor,
+    AgentDefinition, AgentProviderKind, AgentSecretStore, AgentSession, CascadingSecretStore,
+    ChatMessage, ChatRole, EngineRouteMetadata, EngineTurnOutcome, EngineTurnResult, LogCallback,
+    OpenAiCompatibleProvider, PatchRecord, ProviderConfig, ProviderProbeResult, Recipe,
+    RecipeRunResult, StoredChatSession, ToolExecutor, TurnProgressCallback, TurnProgressEvent,
+    WorkspaceToolExecutor,
 };
 use openmesh_core::storage::{default_settings, read_global, Settings};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::Arc;
+use std::time::Instant;
 use tauri::Emitter;
 
 fn secrets() -> CascadingSecretStore {
     CascadingSecretStore::default()
+}
+
+fn failed_turn_result(
+    model: String,
+    provider: AgentProviderKind,
+    provider_name: Option<&str>,
+    custom_base_url: bool,
+) -> EngineTurnResult {
+    EngineTurnResult {
+        assistant_text:
+            "Agent Engine request failed. Check Settings → Provider or OAuth Connections.".into(),
+        tool_steps: vec![],
+        iterations: 0,
+        model,
+        provider: format!("{provider:?}"),
+        refused: false,
+        error: Some("provider_request_failed".into()),
+        route: Some(EngineRouteMetadata::for_selection(
+            provider,
+            provider_name,
+            custom_base_url,
+            EngineTurnOutcome::Failed,
+        )),
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -68,6 +94,11 @@ pub struct AgentProviderTestRequest {
 fn agent_provider_test_blocking(
     request: AgentProviderTestRequest,
 ) -> Result<ProviderProbeResult, String> {
+    let model = request
+        .model
+        .filter(|m| !m.trim().is_empty())
+        .unwrap_or_else(|| "gpt-4o-mini".into());
+
     let store = secrets();
     let api_key = request
         .api_key
@@ -77,11 +108,6 @@ fn agent_provider_test_blocking(
         .ok_or_else(|| {
             "No API key. Enter a key above (or Save Key first), then Test connection.".to_string()
         })?;
-
-    let model = request
-        .model
-        .filter(|m| !m.trim().is_empty())
-        .unwrap_or_else(|| "gpt-4o-mini".into());
 
     probe_provider(
         &api_key,
@@ -136,13 +162,7 @@ fn agent_engine_turn_blocking(
     project_path: String,
     request: AgentEngineTurnRequest,
 ) -> Result<EngineTurnResult, String> {
-    let store = secrets();
-    let api_key = store
-        .get_api_key()
-        .map_err(|e| e.to_string())?
-        .filter(|k| !k.trim().is_empty())
-        .ok_or_else(|| "API key not configured. Save a key in Settings.".to_string())?;
-
+    let settings = read_global::<Settings>("settings.json").unwrap_or_else(default_settings);
     let model = request
         .model
         .filter(|m| !m.trim().is_empty())
@@ -152,6 +172,16 @@ fn agent_engine_turn_blocking(
         request.provider_name.as_deref(),
         request.base_url.as_deref(),
     );
+    let custom_base_url = request
+        .base_url
+        .as_deref()
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false);
+    let api_key = secrets()
+        .get_api_key()
+        .map_err(|e| e.to_string())?
+        .filter(|k| !k.trim().is_empty())
+        .ok_or_else(|| "API key not configured. Save a key in Settings.".to_string())?;
 
     let mut def = AgentDefinition::default_workspace_agent(&model);
     def.provider = provider;
@@ -188,9 +218,7 @@ fn agent_engine_turn_blocking(
     };
 
     // Inject enabled skills + declarative hooks into the system prompt.
-    let ext_settings = read_global::<Settings>("settings.json")
-        .unwrap_or_else(default_settings)
-        .extensions;
+    let ext_settings = settings.extensions;
     let inventory = load_inventory(Some(&project_path), &ext_settings);
     let is_new_chat = !session
         .messages
@@ -247,6 +275,7 @@ fn agent_engine_turn_blocking(
         };
         let _ = app_progress.emit("agent-turn-progress", payload);
     });
+    let turn_start = Instant::now();
     let result = run_agent_turn_with_progress(
         &def,
         &mut session,
@@ -257,7 +286,44 @@ fn agent_engine_turn_blocking(
         Some(on_progress),
     );
     remove_turn(&turn_id);
-    result.map_err(|e| e.to_string())
+    let turn_duration_ms = turn_start.elapsed().as_millis() as u64;
+    let mut result = match result {
+        Ok(value) => value,
+        Err(_) => {
+            return Ok(failed_turn_result(
+                model,
+                provider,
+                request.provider_name.as_deref(),
+                custom_base_url,
+            ));
+        }
+    };
+    let outcome = EngineTurnOutcome::from_error(result.error.as_deref());
+    result.route = Some(EngineRouteMetadata::for_selection(
+        provider,
+        request.provider_name.as_deref(),
+        custom_base_url,
+        outcome,
+    ));
+
+    // Record the turn in the local usage database (best-effort).
+    let _ = crate::usage_tracking::init_usage_db().and_then(|_| {
+        crate::usage_tracking::record_agent_turn(crate::usage_tracking::AgentTurnRecord {
+            id: turn_id.clone(),
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            project_path: Some(project_path.clone()),
+            provider: result.provider.clone(),
+            model: result.model.clone(),
+            duration_ms: turn_duration_ms,
+            input_tokens: 0,
+            output_tokens: 0,
+            total_tokens: 0,
+            outcome: format!("{:?}", outcome),
+            error_message: result.error.clone(),
+        })
+    });
+
+    Ok(result)
 }
 
 #[tauri::command]
@@ -350,14 +416,20 @@ pub async fn agent_workspace_tool(
 }
 
 #[tauri::command]
-pub async fn agent_patch_get(project_path: String, patch_id: String) -> Result<PatchRecord, String> {
+pub async fn agent_patch_get(
+    project_path: String,
+    patch_id: String,
+) -> Result<PatchRecord, String> {
     tauri::async_runtime::spawn_blocking(move || read_patch(&project_path, &patch_id))
         .await
         .map_err(|e| format!("patch get failed to join: {e}"))?
 }
 
 #[tauri::command]
-pub async fn agent_patch_apply(project_path: String, patch_id: String) -> Result<PatchRecord, String> {
+pub async fn agent_patch_apply(
+    project_path: String,
+    patch_id: String,
+) -> Result<PatchRecord, String> {
     tauri::async_runtime::spawn_blocking(move || apply_patch(&project_path, &patch_id))
         .await
         .map_err(|e| format!("patch apply failed to join: {e}"))?
@@ -384,10 +456,7 @@ pub async fn agent_patch_rollback(
 }
 
 #[tauri::command]
-pub async fn agent_patch_summary(
-    project_path: String,
-    patch_id: String,
-) -> Result<String, String> {
+pub async fn agent_patch_summary(project_path: String, patch_id: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let patch = read_patch(&project_path, &patch_id)?;
         Ok(format_patch_summary(&patch))
@@ -530,9 +599,11 @@ pub async fn agent_runs_recent(
     project_path: String,
     limit: Option<usize>,
 ) -> Result<Vec<openmesh_core::agent_engine::AgentRunRecord>, String> {
-    tauri::async_runtime::spawn_blocking(move || list_recent_runs(&project_path, limit.unwrap_or(10)))
-        .await
-        .map_err(|e| format!("runs list failed to join: {e}"))?
+    tauri::async_runtime::spawn_blocking(move || {
+        list_recent_runs(&project_path, limit.unwrap_or(10))
+    })
+    .await
+    .map_err(|e| format!("runs list failed to join: {e}"))?
 }
 
 #[tauri::command]

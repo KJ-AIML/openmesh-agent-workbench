@@ -65,7 +65,9 @@ fn mesh_export_cli_writes_outbox_json() {
             "work.completed",
             "Mesh export ready",
             vec![EvidenceAttachment {
-                evidence_ref: EvidenceRef::FilePath("docs/development/openmesh-0.1.10-execution-plan.md".into()),
+                evidence_ref: EvidenceRef::FilePath(
+                    "docs/development/openmesh-0.1.10-execution-plan.md".into(),
+                ),
                 observed_at: None,
             }],
             "2026-08-02T12:00:00Z",
@@ -74,10 +76,16 @@ fn mesh_export_cli_writes_outbox_json() {
     .expect("event");
 
     let peer = run(
-        &["mesh", "peer", "add", "--label", "Yo", "--id", "yo", "--json"],
+        &[
+            "mesh", "peer", "add", "--label", "Yo", "--id", "yo", "--json",
+        ],
         &project,
     );
-    assert!(peer.status.success(), "{}", String::from_utf8_lossy(&peer.stderr));
+    assert!(
+        peer.status.success(),
+        "{}",
+        String::from_utf8_lossy(&peer.stderr)
+    );
 
     let export = run(
         &[

@@ -80,6 +80,10 @@ function defaultSettings(): Settings {
 			sttModel: "openai/whisper-large-v3",
 			sttLanguage: "",
 		},
+		oauth: {
+			managementPort: 8317,
+			sidecarEnabled: false,
+		},
 	};
 }
 

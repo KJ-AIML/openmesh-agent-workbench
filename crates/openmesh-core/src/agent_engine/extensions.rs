@@ -31,7 +31,9 @@ pub fn project_skills_dir(project_path: &str) -> PathBuf {
 }
 
 pub fn project_plugins_dir(project_path: &str) -> PathBuf {
-    PathBuf::from(project_path).join(".openmesh").join("plugins")
+    PathBuf::from(project_path)
+        .join(".openmesh")
+        .join("plugins")
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -401,7 +403,10 @@ fn scan_skills_root(root: &Path, source: ExtensionSource) -> Vec<SkillPack> {
     out
 }
 
-fn load_plugin_dir(dir: &Path, source: ExtensionSource) -> Result<Option<(PluginRecord, Vec<SkillPack>, Vec<HookDefinition>)>, ExtensionError> {
+fn load_plugin_dir(
+    dir: &Path,
+    source: ExtensionSource,
+) -> Result<Option<(PluginRecord, Vec<SkillPack>, Vec<HookDefinition>)>, ExtensionError> {
     let manifest_path = dir.join("openmesh.plugin.json");
     if !manifest_path.is_file() {
         return Ok(None);
@@ -412,7 +417,8 @@ fn load_plugin_dir(dir: &Path, source: ExtensionSource) -> Result<Option<(Plugin
     let mut skills = Vec::new();
     for rel in &manifest.skills {
         let skill_path = dir.join(rel);
-        if let Some(skill) = load_skill_dir(&skill_path, ExtensionSource::Plugin, Some(&manifest.id))?
+        if let Some(skill) =
+            load_skill_dir(&skill_path, ExtensionSource::Plugin, Some(&manifest.id))?
         {
             skills.push(skill);
         }
@@ -448,7 +454,10 @@ fn load_plugin_dir(dir: &Path, source: ExtensionSource) -> Result<Option<(Plugin
     Ok(Some((record, skills, hooks)))
 }
 
-fn scan_plugins_root(root: &Path, source: ExtensionSource) -> (Vec<PluginRecord>, Vec<SkillPack>, Vec<HookDefinition>) {
+fn scan_plugins_root(
+    root: &Path,
+    source: ExtensionSource,
+) -> (Vec<PluginRecord>, Vec<SkillPack>, Vec<HookDefinition>) {
     let mut plugins = Vec::new();
     let mut skills = Vec::new();
     let mut hooks = Vec::new();
@@ -546,9 +555,7 @@ pub fn build_skills_prompt_section(skills: &[SkillPack]) -> String {
         return String::new();
     }
     let mut out = String::from("\n\n## Enabled OpenMesh Skills\n");
-    out.push_str(
-        "Follow these skill packs when relevant. They are user-enabled extensions.\n",
-    );
+    out.push_str("Follow these skill packs when relevant. They are user-enabled extensions.\n");
     for s in enabled {
         out.push_str("\n### ");
         out.push_str(&s.name);
@@ -772,7 +779,11 @@ Body text.
         let mut settings = ExtensionsSettings::default();
         settings.set_skill("openmesh-voice", false);
         let inv = load_inventory(None, &settings);
-        let voice = inv.skills.iter().find(|s| s.id == "openmesh-voice").unwrap();
+        let voice = inv
+            .skills
+            .iter()
+            .find(|s| s.id == "openmesh-voice")
+            .unwrap();
         assert!(!voice.enabled);
         let concise = inv
             .skills

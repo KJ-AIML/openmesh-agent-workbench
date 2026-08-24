@@ -84,7 +84,11 @@ fn two_person_mesh_peer_export_import_list_show() {
         ],
         &ter,
     );
-    assert!(export.status.success(), "{}", String::from_utf8_lossy(&export.stderr));
+    assert!(
+        export.status.success(),
+        "{}",
+        String::from_utf8_lossy(&export.stderr)
+    );
     let outbox = ter.join(".openmesh/mesh/outbox/env-e2e-1.json");
     assert!(outbox.exists());
 
@@ -99,7 +103,11 @@ fn two_person_mesh_peer_export_import_list_show() {
         ],
         &yo,
     );
-    assert!(import.status.success(), "{}", String::from_utf8_lossy(&import.stderr));
+    assert!(
+        import.status.success(),
+        "{}",
+        String::from_utf8_lossy(&import.stderr)
+    );
     assert!(yo.join(".openmesh/mesh/inbox/env-e2e-1.json").exists());
 
     let list = run(&["mesh", "list", "--mailbox", "inbox", "--json"], &yo);
@@ -111,7 +119,15 @@ fn two_person_mesh_peer_export_import_list_show() {
     assert_eq!(arr[0]["attributedTo"], "local"); // Ter's default from-label without profile
 
     let show = run(
-        &["mesh", "show", "--id", "env-e2e-1", "--mailbox", "inbox", "--json"],
+        &[
+            "mesh",
+            "show",
+            "--id",
+            "env-e2e-1",
+            "--mailbox",
+            "inbox",
+            "--json",
+        ],
         &yo,
     );
     assert!(show.status.success());

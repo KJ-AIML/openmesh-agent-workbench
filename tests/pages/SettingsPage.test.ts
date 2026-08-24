@@ -4,6 +4,36 @@ import { nextTick, ref } from "vue";
 
 const mockQuery = ref<Record<string, string>>({});
 const mockReplace = vi.fn();
+const mockOAuth = vi.hoisted(() => ({
+  clearOAuthSidecarClientKey: vi.fn().mockResolvedValue({}),
+  getOAuthConfigStatus: vi.fn().mockResolvedValue({
+    managementPort: 8317,
+    endpoint: "http://127.0.0.1:8317/v0/management/",
+    dataPlaneEndpoint: "http://127.0.0.1:8317/v1",
+    sidecarEnabled: false,
+    secretConfigured: false,
+    sidecarClientKeyConfigured: false,
+  }),
+  setOAuthManagementPort: vi.fn().mockResolvedValue({}),
+  setOAuthSidecarClientKey: vi.fn().mockResolvedValue({}),
+  setOAuthSidecarEnabled: vi.fn().mockResolvedValue({}),
+}));
+const mockBuiltInProxy = vi.hoisted(() => ({
+  getBuiltInProxyStatus: vi.fn().mockResolvedValue({
+    ownership: "built-in",
+    mode: "managed",
+    running: false,
+    bindHost: "127.0.0.1",
+    port: 8317,
+    endpoint: null,
+    apiKeyConfigured: false,
+    upstreamCount: 0,
+    modelCount: 0,
+    error: null,
+  }),
+  startBuiltInProxyFromSettings: vi.fn().mockResolvedValue({ running: true }),
+  stopBuiltInProxy: vi.fn().mockResolvedValue({ running: false }),
+}));
 
 vi.mock("vue-router", () => ({
   useRoute: () => ({
@@ -21,9 +51,13 @@ vi.mock("@/lib/adapters/fileSystemAdapter", () => ({
 
 vi.mock("@/lib/agentEngineClient", () => ({
   clearAgentSecret: vi.fn(),
+  getAgentSecretStatus: vi.fn().mockResolvedValue({ configured: false, store: "/tmp/mock" }),
   setAgentSecret: vi.fn(),
   testAgentProvider: vi.fn(),
 }));
+
+vi.mock("@/lib/oauthClient", () => mockOAuth);
+vi.mock("@/lib/builtinProxyClient", () => mockBuiltInProxy);
 
 vi.mock("@/lib/adapters/environment", () => ({
   getRuntimeKind: () => "web",
@@ -107,6 +141,7 @@ const mockStore = {
       },
     },
     extensions: { skills: {}, hooks: {}, plugins: {} },
+    oauth: { managementPort: 8317, sidecarEnabled: false },
   } as any),
   saveSettings: vi.fn().mockResolvedValue(undefined),
   resetAll: vi.fn(),
@@ -133,6 +168,18 @@ import SettingsPage from "@/pages/SettingsPage.vue";
 describe("SettingsPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockBuiltInProxy.getBuiltInProxyStatus.mockResolvedValue({
+      ownership: "built-in",
+      mode: "managed",
+      running: false,
+      bindHost: "127.0.0.1",
+      port: 8317,
+      endpoint: null,
+      apiKeyConfigured: false,
+      upstreamCount: 0,
+      modelCount: 0,
+      error: null,
+    });
     mockQuery.value = {};
   });
 
@@ -154,6 +201,33 @@ describe("SettingsPage", () => {
     expect(wrapper.text()).toContain("Provider & Models");
     expect(wrapper.text()).toContain("Provider Name");
     expect(wrapper.text()).toContain("Save Provider & Models");
+  });
+
+  it("Server section exposes the OpenMesh-owned built-in proxy controls", async () => {
+    mockQuery.value = { section: "server" };
+    const wrapper = mount(SettingsPage);
+    await flushPromises();
+    await nextTick();
+
+    expect(wrapper.text()).toContain("OpenMesh Built-in Proxy");
+    expect(wrapper.text()).toContain("Start proxy");
+    expect(wrapper.text()).not.toContain("CLIProxyAPI Sidecar");
+    expect(wrapper.text()).not.toContain("Sidecar Client API Key");
+  });
+
+  it("saves the built-in proxy port without persisting a client key", async () => {
+    mockQuery.value = { section: "server" };
+    const wrapper = mount(SettingsPage);
+    await flushPromises();
+    await nextTick();
+
+    const port = wrapper.find('input[type="number"]');
+    await port.setValue(9001);
+    await wrapper.findAll("button").find((button) => button.text().includes("Save Built-in Proxy Settings"))!.trigger("click");
+    await flushPromises();
+
+    const payload = mockStore.saveSettings.mock.calls.at(-1)?.[0];
+    expect(payload?.oauth).toEqual({ managementPort: 9001, sidecarEnabled: false });
   });
 
   it("Extensions section shows skills/hooks tabs", async () => {

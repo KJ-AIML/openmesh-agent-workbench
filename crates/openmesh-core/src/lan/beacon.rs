@@ -98,7 +98,9 @@ pub fn listen_beacons(
                     merge_peer(table, &beacon, &host, &now);
                 }
             }
-            Err(e) if e.kind() == io::ErrorKind::WouldBlock || e.kind() == io::ErrorKind::TimedOut => {
+            Err(e)
+                if e.kind() == io::ErrorKind::WouldBlock || e.kind() == io::ErrorKind::TimedOut =>
+            {
                 continue;
             }
             Err(e) => return Err(BeaconListenError::Io(e)),

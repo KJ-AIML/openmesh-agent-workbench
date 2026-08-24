@@ -85,6 +85,7 @@ pub fn run_agent_turn_with_progress(
                 provider: format!("{:?}", def.provider),
                 refused: false,
                 error: Some("cancelled".into()),
+                route: None,
             });
         }
 
@@ -102,6 +103,7 @@ pub fn run_agent_turn_with_progress(
                 provider: format!("{:?}", def.provider),
                 refused: false,
                 error: Some(format!("max_iterations:{}", def.max_tool_iterations)),
+                route: None,
             });
         }
 
@@ -128,6 +130,7 @@ pub fn run_agent_turn_with_progress(
                 provider: format!("{:?}", def.provider),
                 refused: false,
                 error: None,
+                route: None,
             });
         }
 
@@ -161,6 +164,7 @@ pub fn run_agent_turn_with_progress(
                     provider: format!("{:?}", def.provider),
                     refused: false,
                     error: Some("cancelled".into()),
+                    route: None,
                 });
             }
             if let Some(cb) = on_progress.as_ref() {
@@ -235,6 +239,7 @@ pub fn run_agent_turn_with_progress(
                 provider: format!("{:?}", def.provider),
                 refused: false,
                 error: Some(format!("max_tools:{hard_cap}")),
+                route: None,
             });
         }
     }
@@ -343,9 +348,7 @@ mod tests {
                 TurnProgressEvent::ToolStart { tool_name, .. } => {
                     lock.push(format!("start:{tool_name}"));
                 }
-                TurnProgressEvent::ToolDone {
-                    tool_name, ok, ..
-                } => {
+                TurnProgressEvent::ToolDone { tool_name, ok, .. } => {
                     lock.push(format!("done:{tool_name}:{ok}"));
                 }
             }

@@ -9,8 +9,8 @@ use crate::handoff::{list_handoff_ids, HandoffStorageError};
 use crate::mesh::contract::{
     validate_envelope_id_for_storage, validate_mesh_envelope, MeshEnvelope, MeshEvidenceItem,
     MeshEvidenceSourceKind, MeshPeerRef, MeshSensitivityMax, MeshValidationError,
-    MESH_ENVELOPE_PROTOCOL_VERSION, MESH_OUTBOX_DIR, MAX_EVIDENCE_ITEMS, MAX_HANDOFF_IDS,
-    MAX_LIMITATIONS,
+    MAX_EVIDENCE_ITEMS, MAX_HANDOFF_IDS, MAX_LIMITATIONS, MESH_ENVELOPE_PROTOCOL_VERSION,
+    MESH_OUTBOX_DIR,
 };
 use crate::mesh::peers::{read_peer, MeshPeerError};
 use crate::storage::{get_project_dir, read_project, Project};
@@ -217,8 +217,7 @@ pub fn export_mesh_envelope_to_outbox(
     } else {
         Vec::new()
     };
-    let envelope =
-        build_mesh_export_envelope(snapshot, current_state, &handoff_ids, request)?;
+    let envelope = build_mesh_export_envelope(snapshot, current_state, &handoff_ids, request)?;
     write_outbox_envelope(project_path, &envelope)?;
     Ok(envelope)
 }
@@ -270,11 +269,8 @@ fn load_project(project_path: &str) -> Result<Project, MeshExportError> {
         .ok_or(MeshExportError::ProjectNotInitialized)
 }
 
-fn push_items<'a, I>(
-    out: &mut Vec<MeshEvidenceItem>,
-    items: I,
-    source_kind: MeshEvidenceSourceKind,
-) where
+fn push_items<'a, I>(out: &mut Vec<MeshEvidenceItem>, items: I, source_kind: MeshEvidenceSourceKind)
+where
     I: Iterator<Item = &'a ContinuityStateItem>,
 {
     for item in items {
@@ -306,8 +302,7 @@ fn write_json_atomic<T: serde::Serialize>(path: &Path, value: &T) -> Result<(), 
     let parent = path.parent().ok_or(MeshExportError::WriteFailed)?;
     fs::create_dir_all(parent).map_err(|_| MeshExportError::WriteFailed)?;
     let temp = path.with_extension(OUTBOX_TEMP_EXTENSION);
-    let mut json =
-        serde_json::to_string_pretty(value).map_err(|_| MeshExportError::WriteFailed)?;
+    let mut json = serde_json::to_string_pretty(value).map_err(|_| MeshExportError::WriteFailed)?;
     json.push('\n');
     {
         let mut file = OpenOptions::new()

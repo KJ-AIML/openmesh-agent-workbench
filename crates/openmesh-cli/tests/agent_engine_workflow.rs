@@ -23,7 +23,12 @@ fn cli() -> Command {
     Command::new(env!("CARGO_BIN_EXE_openmesh-cli"))
 }
 
-fn run(args: &[&str], project: Option<&Path>, env: &[(&str, &str)], clear: &[&str]) -> std::process::Output {
+fn run(
+    args: &[&str],
+    project: Option<&Path>,
+    env: &[(&str, &str)],
+    clear: &[&str],
+) -> std::process::Output {
     let mut cmd = cli();
     for a in args {
         cmd.arg(a);

@@ -54,9 +54,7 @@ fn add_list_show_peer_roundtrip() {
     let peer = sample_peer("yo", "Yo");
     add_peer(&project, &peer).expect("add");
     assert!(peer_path(&project, "yo").exists());
-    assert!(peers_dir(&project)
-        .to_string_lossy()
-        .contains("mesh/peers"));
+    assert!(peers_dir(&project).to_string_lossy().contains("mesh/peers"));
 
     let ids = list_peer_ids(&project).expect("ids");
     assert_eq!(ids, vec!["yo".to_string()]);
