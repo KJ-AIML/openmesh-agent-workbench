@@ -187,8 +187,13 @@ mod tests {
     fn append_and_list_chat_roundtrip() {
         let project = temp_project();
         let msg = new_outbound_message("lan-a", "Alice", "hello team", None);
-        append_chat_message(&project, &msg, LanChatDirection::Outbound, "127.0.0.1:41778")
-            .unwrap();
+        append_chat_message(
+            &project,
+            &msg,
+            LanChatDirection::Outbound,
+            "127.0.0.1:41778",
+        )
+        .unwrap();
         let inbound = LanChatMessage {
             protocol: LAN_CHAT_PROTOCOL.into(),
             message_id: "chat-in-1".into(),
@@ -201,8 +206,7 @@ mod tests {
         append_chat_message(&project, &inbound, LanChatDirection::Inbound, "lan-b").unwrap();
         let all = list_chat_messages(&project, None, None).unwrap();
         assert_eq!(all.len(), 2);
-        let for_peer =
-            list_chat_messages(&project, Some("127.0.0.1:41778"), None).unwrap();
+        let for_peer = list_chat_messages(&project, Some("127.0.0.1:41778"), None).unwrap();
         assert_eq!(for_peer.len(), 1);
         assert_eq!(for_peer[0].message.text, "hello team");
     }

@@ -164,7 +164,11 @@ fn collect_peer_envelopes(
         }
     }
 
-    envelopes.sort_by(|a, b| a.generated_at.cmp(&b.generated_at).then(a.envelope_id.cmp(&b.envelope_id)));
+    envelopes.sort_by(|a, b| {
+        a.generated_at
+            .cmp(&b.generated_at)
+            .then(a.envelope_id.cmp(&b.envelope_id))
+    });
     Ok((envelopes, limitations))
 }
 
@@ -252,8 +256,7 @@ pub fn query_remote_peer_proxy(
     let (envelopes, mut limitations) =
         collect_peer_envelopes(project_path, &peer, request.include_relay_received)?;
 
-    let freshness =
-        evaluate_envelope_freshness(&envelopes, request.freshness_tier, request.now);
+    let freshness = evaluate_envelope_freshness(&envelopes, request.freshness_tier, request.now);
 
     let refused = envelopes.is_empty()
         || (!freshness.is_sufficient
@@ -340,9 +343,7 @@ pub fn query_remote_peer_proxy(
     Ok(answer)
 }
 
-pub fn validate_mesh_remote_query_answer(
-    a: &MeshRemoteQueryAnswer,
-) -> Result<(), MeshQueryError> {
+pub fn validate_mesh_remote_query_answer(a: &MeshRemoteQueryAnswer) -> Result<(), MeshQueryError> {
     if a.protocol_version != MESH_QUERY_PROTOCOL_VERSION {
         return Err(MeshQueryError::Validation("protocol".into()));
     }
@@ -363,7 +364,9 @@ pub fn validate_mesh_remote_query_answer(
     validate_utc_timestamp(&a.generated_at)
         .map_err(|e| MeshQueryError::Validation(e.to_string()))?;
     if a.freshness.statement.trim().is_empty() {
-        return Err(MeshQueryError::Validation("freshness statement required".into()));
+        return Err(MeshQueryError::Validation(
+            "freshness statement required".into(),
+        ));
     }
     Ok(())
 }

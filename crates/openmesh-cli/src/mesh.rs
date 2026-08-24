@@ -486,19 +486,13 @@ fn run_export(args: &MeshExportArgs, cwd: &Path) -> i32 {
     let snapshot = match load_continuity_input_snapshot(&project_path) {
         Ok(s) => s,
         Err(err) => {
-            return print_export_error(
-                &MeshExportError::Continuity(err.to_string()),
-                args.json,
-            );
+            return print_export_error(&MeshExportError::Continuity(err.to_string()), args.json);
         }
     };
     let current_state = match load_current_state_projection(&project_path, false) {
         Ok(s) => s,
         Err(err) => {
-            return print_export_error(
-                &MeshExportError::Continuity(err.to_string()),
-                args.json,
-            );
+            return print_export_error(&MeshExportError::Continuity(err.to_string()), args.json);
         }
     };
 
@@ -521,10 +515,7 @@ fn run_export(args: &MeshExportArgs, cwd: &Path) -> i32 {
             } else {
                 println!("status=ok");
                 println!("envelope_id={}", envelope.envelope_id);
-                println!(
-                    "path=.openmesh/mesh/outbox/{}.json",
-                    envelope.envelope_id
-                );
+                println!("path=.openmesh/mesh/outbox/{}.json", envelope.envelope_id);
                 println!("evidence_items={}", envelope.evidence_items.len());
                 println!("handoff_ids={}", envelope.handoff_ids.len());
                 println!("limitations={}", envelope.limitations.len());
@@ -535,7 +526,11 @@ fn run_export(args: &MeshExportArgs, cwd: &Path) -> i32 {
     }
 }
 
-fn resolve_from_peer(project_path: &str, workspace_id: &str, label_override: Option<&str>) -> MeshPeerRef {
+fn resolve_from_peer(
+    project_path: &str,
+    workspace_id: &str,
+    label_override: Option<&str>,
+) -> MeshPeerRef {
     let label = if let Some(l) = label_override {
         l.to_string()
     } else if profile_exists(project_path).unwrap_or(false) {
@@ -630,10 +625,7 @@ fn run_import(args: &MeshImportArgs, cwd: &Path) -> i32 {
             } else {
                 println!("status=ok");
                 println!("envelope_id={}", envelope.envelope_id);
-                println!(
-                    "path=.openmesh/mesh/inbox/{}.json",
-                    envelope.envelope_id
-                );
+                println!("path=.openmesh/mesh/inbox/{}.json", envelope.envelope_id);
                 println!("from={}", envelope.from_peer.label);
                 println!("evidence_items={}", envelope.evidence_items.len());
             }
@@ -756,11 +748,7 @@ fn run_show(args: &MeshShowArgs, cwd: &Path) -> i32 {
                 println!("attributed_to={}", envelope.from_peer.label);
                 println!(
                     "from_workspace={}",
-                    envelope
-                        .from_peer
-                        .workspace_id
-                        .as_deref()
-                        .unwrap_or("-")
+                    envelope.from_peer.workspace_id.as_deref().unwrap_or("-")
                 );
                 println!("generated_at={}", envelope.generated_at);
                 println!("evidence_items:");

@@ -1,7 +1,8 @@
 //! Storage under `.openmesh/online-proxy/`.
 
 use crate::online_proxy::contract::{
-    validate_online_proxy_answer, validate_online_proxy_config, OnlineProxyAnswer, OnlineProxyConfig,
+    validate_online_proxy_answer, validate_online_proxy_config, OnlineProxyAnswer,
+    OnlineProxyConfig,
 };
 use crate::storage::{get_project_dir, read_project, Project};
 use std::fs::{self, OpenOptions};
@@ -109,8 +110,7 @@ fn write_json_atomic<T: serde::Serialize>(
     let parent = path.parent().ok_or(OnlineProxyStorageError::Io)?;
     fs::create_dir_all(parent).map_err(|_| OnlineProxyStorageError::Io)?;
     let temp = path.with_extension(TEMP);
-    let mut json =
-        serde_json::to_string_pretty(value).map_err(|_| OnlineProxyStorageError::Io)?;
+    let mut json = serde_json::to_string_pretty(value).map_err(|_| OnlineProxyStorageError::Io)?;
     json.push('\n');
     {
         let mut file = OpenOptions::new()

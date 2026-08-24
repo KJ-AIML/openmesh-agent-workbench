@@ -28,9 +28,9 @@ pub use client::{
     PRESENCE_STALE_WINDOW_SECS,
 };
 pub use contract::{
-    validate_lan_beacon, LanAskHttpBody, LanBeacon, LanChatMessage, LanHealthResponse,
-    LanPeerInfo, LanPeerPresence, LanPresenceState, LanProtocolError, LanServeStatus,
-    DEFAULT_HTTP_PORT, DEFAULT_UDP_PORT, LAN_CHAT_PROTOCOL, LAN_PROTOCOL, MAX_CHAT_TEXT_BYTES,
+    validate_lan_beacon, LanAskHttpBody, LanBeacon, LanChatMessage, LanHealthResponse, LanPeerInfo,
+    LanPeerPresence, LanPresenceState, LanProtocolError, LanServeStatus, DEFAULT_HTTP_PORT,
+    DEFAULT_UDP_PORT, LAN_CHAT_PROTOCOL, LAN_PROTOCOL, MAX_CHAT_TEXT_BYTES,
 };
 pub use last_peers::{read_last_peers, remember_discovered_peers, write_last_peers};
 pub use peer::{merge_peer, peer_table_snapshot, PeerTable};

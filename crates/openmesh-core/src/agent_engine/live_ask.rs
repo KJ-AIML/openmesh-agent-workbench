@@ -4,7 +4,9 @@
 //! and returns structured errors when the peer cannot answer.
 
 use super::engine_loop::run_agent_turn;
-use super::provider::{resolve_provider_kind, ChatProvider, OpenAiCompatibleProvider, ProviderConfig};
+use super::provider::{
+    resolve_provider_kind, ChatProvider, OpenAiCompatibleProvider, ProviderConfig,
+};
 use super::registry::ToolExecutor;
 use super::secrets::{AgentSecretStore, CascadingSecretStore};
 use super::types::{AgentDefinition, AgentEngineError, AgentSession, EngineTurnResult};
@@ -178,11 +180,8 @@ mod tests {
 
     fn temp_project() -> String {
         let n = N.fetch_add(1, Ordering::SeqCst);
-        let dir = std::env::temp_dir().join(format!(
-            "openmesh-live-ask-{}-{}",
-            std::process::id(),
-            n
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("openmesh-live-ask-{}-{}", std::process::id(), n));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         let path = dir.to_string_lossy().to_string();

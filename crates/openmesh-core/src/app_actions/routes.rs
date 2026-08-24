@@ -49,8 +49,8 @@ pub fn label_for_route(route: &str) -> &'static str {
 
 /// JSON payload for tool `summary` — legacy fields + typed AppAction.
 pub fn ui_navigate_json(raw: &str) -> Result<String, String> {
-    let (route, label) = normalize_ui_route(raw)
-        .ok_or_else(|| format!("unsupported ui route: {raw}"))?;
+    let (route, label) =
+        normalize_ui_route(raw).ok_or_else(|| format!("unsupported ui route: {raw}"))?;
     Ok(serde_json::to_string_pretty(&json!({
         "ok": true,
         "action": "ui_navigate",

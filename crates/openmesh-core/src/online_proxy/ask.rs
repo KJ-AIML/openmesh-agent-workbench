@@ -9,7 +9,7 @@ use crate::authority_policy::FreshnessTier;
 use crate::domain::ProxyContextPack;
 use crate::online_proxy::contract::{
     build_freshness_statement_text, validate_online_proxy_answer, EvidenceFreshnessStatement,
-    OnlineProxyAnswer, OnlineProxyConfig, ONLINE_PROXY_PROTOCOL_VERSION, MAX_ANSWER_TEXT_BYTES,
+    OnlineProxyAnswer, OnlineProxyConfig, MAX_ANSWER_TEXT_BYTES, ONLINE_PROXY_PROTOCOL_VERSION,
 };
 use crate::online_proxy::storage::{write_answer, OnlineProxyStorageError};
 use crate::relay::transport::received_dir;

@@ -2,8 +2,8 @@
 
 use crate::domain::validate_utc_timestamp;
 use crate::mesh::contract::{
-    validate_mesh_peer_ref, MeshPeerRef, MeshValidationError, MESH_PEERS_DIR, MAX_PEER_LABEL_BYTES,
-    MAX_PEER_PROFILE_ID_BYTES, MAX_WORKSPACE_ID_BYTES,
+    validate_mesh_peer_ref, MeshPeerRef, MeshValidationError, MAX_PEER_LABEL_BYTES,
+    MAX_PEER_PROFILE_ID_BYTES, MAX_WORKSPACE_ID_BYTES, MESH_PEERS_DIR,
 };
 use crate::storage::{get_project_dir, read_project, Project};
 use serde::{Deserialize, Serialize};

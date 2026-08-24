@@ -53,11 +53,7 @@ pub fn resolve_shell() -> (PathBuf, String, Vec<String>) {
     #[cfg(windows)]
     {
         if let Ok(ps) = which_windows("powershell.exe") {
-            return (
-                ps,
-                "powershell".to_string(),
-                vec!["-NoLogo".to_string()],
-            );
+            return (ps, "powershell".to_string(), vec!["-NoLogo".to_string()]);
         }
         return (
             PathBuf::from("cmd.exe"),
@@ -111,13 +107,13 @@ fn which_windows(name: &str) -> Result<PathBuf, ()> {
 pub fn resolve_cwd(cwd: &str) -> Result<PathBuf, String> {
     let trimmed = cwd.trim();
     let path = if trimmed.is_empty() {
-        dirs::home_dir().ok_or_else(|| "No working directory (set HOME or open a project).".to_string())?
+        dirs::home_dir()
+            .ok_or_else(|| "No working directory (set HOME or open a project).".to_string())?
     } else {
         PathBuf::from(trimmed)
     };
 
-    let meta = std::fs::metadata(&path)
-        .map_err(|e| format!("Path does not exist: {e}"))?;
+    let meta = std::fs::metadata(&path).map_err(|e| format!("Path does not exist: {e}"))?;
     if !meta.is_dir() {
         return Err("Path is not a directory".to_string());
     }
@@ -246,7 +242,11 @@ pub fn pty_create(
 }
 
 #[tauri::command]
-pub fn pty_write(state: State<'_, Arc<PtyManager>>, id: String, data: String) -> Result<(), String> {
+pub fn pty_write(
+    state: State<'_, Arc<PtyManager>>,
+    id: String,
+    data: String,
+) -> Result<(), String> {
     let sessions = state
         .sessions
         .lock()
@@ -361,5 +361,4 @@ mod tests {
             Err(e) => assert!(e.contains("HOME") || e.contains("working directory")),
         }
     }
-
 }

@@ -4,6 +4,7 @@
 //! LocalScaffold prose. Does not write project files from remote asks.
 
 use crate::agent_engine::{run_live_ask, LiveAskError, LiveAskRequest};
+use crate::authority_freshness::evaluate_evidence_freshness;
 use crate::authority_freshness::ConfidenceLabel;
 use crate::authority_policy::FreshnessTier;
 use crate::context_pack::{build_proxy_context_pack, ProxyContextPackBuildOptions};
@@ -11,10 +12,7 @@ use crate::domain::CatchUpWindow;
 use crate::mesh::query::{
     validate_mesh_remote_query_answer, MeshRemoteQueryAnswer, MESH_QUERY_PROTOCOL_VERSION,
 };
-use crate::online_proxy::contract::{
-    build_freshness_statement_text, EvidenceFreshnessStatement,
-};
-use crate::authority_freshness::evaluate_evidence_freshness;
+use crate::online_proxy::contract::{build_freshness_statement_text, EvidenceFreshnessStatement};
 use crate::profile::read_work_proxy_profile;
 use crate::storage::{read_project, Project};
 use chrono::{DateTime, Duration, Utc};
@@ -78,8 +76,8 @@ pub fn answer_live_ask(
     if request.question.trim().is_empty() {
         return Err(LanAskError::EmptyQuestion);
     }
-    let project: Project = read_project(project_path, "project.json")
-        .ok_or(LanAskError::ProjectNotInitialized)?;
+    let project: Project =
+        read_project(project_path, "project.json").ok_or(LanAskError::ProjectNotInitialized)?;
 
     let owner_label = read_work_proxy_profile(project_path)
         .map(|p| p.owner_label)
@@ -87,7 +85,8 @@ pub fn answer_live_ask(
     let peer_id = format!("lan-{}", project.id);
 
     let now = Utc::now();
-    let (freshness, context_prefix) = build_optional_freshness_context(project_path, request.tier, now);
+    let (freshness, context_prefix) =
+        build_optional_freshness_context(project_path, request.tier, now);
 
     let live_req = LiveAskRequest {
         question: request.question.clone(),
@@ -146,7 +145,10 @@ fn build_optional_freshness_context(
         generated_at: until.clone(),
         ..ProxyContextPackBuildOptions::default()
     };
-    let window = CatchUpWindow { since, until: until.clone() };
+    let window = CatchUpWindow {
+        since,
+        until: until.clone(),
+    };
 
     match build_proxy_context_pack(project_path, window, options) {
         Ok(pack) => {
@@ -208,11 +210,8 @@ mod tests {
 
     fn temp_project() -> String {
         let n = N.fetch_add(1, Ordering::SeqCst);
-        let dir = std::env::temp_dir().join(format!(
-            "openmesh-lan-ask-{}-{}",
-            std::process::id(),
-            n
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("openmesh-lan-ask-{}-{}", std::process::id(), n));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.to_string_lossy().to_string();

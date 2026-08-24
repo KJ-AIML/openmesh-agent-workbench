@@ -163,7 +163,10 @@ pub fn validate_team_trust_policy(p: &TeamTrustPolicy) -> Result<(), TrustAdminV
         return Err(TrustAdminValidationError::TooManyAdmins);
     }
     for a in &p.admin_member_ids {
-        if a.trim().is_empty() || a.len() > MAX_MEMBER_ID_BYTES || a.contains("..") || a.contains('/')
+        if a.trim().is_empty()
+            || a.len() > MAX_MEMBER_ID_BYTES
+            || a.contains("..")
+            || a.contains('/')
         {
             return Err(TrustAdminValidationError::InvalidAdminId);
         }

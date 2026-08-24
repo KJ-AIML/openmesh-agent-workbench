@@ -119,7 +119,10 @@ fn sort_recipes_for_project(project_path: &str, recipes: &mut [Recipe]) {
 }
 
 /// Pick a default verify recipe from project markers + changed paths.
-pub fn suggest_verify_recipe(project_path: &str, changed_paths: &[String]) -> Result<String, String> {
+pub fn suggest_verify_recipe(
+    project_path: &str,
+    changed_paths: &[String],
+) -> Result<String, String> {
     let recipes = list_recipes(project_path)?;
     if recipes.is_empty() {
         return Err("no recipes available".into());
@@ -189,14 +192,25 @@ fn validate_argv(argv: &[String]) -> Result<(), String> {
         return Err("recipe argv is empty".into());
     }
     for a in argv {
-        if a.contains('\0') || a.contains('$') || a.contains('`') || a.contains('|') || a.contains(';')
+        if a.contains('\0')
+            || a.contains('$')
+            || a.contains('`')
+            || a.contains('|')
+            || a.contains(';')
         {
             return Err("recipe argv contains forbidden characters".into());
         }
     }
     // Block obvious destructive / remote commands in defaults usage.
     let joined = argv.join(" ").to_lowercase();
-    for bad in ["git push", "rm -rf", "curl ", "wget ", "npm publish", "cargo publish"] {
+    for bad in [
+        "git push",
+        "rm -rf",
+        "curl ",
+        "wget ",
+        "npm publish",
+        "cargo publish",
+    ] {
         if joined.contains(bad) {
             return Err(format!("recipe blocked: contains '{bad}'"));
         }
@@ -275,7 +289,9 @@ pub fn run_recipe_with_patch(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    let mut child = cmd.spawn().map_err(|e| format!("failed to spawn recipe: {e}"))?;
+    let mut child = cmd
+        .spawn()
+        .map_err(|e| format!("failed to spawn recipe: {e}"))?;
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
     let out_buf = Arc::new(Mutex::new(String::new()));
@@ -396,11 +412,8 @@ mod tests {
 
     fn temp_project() -> String {
         let n = COUNTER.fetch_add(1, Ordering::SeqCst);
-        let dir = std::env::temp_dir().join(format!(
-            "openmesh-recipes-{}-{}",
-            std::process::id(),
-            n
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("openmesh-recipes-{}-{}", std::process::id(), n));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         let path = dir.to_string_lossy().to_string();
@@ -419,12 +432,13 @@ mod tests {
     #[test]
     fn suggest_prefers_cargo_for_rust_paths() {
         let project = temp_project();
-        fs::write(PathBuf::from(&project).join("Cargo.toml"), "[package]\nname=\"t\"\n").unwrap();
-        let id = suggest_verify_recipe(
-            &project,
-            &["crates/openmesh-core/src/lib.rs".into()],
+        fs::write(
+            PathBuf::from(&project).join("Cargo.toml"),
+            "[package]\nname=\"t\"\n",
         )
         .unwrap();
+        let id =
+            suggest_verify_recipe(&project, &["crates/openmesh-core/src/lib.rs".into()]).unwrap();
         assert_eq!(id, "cargo-test-core");
         let _ = fs::remove_dir_all(&project);
     }
@@ -432,7 +446,11 @@ mod tests {
     #[test]
     fn suggest_prefers_typecheck_for_fe_paths() {
         let project = temp_project();
-        fs::write(PathBuf::from(&project).join("package.json"), "{\"name\":\"t\"}\n").unwrap();
+        fs::write(
+            PathBuf::from(&project).join("package.json"),
+            "{\"name\":\"t\"}\n",
+        )
+        .unwrap();
         let id = suggest_verify_recipe(&project, &["src/pages/Foo.vue".into()]).unwrap();
         assert_eq!(id, "npm-typecheck");
         let _ = fs::remove_dir_all(&project);
@@ -457,7 +475,11 @@ mod tests {
         .unwrap();
         let result = run_recipe(&project, "echo-hi", "test-run-1", None).unwrap();
         assert!(result.ok, "{result:?}");
-        assert!(result.stdout.contains("hello-openmesh"), "{:?}", result.stdout);
+        assert!(
+            result.stdout.contains("hello-openmesh"),
+            "{:?}",
+            result.stdout
+        );
         let _ = fs::remove_dir_all(&project);
     }
 

@@ -1,6 +1,6 @@
 [package]
 name = "openmesh-cli"
-version = "0.1.30"
+version = "0.1.40"
 rust-version = "1.92.0"
 description = "OpenMesh CLI — the official programmable integration spine into the file-backed Signal Inbox"
 authors = ["Openmesh Team"]
@@ -12,6 +12,9 @@ path = "src/main.rs"
 
 [dependencies]
 openmesh-core = { path = "../openmesh-core" }
-clap = { version = "4", features = ["derive"] }
+async-trait = "0.1"
+clap = { version = "4", features = ["derive", "env"] }
 chrono = { version = "0.4", features = ["serde"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal", "net", "time"] }

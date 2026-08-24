@@ -157,7 +157,9 @@ pub fn validate_lan_beacon(b: &LanBeacon) -> Result<(), LanProtocolError> {
     check_nonempty("ownerLabel", &b.owner_label, MAX_LABEL_BYTES)?;
     check_nonempty("peerId", &b.peer_id, MAX_PEER_ID_BYTES)?;
     if b.http_port == 0 {
-        return Err(LanProtocolError::Validation("httpPort must be non-zero".into()));
+        return Err(LanProtocolError::Validation(
+            "httpPort must be non-zero".into(),
+        ));
     }
     if b.started_at.trim().is_empty() {
         return Err(LanProtocolError::Validation("startedAt required".into()));

@@ -1,5 +1,7 @@
 # Dogfood checklist — OpenMesh Desktop v0.1.28
 
+> **Superseded for current dogfood:** use [DOGFOOD_v0.1.30.md](./DOGFOOD_v0.1.30.md) (Download & install + Team/Trust UX). Keep this file for historical ticks against `v0.1.28`.
+
 **Build / tag:** `v0.1.28`  
 **Purpose:** Fillable pass/fail checklist for a real installed (or `tauri:dev`) session.  
 **Related:** [PRODUCT_GUIDE.md](./PRODUCT_GUIDE.md) · [CHAT.md](./CHAT.md) · [TERMINAL.md](./TERMINAL.md) · [SESSIONS.md](./SESSIONS.md) · [CONTINUITY_MESH.md](./CONTINUITY_MESH.md) · [SETTINGS.md](./SETTINGS.md) · [RELEASE_SMOKE.md](./RELEASE_SMOKE.md) · [LIMITATIONS.md](./LIMITATIONS.md)

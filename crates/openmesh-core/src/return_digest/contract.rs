@@ -204,9 +204,8 @@ pub fn validate_pending_question_item(
     validate_utc_timestamp(&item.created_at)
         .map_err(ReturnDigestValidationError::InvalidTimestamp)?;
     for evidence in &item.evidence_refs {
-        validate_evidence_ref(evidence).map_err(|e| {
-            ReturnDigestValidationError::InvalidPendingQuestionItem(e.to_string())
-        })?;
+        validate_evidence_ref(evidence)
+            .map_err(|e| ReturnDigestValidationError::InvalidPendingQuestionItem(e.to_string()))?;
     }
     Ok(())
 }
@@ -322,9 +321,8 @@ pub fn validate_return_digest(digest: &ReturnDigest) -> Result<(), ReturnDigestV
         });
     }
     for evidence in &digest.evidence_refs {
-        validate_evidence_ref(evidence).map_err(|e| {
-            ReturnDigestValidationError::InvalidPendingQuestionItem(e.to_string())
-        })?;
+        validate_evidence_ref(evidence)
+            .map_err(|e| ReturnDigestValidationError::InvalidPendingQuestionItem(e.to_string()))?;
     }
     validate_limitations(&digest.limitations)?;
     Ok(())

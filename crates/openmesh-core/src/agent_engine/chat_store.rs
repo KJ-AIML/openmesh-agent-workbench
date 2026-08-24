@@ -78,11 +78,7 @@ mod tests {
 
     #[test]
     fn roundtrip_sessions() {
-        let dir = std::env::temp_dir().join(format!(
-            "openmesh-chats-{}-{}",
-            std::process::id(),
-            1
-        ));
+        let dir = std::env::temp_dir().join(format!("openmesh-chats-{}-{}", std::process::id(), 1));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         let project = dir.to_string_lossy().to_string();
@@ -111,10 +107,7 @@ mod tests {
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].title, "Hello");
         assert_eq!(
-            loaded[0]
-                .imported_from
-                .as_ref()
-                .map(|p| p.source.as_str()),
+            loaded[0].imported_from.as_ref().map(|p| p.source.as_str()),
             Some("cursor")
         );
         let _ = fs::remove_dir_all(&dir);

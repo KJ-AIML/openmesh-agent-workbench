@@ -103,7 +103,9 @@ pub enum OnlineProxyValidationError {
     MissingFreshness,
 }
 
-pub fn validate_online_proxy_config(cfg: &OnlineProxyConfig) -> Result<(), OnlineProxyValidationError> {
+pub fn validate_online_proxy_config(
+    cfg: &OnlineProxyConfig,
+) -> Result<(), OnlineProxyValidationError> {
     if cfg.protocol_version != ONLINE_PROXY_PROTOCOL_VERSION {
         return Err(OnlineProxyValidationError::UnsupportedProtocol {
             found: cfg.protocol_version.clone(),
@@ -122,8 +124,10 @@ pub fn validate_online_proxy_config(cfg: &OnlineProxyConfig) -> Result<(), Onlin
     if cfg.owner_label.trim().is_empty() || cfg.owner_label.len() > MAX_LABEL_BYTES {
         return Err(OnlineProxyValidationError::InvalidOwnerLabel);
     }
-    validate_utc_timestamp(&cfg.created_at).map_err(OnlineProxyValidationError::InvalidTimestamp)?;
-    validate_utc_timestamp(&cfg.updated_at).map_err(OnlineProxyValidationError::InvalidTimestamp)?;
+    validate_utc_timestamp(&cfg.created_at)
+        .map_err(OnlineProxyValidationError::InvalidTimestamp)?;
+    validate_utc_timestamp(&cfg.updated_at)
+        .map_err(OnlineProxyValidationError::InvalidTimestamp)?;
     Ok(())
 }
 
@@ -138,7 +142,8 @@ pub fn validate_evidence_freshness_statement(
     if !lower.contains("fresh") && !lower.contains("stale") && !lower.contains("age") {
         return Err(OnlineProxyValidationError::InvalidFreshnessStatement);
     }
-    validate_utc_timestamp(&s.evaluated_at).map_err(OnlineProxyValidationError::InvalidTimestamp)?;
+    validate_utc_timestamp(&s.evaluated_at)
+        .map_err(OnlineProxyValidationError::InvalidTimestamp)?;
     if s.stale_warnings.len() > MAX_WARNINGS || s.evidence_source_ids.len() > MAX_SOURCE_IDS {
         return Err(OnlineProxyValidationError::Bounds);
     }
@@ -150,7 +155,9 @@ pub fn validate_evidence_freshness_statement(
     Ok(())
 }
 
-pub fn validate_online_proxy_answer(a: &OnlineProxyAnswer) -> Result<(), OnlineProxyValidationError> {
+pub fn validate_online_proxy_answer(
+    a: &OnlineProxyAnswer,
+) -> Result<(), OnlineProxyValidationError> {
     if a.protocol_version != ONLINE_PROXY_PROTOCOL_VERSION {
         return Err(OnlineProxyValidationError::UnsupportedProtocol {
             found: a.protocol_version.clone(),
@@ -165,7 +172,8 @@ pub fn validate_online_proxy_answer(a: &OnlineProxyAnswer) -> Result<(), OnlineP
     if a.answer_text.trim().is_empty() || a.answer_text.len() > MAX_ANSWER_TEXT_BYTES {
         return Err(OnlineProxyValidationError::InvalidAnswerText);
     }
-    validate_utc_timestamp(&a.generated_at).map_err(OnlineProxyValidationError::InvalidTimestamp)?;
+    validate_utc_timestamp(&a.generated_at)
+        .map_err(OnlineProxyValidationError::InvalidTimestamp)?;
     validate_evidence_freshness_statement(&a.freshness)?;
     // Scaffold gate: never silently stale — insufficient freshness must refuse.
     // Live Agent Engine answers disclose freshness in-prompt; soft-warn only.

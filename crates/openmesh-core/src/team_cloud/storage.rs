@@ -84,7 +84,8 @@ pub fn init_team_cloud(
     if config_path(project_path).exists() {
         return Err(TeamCloudStorageError::AlreadyExists);
     }
-    let team = read_team_workspace(project_path).map_err(|_| TeamCloudStorageError::TeamRequired)?;
+    let team =
+        read_team_workspace(project_path).map_err(|_| TeamCloudStorageError::TeamRequired)?;
     let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
     let cfg = TeamCloudConfig {
         protocol_version: TEAM_CLOUD_PROTOCOL_VERSION.into(),

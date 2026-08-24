@@ -53,8 +53,8 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), RcStorageError> {
 }
 
 pub fn write_rc_pack(project_path: &str, pack: &RcPack) -> Result<(), RcStorageError> {
-    let _: Project = read_project(project_path, "project.json")
-        .ok_or(RcStorageError::ProjectNotInitialized)?;
+    let _: Project =
+        read_project(project_path, "project.json").ok_or(RcStorageError::ProjectNotInitialized)?;
     validate_rc_pack(pack).map_err(|e| RcStorageError::Validation(e.to_string()))?;
     fs::create_dir_all(rc_dir(project_path)).map_err(|_| RcStorageError::Io)?;
     let bytes = serde_json::to_vec_pretty(pack).map_err(|_| RcStorageError::MalformedJson)?;
@@ -62,8 +62,8 @@ pub fn write_rc_pack(project_path: &str, pack: &RcPack) -> Result<(), RcStorageE
 }
 
 pub fn read_rc_pack(project_path: &str) -> Result<RcPack, RcStorageError> {
-    let _: Project = read_project(project_path, "project.json")
-        .ok_or(RcStorageError::ProjectNotInitialized)?;
+    let _: Project =
+        read_project(project_path, "project.json").ok_or(RcStorageError::ProjectNotInitialized)?;
     let path = pack_path(project_path);
     if !path.exists() {
         return Err(RcStorageError::Missing);

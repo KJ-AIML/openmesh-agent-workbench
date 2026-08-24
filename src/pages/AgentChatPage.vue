@@ -11,9 +11,7 @@ import {
 } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
-  AlertCircle,
   Check,
-  CheckCircle2,
   ChevronDown,
   ChevronRight,
   Copy,
@@ -21,7 +19,6 @@ import {
   GitFork,
   Pencil,
   Plus,
-  Settings,
   Sparkles,
   Trash2,
   Wrench,
@@ -36,17 +33,14 @@ import {
   resolveToolsForMessage,
   summarizeToolsHelp,
 } from "../lib/agentChat/tools";
-import {
-  chatModelId,
-  getChatSetupChecks,
-  isChatProviderReady,
-} from "../lib/agentChat/ready";
+import { chatModelId } from "../lib/agentChat/ready";
 import {
   cancelAgentEngineTurn,
   extractPatchIds,
   getAgentSecretStatus,
   listenAgentTurnProgress,
   type AgentToolStep,
+  type EngineRouteMetadata,
 } from "../lib/agentEngineClient";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import {
@@ -112,6 +106,10 @@ const { currentProjectPath, currentProject, settings, saveSettings } = useStore(
 
 /** Real secret-store presence; null until probed (or when IPC unavailable). */
 const secretConfigured = ref<boolean | null>(null);
+/** Agent Engine currently uses the configured direct provider connection. */
+const runtimeReady = computed<boolean | null>(
+  () => secretConfigured.value ?? !!settings.value.provider?.apiKeyConfigured,
+);
 
 /** Shallow — avoid deep-watching the whole session tree on every keystroke/send. */
 const sessions = shallowRef<ChatSession[]>([]);
@@ -128,6 +126,12 @@ const busyLabel = ref("Thinking…");
 const busyDetail = ref<string | null>(null);
 const error = ref<string | null>(null);
 const chatMode = ref<ChatMode>("ask");
+/** Latest backend-authoritative route metadata; intentionally memory-only. */
+const lastTurnRoute = ref<EngineRouteMetadata | null>(null);
+const lastTurnModel = ref<string | null>(null);
+const lastTurnIterations = ref<number | null>(null);
+const lastTurnToolCount = ref<number | null>(null);
+const routeContextVersion = ref(0);
 const activeTurnId = ref<string | null>(null);
 const verifyRunKey = ref<string | null>(null);
 const scroller = ref<HTMLElement | null>(null);
@@ -165,18 +169,32 @@ const hasProject = computed(() => !!currentProjectPath.value);
 const projectLabel = computed(
   () => currentProject.value?.name || currentProjectPath.value || "No project",
 );
-const chatReadyOpts = computed(() =>
-  typeof secretConfigured.value === "boolean"
-    ? { secretConfigured: secretConfigured.value }
-    : undefined,
-);
-const chatReady = computed(() =>
-  isChatProviderReady(settings.value, chatReadyOpts.value),
-);
-const setupChecks = computed(() =>
-  getChatSetupChecks(settings.value, chatReadyOpts.value),
-);
 const activeModel = computed(() => chatModelId(settings.value));
+
+function routeTransportLabel(value: EngineRouteMetadata["transport"]): string {
+  return value === "direct-provider" ? "Direct provider" : value;
+}
+
+function endpointKindLabel(value: EngineRouteMetadata["endpointKind"]): string {
+  switch (value) {
+    case "custom-compatible":
+      return "custom compatible";
+    default:
+      return "provider default";
+  }
+}
+
+function turnOutcomeLabel(value: EngineRouteMetadata["outcome"]): string {
+  return value.replace(/-/g, " ");
+}
+
+function clearLastTurnRoute() {
+  routeContextVersion.value += 1;
+  lastTurnRoute.value = null;
+  lastTurnModel.value = null;
+  lastTurnIterations.value = null;
+  lastTurnToolCount.value = null;
+}
 
 async function syncSecretConfigured() {
   try {
@@ -195,6 +213,7 @@ async function syncSecretConfigured() {
     // Browser / mock — keep using settings JSON flag.
     secretConfigured.value = null;
   }
+
 }
 
 const activeSession = computed(
@@ -494,6 +513,7 @@ function applyChatQuery() {
   const match = sessions.value.find((s) => s.id === id);
   if (!match) return;
   if (activeSessionId.value === id) return;
+  clearLastTurnRoute();
   activeSessionId.value = id;
   bindActiveMessages(match);
   error.value = null;
@@ -523,13 +543,14 @@ async function loadForProject(path: string) {
 }
 
 watch(
-  [currentProjectPath, chatReady],
-  ([path, ready]) => {
+  currentProjectPath,
+  (path) => {
+    clearLastTurnRoute();
     // Flush any pending write for the previous project before swapping state.
     persistQueue.flush();
     error.value = null;
     renamingId.value = null;
-    if (path && ready) void loadForProject(path);
+    if (path) void loadForProject(path);
     else {
       sessions.value = [];
       activeSessionId.value = null;
@@ -592,7 +613,7 @@ onMounted(() => {
 });
 
 watch(
-  () => settings.value.provider?.apiKeyConfigured,
+  [() => settings.value.provider?.apiKeyConfigured],
   () => {
     void syncSecretConfigured();
   },
@@ -662,6 +683,7 @@ function forkFromMessage(messageIndex: number) {
   const forked = forkSessionAt(session, messageIndex);
   if (!forked) return;
   sessions.value = [forked, ...sessions.value];
+  clearLastTurnRoute();
   activeSessionId.value = forked.id;
   bindActiveMessages(forked);
   renamingId.value = null;
@@ -757,6 +779,7 @@ function applyTurnProgress(event: ChatTurnProgress) {
 }
 
 function startNewChat() {
+  clearLastTurnRoute();
   const fresh = createChatSession();
   seedWelcome(fresh);
   sessions.value = [fresh, ...sessions.value];
@@ -770,6 +793,7 @@ function startNewChat() {
 
 function switchToSession(id: string) {
   if (id === activeSessionId.value) return;
+  clearLastTurnRoute();
   activeSessionId.value = id;
   bindActiveMessages(sessions.value.find((s) => s.id === id) ?? null);
   error.value = null;
@@ -803,6 +827,7 @@ function cancelRename() {
 function removeSession(id: string) {
   sessions.value = sessions.value.filter((s) => s.id !== id);
   if (activeSessionId.value === id) {
+    clearLastTurnRoute();
     if (sessions.value.length > 0) {
       activeSessionId.value = sessions.value[0].id;
       bindActiveMessages(sessions.value[0]);
@@ -818,6 +843,7 @@ function removeSession(id: string) {
 function clearActiveChat() {
   const session = activeSession.value;
   if (!session) return;
+  clearLastTurnRoute();
   session.messages = [];
   touchSession(session);
   afterSessionMutation(session);
@@ -836,12 +862,13 @@ function relativeTime(ts: number): string {
 }
 
 async function send(text: string) {
-  if (!currentProjectPath.value || busy.value || !chatReady.value) return;
+  if (!currentProjectPath.value || busy.value) return;
   const session = activeSession.value;
   if (!session) return;
   const trimmed = text.trim();
   if (!trimmed) return;
   const projectPath = currentProjectPath.value;
+  const sessionId = session.id;
 
   // 1) Optimistic UI only — no stringify / IPC / markdown of history here.
   // Persist is explicit + idle; composer textarea stays enabled while busy.
@@ -859,7 +886,9 @@ async function send(text: string) {
   busyDetail.value = null;
   busy.value = true;
   error.value = null;
+  clearLastTurnRoute();
   const turnId = `turn-${Date.now().toString(16)}`;
+  const routeVersion = routeContextVersion.value;
   activeTurnId.value = turnId;
   startWorkingRun(turnId, busyLabel.value);
   const verifyMatch = trimmed.match(/^\/verify\s+(\S+)/i);
@@ -949,7 +978,20 @@ async function send(text: string) {
       onProgress: applyTurnProgress,
       mode: chatMode.value,
       turnId,
+      runtimeReady: runtimeReady.value,
     });
+    if (
+      result.route &&
+      activeTurnId.value === turnId &&
+      routeContextVersion.value === routeVersion &&
+      activeSessionId.value === sessionId &&
+      currentProjectPath.value === projectPath
+    ) {
+      lastTurnRoute.value = result.route;
+      lastTurnModel.value = result.model ?? null;
+      lastTurnIterations.value = result.iterations ?? null;
+      lastTurnToolCount.value = result.toolCalls?.length ?? 0;
+    }
     // Apply allowlisted in-app navigation from ui_navigate tool steps.
     const navSteps: AgentToolStep[] = (result.toolCalls ?? []).map((t) => ({
       toolName: t.toolId,
@@ -984,8 +1026,9 @@ async function send(text: string) {
       );
     }
     finishWorkingRuns("done");
-  } catch (e) {
-    error.value = e instanceof Error ? e.message : String(e);
+  } catch {
+    clearLastTurnRoute();
+    error.value = "Agent Engine request failed. Check Settings → Provider.";
     session.messages.push(createChatMessage("assistant", `Error: ${error.value}`));
     finishWorkingRuns("failed");
     if (verifyRunKey.value) {
@@ -1125,46 +1168,6 @@ function toggleToolsExpanded(id: string) {
       </div>
     </div>
 
-    <div v-else-if="!chatReady" class="chat__viewport">
-      <div class="chat__gate workbench-card">
-        <div class="chat__gate-head">
-          <Settings :size="18" />
-          <div>
-            <h2 class="chat__gate-title">Set up provider before chat</h2>
-            <p class="chat__gate-body">
-              Add a provider, mark an API key as configured, and choose a default
-              model. Chat stays locked until these are saved in Settings.
-              Use a normal OpenAI-compatible endpoint — not DashScope Coding Plan.
-            </p>
-          </div>
-        </div>
-        <ul class="chat__gate-list">
-          <li v-for="c in setupChecks" :key="c.id" class="chat__gate-item">
-            <CheckCircle2
-              v-if="c.done"
-              class="chat__gate-icon chat__gate-icon--ok"
-              :size="16"
-            />
-            <AlertCircle
-              v-else
-              class="chat__gate-icon chat__gate-icon--warn"
-              :size="16"
-            />
-            <div>
-              <div class="chat__gate-label">{{ c.label }}</div>
-              <div class="chat__gate-hint">{{ c.hint }}</div>
-            </div>
-            <span class="chat__gate-badge" :class="c.done ? 'is-ok' : 'is-warn'">
-              {{ c.done ? "Ready" : "Required" }}
-            </span>
-          </li>
-        </ul>
-        <button type="button" class="btn-primary" @click="router.push('/settings')">
-          Open Settings
-        </button>
-      </div>
-    </div>
-
     <template v-else>
       <div class="chat__body">
         <aside class="chat__rail" aria-label="Chat sessions">
@@ -1247,10 +1250,26 @@ function toggleToolsExpanded(id: string) {
               <span class="chat__thread-meta" :title="projectLabel">
                 {{ projectLabel }}
               </span>
+              <span
+                v-if="lastTurnRoute"
+                class="chat__route-summary"
+                data-testid="chat-route-summary"
+                :title="`${lastTurnRoute.providerLabel} · ${lastTurnModel || 'model not reported'}`"
+              >
+                <span class="chat__route-summary-label">Last turn</span>
+                <span>{{ routeTransportLabel(lastTurnRoute.transport) }}</span>
+                <span>· {{ lastTurnRoute.providerLabel }}</span>
+                <span>· {{ endpointKindLabel(lastTurnRoute.endpointKind) }}</span>
+                <span v-if="lastTurnModel">· {{ lastTurnModel }}</span>
+                <span v-if="lastTurnIterations !== null">· {{ lastTurnIterations }} rounds</span>
+                <span v-if="lastTurnToolCount !== null">· {{ lastTurnToolCount }} tools</span>
+                <span>· {{ turnOutcomeLabel(lastTurnRoute.outcome) }}</span>
+              </span>
               <button
                 v-if="activeMessages.length > 0"
                 type="button"
                 class="chat__clear"
+                data-testid="chat-clear"
                 title="Clear this chat"
                 @click="clearActiveChat"
               >
@@ -1270,8 +1289,7 @@ function toggleToolsExpanded(id: string) {
                 </div>
                 <div v-else ref="scroller" class="chat__thread">
                   <div class="chat__thread-inner">
-                    <!-- Plain list (no TransitionGroup) — avoids O(n) move FLIP
-                         work when appending; v-memo keeps old markdown bubbles cold. -->
+                    <!-- Plain list (no TransitionGroup) avoids O(n) move FLIP work when appending. -->
                     <div class="chat__thread-msgs">
                       <div
                         v-for="(m, mi) in activeMessages"
@@ -1284,12 +1302,6 @@ function toggleToolsExpanded(id: string) {
                         <article
                           class="bubble"
                           :class="`bubble--${m.role}`"
-                          v-memo="[
-                            m.id,
-                            m.text,
-                            m.toolCalls,
-                            isToolsHelpMessage(m) ? isToolsExpanded(m.id) : false,
-                          ]"
                         >
                           <header class="bubble__meta">
                             <span class="bubble__role">{{ roleLabel(m.role) }}</span>
@@ -1502,6 +1514,26 @@ function toggleToolsExpanded(id: string) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.chat__route-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+  flex: 0 1 auto;
+  max-width: 58%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--muted-foreground);
+  font-size: 0.64rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.chat__route-summary-label {
+  color: var(--foreground);
+  font-weight: 650;
 }
 
 .chat__clear {

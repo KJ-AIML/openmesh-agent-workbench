@@ -206,8 +206,7 @@ fn write_json_atomic<T: serde::Serialize>(path: &Path, value: &T) -> Result<(), 
     let parent = path.parent().ok_or(MeshImportError::WriteFailed)?;
     fs::create_dir_all(parent).map_err(|_| MeshImportError::WriteFailed)?;
     let temp = path.with_extension(INBOX_TEMP_EXTENSION);
-    let mut json =
-        serde_json::to_string_pretty(value).map_err(|_| MeshImportError::WriteFailed)?;
+    let mut json = serde_json::to_string_pretty(value).map_err(|_| MeshImportError::WriteFailed)?;
     json.push('\n');
     {
         let mut file = OpenOptions::new()

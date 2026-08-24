@@ -68,12 +68,11 @@ pub fn health_check(host: &str, port: u16) -> Result<LanHealthResponse, LanClien
         .send()
         .map_err(|e| LanClientError::Http(e.to_string()))?;
     let status = resp.status().as_u16();
-    let text = resp.text().map_err(|e| LanClientError::Http(e.to_string()))?;
+    let text = resp
+        .text()
+        .map_err(|e| LanClientError::Http(e.to_string()))?;
     if !(200..300).contains(&status) {
-        return Err(LanClientError::Peer {
-            status,
-            body: text,
-        });
+        return Err(LanClientError::Peer { status, body: text });
     }
     serde_json::from_str(&text).map_err(|e| LanClientError::Decode(e.to_string()))
 }
@@ -87,12 +86,11 @@ pub fn health_check_quick(host: &str, port: u16) -> Result<LanHealthResponse, La
         .send()
         .map_err(|e| LanClientError::Http(e.to_string()))?;
     let status = resp.status().as_u16();
-    let text = resp.text().map_err(|e| LanClientError::Http(e.to_string()))?;
+    let text = resp
+        .text()
+        .map_err(|e| LanClientError::Http(e.to_string()))?;
     if !(200..300).contains(&status) {
-        return Err(LanClientError::Peer {
-            status,
-            body: text,
-        });
+        return Err(LanClientError::Peer { status, body: text });
     }
     serde_json::from_str(&text).map_err(|e| LanClientError::Decode(e.to_string()))
 }
@@ -150,9 +148,7 @@ pub fn probe_presence(
 }
 
 /// Probe many addresses. Failures become unreachable/stale rows (never hard-fail the batch).
-pub fn probe_presence_many(
-    targets: &[(String, Option<String>)],
-) -> Vec<LanPeerPresence> {
+pub fn probe_presence_many(targets: &[(String, Option<String>)]) -> Vec<LanPeerPresence> {
     let mut out = Vec::with_capacity(targets.len());
     for (address, last_seen) in targets {
         match probe_presence(address, last_seen.as_deref()) {
@@ -189,12 +185,11 @@ pub fn send_chat_message(
         .send()
         .map_err(|e| LanClientError::Http(e.to_string()))?;
     let status = resp.status().as_u16();
-    let text = resp.text().map_err(|e| LanClientError::Http(e.to_string()))?;
+    let text = resp
+        .text()
+        .map_err(|e| LanClientError::Http(e.to_string()))?;
     if !(200..300).contains(&status) {
-        return Err(LanClientError::Peer {
-            status,
-            body: text,
-        });
+        return Err(LanClientError::Peer { status, body: text });
     }
     serde_json::from_str(&text).map_err(|e| LanClientError::Decode(e.to_string()))
 }
@@ -213,12 +208,11 @@ pub fn send_package_to_peer(
         .send()
         .map_err(|e| LanClientError::Http(e.to_string()))?;
     let status = resp.status().as_u16();
-    let text = resp.text().map_err(|e| LanClientError::Http(e.to_string()))?;
+    let text = resp
+        .text()
+        .map_err(|e| LanClientError::Http(e.to_string()))?;
     if !(200..300).contains(&status) {
-        return Err(LanClientError::Peer {
-            status,
-            body: text,
-        });
+        return Err(LanClientError::Peer { status, body: text });
     }
     serde_json::from_str(&text).map_err(|e| LanClientError::Decode(e.to_string()))
 }
@@ -242,12 +236,11 @@ pub fn ask_peer(
         .send()
         .map_err(|e| LanClientError::Http(e.to_string()))?;
     let status = resp.status().as_u16();
-    let text = resp.text().map_err(|e| LanClientError::Http(e.to_string()))?;
+    let text = resp
+        .text()
+        .map_err(|e| LanClientError::Http(e.to_string()))?;
     if !(200..300).contains(&status) {
-        return Err(LanClientError::Peer {
-            status,
-            body: text,
-        });
+        return Err(LanClientError::Peer { status, body: text });
     }
     serde_json::from_str(&text).map_err(|e| LanClientError::Decode(e.to_string()))
 }

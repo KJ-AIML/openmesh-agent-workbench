@@ -111,7 +111,10 @@ fn now_ms() -> u64 {
 }
 
 fn auto_ui_dir(project_path: &Path) -> PathBuf {
-    project_path.join(".openmesh").join("canvases").join("auto-ui")
+    project_path
+        .join(".openmesh")
+        .join("canvases")
+        .join("auto-ui")
 }
 
 fn auto_ui_file(project_path: &Path, id: &str) -> PathBuf {
@@ -246,10 +249,7 @@ fn load_auto_ui_path(path: &Path) -> Result<AutoUiDocument, AutoUiError> {
     parse_auto_ui_document(&value)
 }
 
-pub fn upsert_auto_ui(
-    project_path: &Path,
-    value: &Value,
-) -> Result<AutoUiDocument, AutoUiError> {
+pub fn upsert_auto_ui(project_path: &Path, value: &Value) -> Result<AutoUiDocument, AutoUiError> {
     let doc = parse_auto_ui_document(value)?;
     let dir = auto_ui_dir(project_path);
     fs::create_dir_all(&dir).map_err(|e| AutoUiError::Io(e.to_string()))?;
@@ -269,14 +269,19 @@ pub fn delete_auto_ui(project_path: &Path, id: &str) -> Result<(), AutoUiError> 
 }
 
 /// Tool helper: upsert from agent JSON args.
-pub fn upsert_auto_ui_from_tool(project_path: &str, arguments_json: &str) -> Result<String, String> {
+pub fn upsert_auto_ui_from_tool(
+    project_path: &str,
+    arguments_json: &str,
+) -> Result<String, String> {
     let args: Value = serde_json::from_str(arguments_json).map_err(|e| e.to_string())?;
     let doc_val = if let Some(doc) = args.get("document") {
         doc.clone()
     } else if args.get("schema").is_some() {
         args.clone()
     } else {
-        return Err("canvas_upsert_auto_ui requires document object (schema openmesh.canvas/1)".into());
+        return Err(
+            "canvas_upsert_auto_ui requires document object (schema openmesh.canvas/1)".into(),
+        );
     };
     let saved = upsert_auto_ui(Path::new(project_path), &doc_val).map_err(|e| e.to_string())?;
     Ok(serde_json::to_string_pretty(&serde_json::json!({

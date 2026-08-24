@@ -493,7 +493,7 @@ fn checkpoint_f_does_not_change_tauri_surface() {
     let tauri_lib = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../src-tauri/src/lib.rs");
     let content = fs::read_to_string(tauri_lib).expect("read tauri lib");
     // 0.1.16: +get_host_os for macOS chrome (continuity handlers live in continuity_desktop.rs).
-    assert_eq!(content.matches("#[tauri::command]").count(), 53);
+    assert_eq!(content.matches("#[tauri::command]").count(), 56);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

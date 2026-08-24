@@ -7,9 +7,7 @@ use openmesh_core::lan::{
     ask_peer, lan_serve_status_for_project, listen_beacons, parse_host_port, send_package_to_peer,
     start_lan_serve, stop_lan_serve, PeerTable, DEFAULT_HTTP_PORT, DEFAULT_UDP_PORT, LAN_PROTOCOL,
 };
-use openmesh_core::relay::{
-    is_package_approved, read_approved_package, RelayTransportError,
-};
+use openmesh_core::relay::{is_package_approved, read_approved_package, RelayTransportError};
 use openmesh_core::storage::{read_project, Project};
 use serde_json::json;
 use std::io::{self, Write};
@@ -169,7 +167,10 @@ fn run_serve(args: &LanServeArgs, cwd: &Path) -> i32 {
             handle.status.http_host.as_deref().unwrap_or(&args.host),
             handle.status.http_port.unwrap_or(0)
         );
-        println!("udp_port={}", handle.status.udp_port.unwrap_or(args.udp_port));
+        println!(
+            "udp_port={}",
+            handle.status.udp_port.unwrap_or(args.udp_port)
+        );
         println!(
             "peer_id={}",
             handle.status.peer_id.as_deref().unwrap_or("-")
@@ -230,12 +231,7 @@ fn run_discover(args: &LanDiscoverArgs, cwd: &Path) -> i32 {
         });
 
     let table = PeerTable::new();
-    match listen_beacons(
-        &table,
-        args.udp_port,
-        args.seconds,
-        ignore.as_deref(),
-    ) {
+    match listen_beacons(&table, args.udp_port, args.seconds, ignore.as_deref()) {
         Ok(peers) => {
             if args.json {
                 println!("{}", serde_json::to_value(&peers).unwrap_or(json!([])));

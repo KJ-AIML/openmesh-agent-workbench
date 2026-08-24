@@ -10,9 +10,7 @@ use crate::return_digest::contract::{
     ReturnDigestValidationError, MAX_DIGEST_EVIDENCE_REFS, MAX_DIGEST_HANDOFF_REFS,
     MAX_DIGEST_LIMITATIONS, MAX_DIGEST_SUMMARY_BYTES, RETURN_DIGEST_PROTOCOL_VERSION,
 };
-use crate::return_digest::pending::{
-    build_pending_questions_view, PendingQuestionsError,
-};
+use crate::return_digest::pending::{build_pending_questions_view, PendingQuestionsError};
 
 #[derive(Debug, thiserror::Error)]
 pub enum ReturnDigestError {

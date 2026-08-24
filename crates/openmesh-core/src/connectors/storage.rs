@@ -96,7 +96,9 @@ fn write_registry(
     atomic_write(&registry_path(project_path), &bytes)
 }
 
-pub fn list_connectors(project_path: &str) -> Result<Vec<ConnectorDescriptor>, ConnectorStorageError> {
+pub fn list_connectors(
+    project_path: &str,
+) -> Result<Vec<ConnectorDescriptor>, ConnectorStorageError> {
     let _ = load_project(project_path)?;
     Ok(read_registry(project_path)?.connectors)
 }
@@ -123,7 +125,11 @@ pub fn init_or_register_connector(
 ) -> Result<ConnectorDescriptor, ConnectorStorageError> {
     let _ = load_project(project_path)?;
     let mut reg = read_registry(project_path)?;
-    if reg.connectors.iter().any(|c| c.connector_id == connector_id) {
+    if reg
+        .connectors
+        .iter()
+        .any(|c| c.connector_id == connector_id)
+    {
         return Err(ConnectorStorageError::AlreadyExists(connector_id.into()));
     }
     let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);

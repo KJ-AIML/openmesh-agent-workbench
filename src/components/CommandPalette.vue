@@ -99,6 +99,7 @@ watch(
       searchInputRef.value?.focus();
     }
   },
+  { immediate: true },
 );
 
 function handleKeydown(e: KeyboardEvent) {
@@ -170,7 +171,7 @@ onUnmounted(() => {
             type="text"
             placeholder="Type a command or search..."
             class="command-palette-input"
-            @keydown.stop
+            @keydown.stop="handleKeydown"
           />
           <kbd class="command-palette-kbd">ESC</kbd>
         </div>

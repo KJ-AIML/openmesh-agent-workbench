@@ -10,33 +10,33 @@
 // `write_signal` call happens yet (Checkpoints B/C).
 // ============================================================================
 
+mod agent;
 mod catch_up;
 mod collect;
+mod connector;
 mod context;
 mod digest;
 mod event;
 mod handoff;
 mod init;
+mod lan;
 mod mesh;
 mod online_proxy;
+mod org;
 mod output;
 mod pending;
+mod pilot;
 mod profile;
 mod project;
 mod proxy;
 mod proxy_runtime_factory;
 mod proxy_verify;
-mod lan;
-mod agent;
+mod rc;
 mod relay;
 mod signal;
 mod state;
 mod team;
 mod trust_admin;
-mod connector;
-mod org;
-mod pilot;
-mod rc;
 
 use clap::{Args, Parser, Subcommand};
 

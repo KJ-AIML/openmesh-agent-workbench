@@ -56,10 +56,12 @@ import {
   getTeamTrustPolicy,
   initTeamWorkspace,
   addTeamMember,
+  removeTeamMember,
   initTeamTrustPolicy,
   setTeamTrustRemoteQuery,
   setTeamTrustQueryMode,
   addTeamTrustAllowlist,
+  removeTeamTrustAllowlist,
   listTeamTrustAudit,
   listConnectors,
   getOrgGraph,
@@ -177,7 +179,7 @@ const tabMeta: Record<TabId, { label: string; icon: typeof Inbox }> = {
   pending: { label: "Pending", icon: Inbox },
   digest: { label: "Digest", icon: Clock },
   mesh: { label: "Peers", icon: Users },
-  team: { label: "Workspace", icon: Users },
+  team: { label: "Team", icon: Users },
   trust: { label: "Trust", icon: Shield },
   connectors: { label: "Connectors", icon: Plug },
   org: { label: "Org", icon: Network },
@@ -188,6 +190,25 @@ const tabMeta: Record<TabId, { label: string; icon: typeof Inbox }> = {
   lan: { label: "LAN", icon: Radio },
   chat: { label: "Chat", icon: MessageSquare },
 };
+
+/** LAN dogfood path — short steps, not a card dashboard. */
+const lanDogfoodSteps: Array<{ id: TabId; label: string; hint: string }> = [
+  { id: "mesh", label: "Peers", hint: "Register a peer (+ optional LAN host:port)" },
+  { id: "team", label: "Team", hint: "Init workspace and link members to peers" },
+  { id: "trust", label: "Trust", hint: "Allowlist the peer for remote query" },
+  { id: "lan", label: "LAN", hint: "Start listener / discover on the same network" },
+];
+
+const showLanDogfoodGuide = computed(() =>
+  lanDogfoodSteps.some((s) => s.id === tab.value),
+);
+
+const lanDogfoodDone = computed<Record<string, boolean>>(() => ({
+  mesh: peers.value.length > 0,
+  team: !!teamWs.value,
+  trust: !!trustPolicy.value,
+  lan: !!lanStatus.value?.running,
+}));
 
 const visibleTabs = computed(() => {
   const g = groups.find((x) => x.id === group.value) ?? groups[0];
@@ -249,6 +270,9 @@ async function loadTab() {
       case "mesh":
         peers.value = await listMeshPeers(path);
         envelopes.value = await listMeshEnvelopes(path);
+        teamWs.value = await getTeamWorkspace(path);
+        trustPolicy.value = await getTeamTrustPolicy(path);
+        lanStatus.value = await lanServeStatus(path);
         if (peers.value.some((p) => p.lanAddress)) {
           await refreshLanPresence();
         }
@@ -261,6 +285,9 @@ async function loadTab() {
         break;
       case "lan":
         lanStatus.value = await lanServeStatus(path);
+        peers.value = await listMeshPeers(path);
+        teamWs.value = await getTeamWorkspace(path);
+        trustPolicy.value = await getTeamTrustPolicy(path);
         await refreshLanApproved();
         if (lanPeers.value.length === 0) {
           try {
@@ -287,13 +314,25 @@ async function loadTab() {
         break;
       case "team":
         teamWs.value = await getTeamWorkspace(path);
+        peers.value = await listMeshPeers(path);
+        trustPolicy.value = await getTeamTrustPolicy(path);
+        lanStatus.value = await lanServeStatus(path);
+        if (peers.value.some((p) => p.lanAddress)) {
+          await refreshLanPresence();
+        }
         break;
       case "trust":
         trustPolicy.value = await getTeamTrustPolicy(path);
+        teamWs.value = await getTeamWorkspace(path);
+        peers.value = await listMeshPeers(path);
+        lanStatus.value = await lanServeStatus(path);
         try {
           trustAudit.value = await listTeamTrustAudit(path, 20);
         } catch {
           trustAudit.value = [];
+        }
+        if (peers.value.some((p) => p.lanAddress)) {
+          await refreshLanPresence();
         }
         break;
       case "connectors":
@@ -427,6 +466,25 @@ function presenceLabel(state?: LanPresenceState): string {
   }
 }
 
+function peerById(peerId?: string | null): MeshPeerRecord | undefined {
+  if (!peerId) return undefined;
+  return peers.value.find((p) => p.peerId === peerId);
+}
+
+function presenceForPeerId(peerId?: string | null): LanPeerPresence | undefined {
+  const p = peerById(peerId);
+  return p?.lanAddress ? presenceFor(p.lanAddress) : undefined;
+}
+
+function canRemoveMember(memberId: string, role: string): boolean {
+  if (!teamWs.value?.members?.length) return false;
+  if (role === "owner") {
+    const owners = teamWs.value.members.filter((m) => m.role === "owner");
+    return owners.length > 1;
+  }
+  return true;
+}
+
 async function refreshLanPresence() {
   const targets: Array<{ address: string; lastSeenAt?: string }> = [];
   const seen = new Set<string>();
@@ -535,6 +593,7 @@ async function handleTeamInit() {
       ownerLabel: currentProject.value?.name || "local-operator",
     });
     teamInitName.value = "";
+    await loadSummary();
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
   } finally {
@@ -554,6 +613,21 @@ async function handleTeamAddMember() {
     });
     teamMemberLabel.value = "";
     teamMemberPeer.value = "";
+    await loadSummary();
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    acting.value = false;
+  }
+}
+
+async function handleTeamRemoveMember(memberId: string) {
+  if (!currentProjectPath.value || !memberId) return;
+  acting.value = true;
+  error.value = null;
+  try {
+    teamWs.value = await removeTeamMember(currentProjectPath.value, memberId);
+    await loadSummary();
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
   } finally {
@@ -563,6 +637,11 @@ async function handleTeamAddMember() {
 
 async function handleTrustInit() {
   if (!currentProjectPath.value) return;
+  if (!teamWs.value) {
+    error.value = "Initialize a team workspace first (Team tab).";
+    selectTab("team");
+    return;
+  }
   acting.value = true;
   error.value = null;
   try {
@@ -620,6 +699,33 @@ async function handleTrustAllowAdd() {
     error.value = e instanceof Error ? e.message : String(e);
   } finally {
     acting.value = false;
+  }
+}
+
+async function handleTrustAllowRemove(entry: {
+  memberId?: string;
+  meshPeerId?: string;
+}) {
+  if (!currentProjectPath.value) return;
+  if (!entry.memberId && !entry.meshPeerId) return;
+  acting.value = true;
+  error.value = null;
+  try {
+    trustPolicy.value = await removeTeamTrustAllowlist(currentProjectPath.value, {
+      memberId: entry.memberId,
+      meshPeerId: entry.meshPeerId,
+    });
+    trustAudit.value = await listTeamTrustAudit(currentProjectPath.value, 20);
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    acting.value = false;
+  }
+}
+
+function trustPeerFromRoster() {
+  if (peers.value.length === 1 && !trustAllowPeer.value.trim()) {
+    trustAllowPeer.value = peers.value[0].peerId;
   }
 }
 
@@ -873,6 +979,41 @@ onUnmounted(() => {
         <span>{{ error }}</span>
       </div>
 
+      <ol
+        v-if="showLanDogfoodGuide"
+        class="cont__flow"
+        aria-label="LAN dogfood steps"
+      >
+        <li
+          v-for="(step, i) in lanDogfoodSteps"
+          :key="step.id"
+          class="cont__flow-step"
+          :class="{
+            'is-active': tab === step.id,
+            'is-done': lanDogfoodDone[step.id],
+          }"
+        >
+          <button
+            type="button"
+            class="cont__flow-btn"
+            :title="step.hint"
+            @click="selectTab(step.id)"
+          >
+            <span class="cont__flow-num">{{ i + 1 }}</span>
+            <span class="cont__flow-label">{{ step.label }}</span>
+          </button>
+          <span
+            v-if="i < lanDogfoodSteps.length - 1"
+            class="cont__flow-sep"
+            aria-hidden="true"
+          >→</span>
+        </li>
+      </ol>
+      <p v-if="showLanDogfoodGuide" class="cont__flow-hint">
+        Trusted-LAN alpha (no WAN / no cloud relay). Local registry + same-network HTTP —
+        not finished-product encryption.
+      </p>
+
       <div v-if="loading" class="flex items-center gap-2 text-[13px] text-muted py-8 justify-center">
         <Loader2 class="h-4 w-4 animate-spin" />
         Loading…
@@ -994,8 +1135,8 @@ onUnmounted(() => {
         <div class="workbench-card p-4 space-y-3">
           <h3 class="section-label">Register peer</h3>
           <p class="text-[12px] text-muted">
-            Local peer registry (same as <code class="code">mesh peer add</code>).
-            Optional LAN host:port enables presence probing and Team Chat.
+            Step 1 — local peer registry. Optional LAN <code class="code">host:port</code>
+            enables green-dot presence and Chat. Next: Team → Trust → start LAN listener.
           </p>
           <input
             v-model="meshAddLabel"
@@ -1005,7 +1146,7 @@ onUnmounted(() => {
           <input
             v-model="meshAddLan"
             class="input-sm w-full"
-            placeholder="LAN host:port (optional)"
+            placeholder="LAN host:port (optional, e.g. 192.168.1.12:41778)"
           />
           <input
             v-model="meshAddNotes"
@@ -1023,8 +1164,12 @@ onUnmounted(() => {
         </div>
         <div class="workbench-card p-4 space-y-3">
           <h3 class="section-label">Peers ({{ peers.length }})</h3>
-          <div v-if="peers.length === 0" class="text-[12px] text-muted">
-            No mesh peers registered yet.
+          <div v-if="peers.length === 0" class="cont__empty">
+            <p class="cont__empty-title">No peers yet</p>
+            <p class="cont__empty-body">
+              Add a peer above (include LAN host:port if you already know it), then continue to
+              <button type="button" class="cont__inline-link" @click="selectTab('team')">Team</button>.
+            </p>
           </div>
           <div
             v-for="p in peers"
@@ -1133,10 +1278,10 @@ onUnmounted(() => {
         <div class="workbench-card p-4 space-y-3">
           <h3 class="section-label">LAN listener</h3>
           <p class="text-[12px] text-muted">
-            Trusted-LAN alpha: UDP discovery + HTTP package transfer / live Agent
-            Engine ask. macOS may prompt for firewall on first bind. VPN or
-            loopback-only networks often break UDP — paste the peer’s
-            <code class="text-[11px]">host:port</code> manually.
+            Step 4 — start the listener so peers can discover / ask / chat here.
+            Trusted-LAN alpha: UDP + HTTP. macOS may prompt for firewall on first bind.
+            VPN or loopback-only networks often break UDP — paste the peer’s
+            <code class="text-[11px]">host:port</code> manually. No WAN.
           </p>
           <div v-if="lanStatus?.running" class="flex items-center gap-2 text-[13px]">
             <CheckCircle2 class="h-4 w-4" style="color: var(--accent-green)" />
@@ -1585,17 +1730,23 @@ onUnmounted(() => {
       </div>
 
       <!-- Team (0.1.15) -->
-      <div v-else-if="tab === 'team'" class="space-y-4">
-        <div v-if="loading" class="text-[13px] text-muted flex items-center gap-2">
-          <Loader2 class="h-4 w-4 animate-spin" /> Loading…
-        </div>
-        <template v-else-if="!teamWs">
+      <div v-else-if="tab === 'team'" class="space-y-3">
+        <template v-if="!teamWs">
           <div class="workbench-card p-5 space-y-3">
-            <h3 class="text-[14px] font-semibold">Initialize team workspace</h3>
+            <h3 class="text-[14px] font-semibold">Initialize team</h3>
             <p class="text-[12px] text-muted">
-              Local team registry (same as <code class="code">team init</code>).
-              Not cloud multi-tenant admin.
+              Step 2 — local team registry for this project. Not multi-tenant cloud admin.
+              Cloud sync remains CLI scaffold only (<code class="code">team cloud sync-scaffold</code>).
             </p>
+            <div
+              v-if="peers.length === 0"
+              class="text-[12px] rounded p-3"
+              style="background: var(--surface-2); border: 1px solid var(--border)"
+            >
+              Tip: register a peer first
+              (<button type="button" class="cont__inline-link" @click="selectTab('mesh')">Peers</button>)
+              so you can link members afterward.
+            </div>
             <input
               v-model="teamInitName"
               class="input-sm w-full"
@@ -1613,32 +1764,84 @@ onUnmounted(() => {
         </template>
         <template v-else>
           <div class="workbench-card p-5 space-y-3">
-            <h3 class="text-[14px] font-semibold">{{ teamWs.displayName }}</h3>
-            <p class="text-[12px] text-muted">
-              team_id={{ teamWs.teamId }} · host={{ teamWs.hostWorkspaceId }} ·
-              members={{ teamWs.members?.length ?? 0 }}
-            </p>
-            <ul class="space-y-1.5 text-[12px]">
-              <li v-for="m in teamWs.members" :key="m.memberId" class="flex gap-2 flex-wrap">
-                <span class="font-medium">{{ m.label }}</span>
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+              <div>
+                <h3 class="text-[14px] font-semibold">{{ teamWs.displayName }}</h3>
+                <p class="text-[12px] text-muted mt-0.5">
+                  {{ teamWs.members?.length ?? 0 }} members · local registry
+                </p>
+              </div>
+              <button
+                v-if="!trustPolicy"
+                type="button"
+                class="btn-ghost"
+                @click="selectTab('trust')"
+              >
+                Next: Trust →
+              </button>
+            </div>
+            <ul class="space-y-2 text-[12px]">
+              <li
+                v-for="m in teamWs.members"
+                :key="m.memberId"
+                class="flex items-center gap-2 flex-wrap rounded-lg p-2.5"
+                style="background: var(--surface-2); border: 1px solid var(--border)"
+              >
+                <span
+                  v-if="m.meshPeerId && peerById(m.meshPeerId)?.lanAddress"
+                  class="presence-dot"
+                  :class="
+                    'presence-dot--' +
+                    (presenceForPeerId(m.meshPeerId)?.state || 'unknown')
+                  "
+                  :title="presenceLabel(presenceForPeerId(m.meshPeerId)?.state)"
+                />
+                <span class="font-medium text-[13px]">{{ m.label }}</span>
                 <span class="badge">{{ m.role }}</span>
-                <span class="text-muted">id={{ m.memberId }}</span>
-                <span v-if="m.meshPeerId" class="text-muted">peer={{ m.meshPeerId }}</span>
+                <span
+                  v-if="m.meshPeerId"
+                  class="text-muted"
+                >
+                  {{ peerById(m.meshPeerId)?.label || m.meshPeerId }}
+                  <template v-if="peerById(m.meshPeerId)?.lanAddress">
+                    · {{ peerById(m.meshPeerId)?.lanAddress }}
+                  </template>
+                </span>
+                <span v-else class="text-muted">no linked peer</span>
+                <button
+                  v-if="canRemoveMember(m.memberId, m.role)"
+                  type="button"
+                  class="btn-ghost ml-auto"
+                  :disabled="acting"
+                  @click="handleTeamRemoveMember(m.memberId)"
+                >
+                  Remove
+                </button>
               </li>
             </ul>
           </div>
           <div class="workbench-card p-5 space-y-3">
             <h3 class="section-label">Add member</h3>
+            <p class="text-[12px] text-muted">
+              Link a mesh peer so Trust allowlist and LAN presence stay aligned.
+            </p>
             <input
               v-model="teamMemberLabel"
               class="input-sm w-full"
               placeholder="Member label"
             />
-            <input
-              v-model="teamMemberPeer"
-              class="input-sm w-full"
-              placeholder="Linked mesh peer id (optional)"
-            />
+            <select v-model="teamMemberPeer" class="input-sm w-full">
+              <option value="">No linked peer</option>
+              <option
+                v-for="p in peers"
+                :key="p.peerId"
+                :value="p.peerId"
+              >
+                {{ p.label }} ({{ p.peerId }}){{
+                  p.lanAddress ? ` · ${p.lanAddress}` : ""
+                }}
+              </option>
+            </select>
             <button
               type="button"
               class="btn-primary"
@@ -1647,21 +1850,36 @@ onUnmounted(() => {
             >
               Add member
             </button>
+            <p v-if="peers.length === 0" class="text-[12px] text-muted">
+              No peers to link —
+              <button type="button" class="cont__inline-link" @click="selectTab('mesh')">
+                Add peer
+              </button>
+              first.
+            </p>
           </div>
         </template>
       </div>
 
       <!-- Trust (0.1.17) -->
-      <div v-else-if="tab === 'trust'" class="space-y-4">
-        <div v-if="loading" class="text-[13px] text-muted flex items-center gap-2">
-          <Loader2 class="h-4 w-4 animate-spin" /> Loading…
-        </div>
+      <div v-else-if="tab === 'trust'" class="space-y-3">
+        <template v-if="!teamWs">
+          <div class="workbench-card p-5 space-y-3">
+            <h3 class="text-[14px] font-semibold">Team required first</h3>
+            <p class="text-[12px] text-muted">
+              Trust policy is scoped to a team workspace. Init Team, then return here.
+            </p>
+            <button type="button" class="btn-primary" @click="selectTab('team')">
+              Go to Team → Init
+            </button>
+          </div>
+        </template>
         <template v-else-if="!trustPolicy">
           <div class="workbench-card p-5 space-y-3">
-            <h3 class="text-[14px] font-semibold">No trust policy</h3>
+            <h3 class="text-[14px] font-semibold">Initialize trust</h3>
             <p class="text-[12px] text-muted">
-              Initialize after team workspace exists. Secrets stay fail-closed;
-              this is policy gating — not finished-product E2E mesh crypto.
+              Step 3 — local policy for remote query gating on LAN/mesh.
+              Secrets stay fail-closed. This is <em>not</em> finished-product E2E mesh crypto.
             </p>
             <button
               type="button"
@@ -1675,33 +1893,28 @@ onUnmounted(() => {
         </template>
         <template v-else>
           <div class="workbench-card p-5 space-y-3 text-[12px]">
-            <p>
-              <span class="text-muted">team</span> · {{ trustPolicy.teamId }}
-            </p>
-            <p>
-              <span class="text-muted">remote query</span> ·
-              {{ trustPolicy.remoteQueryEnabled ? "enabled" : "disabled" }}
-            </p>
-            <p>
-              <span class="text-muted">allowlist mode</span> ·
-              {{ trustPolicy.queryAllowlistMode }}
-            </p>
-            <p>
-              <span class="text-muted">allowlist size</span> ·
-              {{ trustPolicy.queryAllowlist?.length ?? 0 }}
-            </p>
-            <p>
-              <span class="text-muted">secrets fail-closed</span> ·
-              {{ trustPolicy.secretTopicsFailClosed }}
-            </p>
-            <p>
-              <span class="text-muted">secret export</span> ·
-              {{ trustPolicy.allowSecretExport }}
-            </p>
-            <p>
-              <span class="text-muted">selective sync</span> ·
-              {{ trustPolicy.syncRequireSelective }}
-            </p>
+            <div class="flex items-start justify-between gap-3 flex-wrap">
+              <div>
+                <h3 class="text-[14px] font-semibold">Trust this peer on LAN</h3>
+                <p class="text-muted mt-0.5">
+                  team {{ trustPolicy.teamId }} · policy gating only
+                </p>
+              </div>
+              <button type="button" class="btn-ghost" @click="selectTab('lan')">
+                Next: LAN →
+              </button>
+            </div>
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="badge">
+                remote query
+                {{ trustPolicy.remoteQueryEnabled ? "on" : "off" }}
+              </span>
+              <span class="badge">mode {{ trustPolicy.queryAllowlistMode }}</span>
+              <span class="badge">
+                allowlist {{ trustPolicy.queryAllowlist?.length ?? 0 }}
+              </span>
+              <span class="badge">secrets fail-closed</span>
+            </div>
             <div class="flex flex-wrap gap-2 pt-1">
               <button
                 type="button"
@@ -1718,38 +1931,68 @@ onUnmounted(() => {
               <button
                 type="button"
                 class="btn-ghost"
+                :class="{
+                  'is-mode-active': trustPolicy.queryAllowlistMode === 'allow-all',
+                }"
                 :disabled="acting"
                 @click="handleTrustSetMode('allow-all')"
               >
-                Mode: allow-all
+                allow-all
               </button>
               <button
                 type="button"
                 class="btn-ghost"
+                :class="{
+                  'is-mode-active':
+                    trustPolicy.queryAllowlistMode === 'allowlist-only',
+                }"
                 :disabled="acting"
                 @click="handleTrustSetMode('allowlist-only')"
               >
-                Mode: allowlist-only
+                allowlist-only
               </button>
               <button
                 type="button"
                 class="btn-ghost"
+                :class="{
+                  'is-mode-active': trustPolicy.queryAllowlistMode === 'deny-all',
+                }"
                 :disabled="acting"
                 @click="handleTrustSetMode('deny-all')"
               >
-                Mode: deny-all
+                deny-all
               </button>
             </div>
+            <p class="text-muted">
+              For LAN dogfood: enable remote query → set <strong>allowlist-only</strong> →
+              add the peer below.
+            </p>
           </div>
           <div class="workbench-card p-5 space-y-3">
             <h3 class="section-label">Allowlist peer</h3>
             <p class="text-[12px] text-muted">
               When mode is allowlist-only, only listed mesh peers may be queried.
             </p>
+            <select
+              v-model="trustAllowPeer"
+              class="input-sm w-full"
+              @focus="trustPeerFromRoster"
+            >
+              <option value="">Select a registered peer…</option>
+              <option
+                v-for="p in peers"
+                :key="p.peerId"
+                :value="p.peerId"
+              >
+                {{ p.label }} ({{ p.peerId }}){{
+                  p.lanAddress ? ` · ${p.lanAddress}` : ""
+                }}
+              </option>
+            </select>
             <input
               v-model="trustAllowPeer"
               class="input-sm w-full"
-              placeholder="Mesh peer id"
+              placeholder="Or paste mesh peer id"
             />
             <button
               type="button"
@@ -1757,24 +2000,62 @@ onUnmounted(() => {
               :disabled="acting || !trustAllowPeer.trim()"
               @click="handleTrustAllowAdd"
             >
-              Add to allowlist
+              Trust this peer
             </button>
+            <p v-if="peers.length === 0" class="text-[12px] text-muted">
+              No peers registered —
+              <button type="button" class="cont__inline-link" @click="selectTab('mesh')">
+                Add peer
+              </button>
+              first.
+            </p>
             <ul
               v-if="trustPolicy.queryAllowlist?.length"
-              class="space-y-1 text-[12px] text-muted"
+              class="space-y-2 text-[12px]"
             >
               <li
                 v-for="(e, i) in trustPolicy.queryAllowlist"
                 :key="i"
+                class="flex items-center gap-2 flex-wrap rounded-lg p-2.5"
+                style="background: var(--surface-2); border: 1px solid var(--border)"
               >
-                member={{ e.memberId || "-" }} · peer={{ e.meshPeerId || "-" }}
+                <span
+                  v-if="e.meshPeerId && peerById(e.meshPeerId)?.lanAddress"
+                  class="presence-dot"
+                  :class="
+                    'presence-dot--' +
+                    (presenceForPeerId(e.meshPeerId)?.state || 'unknown')
+                  "
+                  :title="presenceLabel(presenceForPeerId(e.meshPeerId)?.state)"
+                />
+                <span class="font-medium">
+                  {{ peerById(e.meshPeerId)?.label || e.meshPeerId || e.memberId || "entry" }}
+                </span>
+                <span class="text-muted">
+                  peer={{ e.meshPeerId || "-" }}
+                  <template v-if="e.memberId"> · member={{ e.memberId }}</template>
+                </span>
+                <button
+                  type="button"
+                  class="btn-ghost ml-auto"
+                  :disabled="acting"
+                  @click="handleTrustAllowRemove(e)"
+                >
+                  Remove
+                </button>
               </li>
             </ul>
+            <p
+              v-else
+              class="text-[12px] text-muted"
+            >
+              Allowlist empty — add a peer to trust on LAN, or use allow-all mode.
+            </p>
           </div>
           <div class="workbench-card p-5 space-y-2">
             <h3 class="section-label">Admin audit</h3>
             <div v-if="trustAudit.length === 0" class="text-[12px] text-muted">
-              No audit events yet.
+              No audit events yet. Init / mode / allowlist changes appear here.
             </div>
             <div
               v-for="ev in trustAudit"
@@ -2003,6 +2284,90 @@ onUnmounted(() => {
   margin: 0.35rem 0 0;
   font-size: 0.8rem;
   color: var(--muted-foreground);
+}
+
+.cont__flow {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.15rem 0.25rem;
+}
+
+.cont__flow-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.cont__flow-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cont__flow-step.is-active .cont__flow-btn {
+  border-color: color-mix(in srgb, var(--accent-blue) 55%, var(--border));
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--accent-blue) 12%, var(--surface-2));
+}
+
+.cont__flow-step.is-done .cont__flow-num {
+  background: var(--accent-green, #22c55e);
+  color: #fff;
+}
+
+.cont__flow-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  background: var(--surface-3);
+  color: var(--muted-foreground);
+}
+
+.cont__flow-sep {
+  color: var(--muted-foreground);
+  opacity: 0.55;
+  font-size: 0.75rem;
+  padding: 0 0.1rem;
+}
+
+.cont__flow-hint {
+  margin: -0.35rem 0 0;
+  font-size: 0.72rem;
+  color: var(--muted-foreground);
+}
+
+.cont__inline-link {
+  display: inline;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent-blue);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.btn-ghost.is-mode-active {
+  border-color: color-mix(in srgb, var(--accent-blue) 50%, var(--border));
+  background: color-mix(in srgb, var(--accent-blue) 10%, transparent);
 }
 
 .chip {

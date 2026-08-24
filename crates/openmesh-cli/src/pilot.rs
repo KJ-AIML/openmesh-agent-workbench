@@ -173,10 +173,7 @@ fn print_pack(pack: &openmesh_core::pilot::PilotPack, json: bool) {
         pack.pass_count, pack.warn_count, pack.fail_count
     );
     for c in &pack.checks {
-        println!(
-            "  [{:?}] {} | {} | {}",
-            c.status, c.id, c.title, c.evidence
-        );
+        println!("  [{:?}] {} | {} | {}", c.status, c.id, c.title, c.evidence);
         if let Some(d) = &c.detail {
             println!("    {}", d);
         }

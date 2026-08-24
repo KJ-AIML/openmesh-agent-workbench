@@ -5,11 +5,11 @@
 //! `propose_patch` stages changes for human approval (does not apply).
 
 use super::continue_ops;
+use super::patch::propose_patch_from_args;
 use super::path_safety::{
     deny_sensitive_path, normalize_rel, resolve_dir_in_workspace, resolve_file_in_workspace,
     workspace_root,
 };
-use super::patch::propose_patch_from_args;
 use super::recipes;
 use super::registry::ToolExecutor;
 use crate::context_service;
@@ -40,8 +40,7 @@ pub struct WorkspaceToolExecutor {
 
 impl ToolExecutor for WorkspaceToolExecutor {
     fn execute(&self, tool_name: &str, arguments_json: &str) -> Result<String, String> {
-        let args: serde_json::Value =
-            serde_json::from_str(arguments_json).unwrap_or(json!({}));
+        let args: serde_json::Value = serde_json::from_str(arguments_json).unwrap_or(json!({}));
         match tool_name {
             "project_info" => {
                 let project: Option<Project> = read_project(&self.project_path, "project.json");
@@ -216,11 +215,7 @@ fn list_workspace_dir(project_path: &str, relative: &str) -> Result<String, Stri
     ))
 }
 
-fn grep_workspace(
-    project_path: &str,
-    pattern: &str,
-    glob: Option<&str>,
-) -> Result<String, String> {
+fn grep_workspace(project_path: &str, pattern: &str, glob: Option<&str>) -> Result<String, String> {
     let pattern = pattern.trim();
     if pattern.is_empty() {
         return Err("pattern is required".into());
@@ -244,11 +239,7 @@ fn grep_workspace(
     }
 }
 
-fn grep_with_rg(
-    project_path: &str,
-    pattern: &str,
-    glob: Option<&str>,
-) -> Result<String, String> {
+fn grep_with_rg(project_path: &str, pattern: &str, glob: Option<&str>) -> Result<String, String> {
     let root = workspace_root(project_path)?;
     let mut cmd = Command::new("rg");
     cmd.current_dir(&root);
@@ -274,7 +265,9 @@ fn grep_with_rg(
         &MAX_GREP_MATCHES.to_string(),
     ]);
     if let Some(g) = glob.map(str::trim).filter(|s| !s.is_empty()) {
-        if g.chars().any(|c| c == ';' || c == '|' || c == '&' || c == '`' || c == '$') {
+        if g.chars()
+            .any(|c| c == ';' || c == '|' || c == '&' || c == '`' || c == '$')
+        {
             return Err("invalid glob".into());
         }
         cmd.arg("--glob").arg(g);
@@ -429,13 +422,12 @@ fn git_status_text(project_path: &str) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
-fn git_diff_text(
-    project_path: &str,
-    path: Option<&str>,
-    staged: bool,
-) -> Result<String, String> {
+fn git_diff_text(project_path: &str, path: Option<&str>, staged: bool) -> Result<String, String> {
     let mut cmd = Command::new("git");
-    cmd.arg("-C").arg(project_path).arg("diff").arg("--no-color");
+    cmd.arg("-C")
+        .arg(project_path)
+        .arg("diff")
+        .arg("--no-color");
     if staged {
         cmd.arg("--cached");
     }
@@ -544,12 +536,13 @@ mod tests {
         let err = exec
             .execute("read_file", r#"{"path":"../outside.txt"}"#)
             .unwrap_err();
-        assert!(err.contains("Invalid path") || err.contains("escapes") || err.contains("not found"), "err={err}");
+        assert!(
+            err.contains("Invalid path") || err.contains("escapes") || err.contains("not found"),
+            "err={err}"
+        );
 
         fs::write(Path::new(&project).join(".env"), "SECRET=1\n").unwrap();
-        let denied = exec
-            .execute("read_file", r#"{"path":".env"}"#)
-            .unwrap_err();
+        let denied = exec.execute("read_file", r#"{"path":".env"}"#).unwrap_err();
         assert!(denied.contains("sensitive"), "denied={denied}");
         let _ = fs::remove_dir_all(&project);
     }
@@ -583,9 +576,7 @@ mod tests {
         let exec = WorkspaceToolExecutor {
             project_path: project.clone(),
         };
-        let out = exec
-            .execute("ui_navigate", r#"{"route":"docs"}"#)
-            .unwrap();
+        let out = exec.execute("ui_navigate", r#"{"route":"docs"}"#).unwrap();
         assert!(out.contains("\"/docs\""), "out={out}");
         assert!(out.contains("ui_navigate"), "out={out}");
         let err = exec

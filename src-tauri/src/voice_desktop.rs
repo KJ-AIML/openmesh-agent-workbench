@@ -104,7 +104,8 @@ fn transcribe_blocking(request: VoiceTranscribeRequest) -> Result<String, String
         .or_else(|| secrets().get_api_key().ok().flatten())
         .filter(|k| !k.trim().is_empty())
         .ok_or_else(|| {
-            "No API key for STT. Save your OpenRouter/OpenAI key in Settings → Provider.".to_string()
+            "No API key for STT. Save your OpenRouter/OpenAI key in Settings → Provider."
+                .to_string()
         })?;
 
     let provider = request
@@ -161,9 +162,7 @@ fn looks_openrouter(api_key: &str, provider: &str, base_url: &str) -> bool {
     let key = api_key.trim();
     let provider = provider.trim().to_ascii_lowercase();
     let base = base_url.trim().to_ascii_lowercase();
-    key.starts_with("sk-or-")
-        || provider.contains("openrouter")
-        || base.contains("openrouter.ai")
+    key.starts_with("sk-or-") || provider.contains("openrouter") || base.contains("openrouter.ai")
 }
 
 #[tauri::command]

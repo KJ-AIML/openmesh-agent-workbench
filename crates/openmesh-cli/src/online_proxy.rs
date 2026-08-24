@@ -206,8 +206,8 @@ fn run_ask(args: &OnlineProxyAskArgs, cwd: &Path) -> i32 {
     };
     let now = Utc::now();
     let until = now.to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
-    let since = (now - chrono::Duration::hours(24))
-        .to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+    let since =
+        (now - chrono::Duration::hours(24)).to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
     let options = ProxyContextPackBuildOptions {
         generated_at: until.clone(),
         ..ProxyContextPackBuildOptions::default()

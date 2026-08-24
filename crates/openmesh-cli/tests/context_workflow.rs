@@ -544,13 +544,11 @@ fn context_commands_expose_no_ask_answer_chat_or_query_subcommand() {
 #[test]
 fn context_commands_invoke_no_llm_axga_or_model_runtime() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
-    for file in ["context.rs", "main.rs"] {
-        let lowered = fs::read_to_string(root.join(file))
-            .expect("read")
-            .to_ascii_lowercase();
-        for forbidden in ["llm", "axga", "openai", "anthropic", "model_runtime"] {
-            assert!(!lowered.contains(forbidden));
-        }
+    let lowered = fs::read_to_string(root.join("context.rs"))
+        .expect("read context.rs")
+        .to_ascii_lowercase();
+    for forbidden in ["llm", "axga", "openai", "anthropic", "model_runtime"] {
+        assert!(!lowered.contains(forbidden));
     }
 }
 

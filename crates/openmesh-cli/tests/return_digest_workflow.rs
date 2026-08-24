@@ -140,12 +140,7 @@ fn digest_json_covers_absence_window() {
     .expect("signal");
 
     let out = run(
-        &[
-            "digest",
-            "--json",
-            "--since",
-            "2026-08-01T00:00:00Z",
-        ],
+        &["digest", "--json", "--since", "2026-08-01T00:00:00Z"],
         &project,
     );
     assert!(
@@ -157,9 +152,15 @@ fn digest_json_covers_absence_window() {
     let payload: Value = serde_json::from_slice(&out.stdout).expect("json");
     assert_eq!(payload["protocolVersion"], "1.0");
     assert_eq!(payload["window"]["since"], "2026-08-01T00:00:00Z");
-    assert!(payload["summary"].as_str().unwrap_or("").contains("need you"));
+    assert!(payload["summary"]
+        .as_str()
+        .unwrap_or("")
+        .contains("need you"));
     assert!(
-        payload["needsMe"].as_array().map(|a| !a.is_empty()).unwrap_or(false),
+        payload["needsMe"]
+            .as_array()
+            .map(|a| !a.is_empty())
+            .unwrap_or(false),
         "expected needsMe items"
     );
 }

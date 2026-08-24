@@ -1762,8 +1762,8 @@ fn checkpoint_c_does_not_change_tauri_surface() {
         assert!(!content.contains("ProxyContextPack"));
         assert_eq!(
             content.matches("#[tauri::command]").count(),
-            53,
-            "Tauri command count must remain 53 (get_host_os)"
+            56,
+            "Tauri command count must remain 56 (current desktop surface)"
         );
     }
 }

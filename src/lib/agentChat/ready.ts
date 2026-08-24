@@ -9,9 +9,8 @@ export type ChatSetupCheck = {
 
 export type ChatReadyOptions = {
   /**
-   * Truth from the user secret store / env (`agent_secret_status`).
-   * When provided, overrides the settings JSON `apiKeyConfigured` flag so the
-   * chat gate matches what the Agent Engine actually checks.
+   * Truth from the direct-provider secret store / env (`agent_secret_status`).
+   * When provided, overrides the settings JSON `apiKeyConfigured` flag.
    */
   secretConfigured?: boolean | null;
 };

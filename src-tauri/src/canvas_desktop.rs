@@ -1,9 +1,9 @@
 //! Tauri commands for OpenMesh Canvas domain (graph + Auto UI + freeform Board).
 
 use openmesh_core::canvas::{
-    add_node, connect_nodes, create_board, create_canvas, delete_auto_ui, delete_board, delete_node,
-    list_auto_ui, list_boards, list_canvases, load_auto_ui, load_board, load_canvas,
-    board_add_sticky, board_connect, save_board_scene, upsert_auto_ui, upsert_board,
+    add_node, board_add_sticky, board_connect, connect_nodes, create_board, create_canvas,
+    delete_auto_ui, delete_board, delete_node, list_auto_ui, list_boards, list_canvases,
+    load_auto_ui, load_board, load_canvas, save_board_scene, upsert_auto_ui, upsert_board,
     AutoUiDocument, BoardDocument, CanvasDocument,
 };
 use serde::Serialize;
@@ -129,10 +129,7 @@ pub fn canvas_board_load(project_path: String, id: String) -> Result<BoardDocume
 }
 
 #[tauri::command]
-pub fn canvas_board_upsert(
-    project_path: String,
-    document: Value,
-) -> Result<BoardDocument, String> {
+pub fn canvas_board_upsert(project_path: String, document: Value) -> Result<BoardDocument, String> {
     upsert_board(&PathBuf::from(project_path), &document).map_err(|e| e.to_string())
 }
 
@@ -156,12 +153,8 @@ pub fn canvas_board_add_sticky(
     text: String,
     board_id: Option<String>,
 ) -> Result<BoardDocument, String> {
-    board_add_sticky(
-        &PathBuf::from(project_path),
-        board_id.as_deref(),
-        &text,
-    )
-    .map_err(|e| e.to_string())
+    board_add_sticky(&PathBuf::from(project_path), board_id.as_deref(), &text)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

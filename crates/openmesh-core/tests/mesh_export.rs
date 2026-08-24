@@ -1,8 +1,6 @@
 //! Dev Track 0.1.10 Checkpoint C — mesh export / outbox tests.
 
-use openmesh_core::continuity::{
-    build_current_state_projection, load_continuity_input_snapshot,
-};
+use openmesh_core::continuity::{build_current_state_projection, load_continuity_input_snapshot};
 use openmesh_core::domain::{CatchUpWindow, EvidenceAttachment, EvidenceRef, WorkEvent};
 use openmesh_core::events::append_event;
 use openmesh_core::mesh::{
@@ -70,7 +68,9 @@ fn export_writes_outbox_envelope_with_continuity_items() {
             "work.completed",
             "Finished peer registry",
             vec![EvidenceAttachment {
-                evidence_ref: EvidenceRef::FilePath("crates/openmesh-core/src/mesh/peers.rs".into()),
+                evidence_ref: EvidenceRef::FilePath(
+                    "crates/openmesh-core/src/mesh/peers.rs".into(),
+                ),
                 observed_at: None,
             }],
             "2026-08-02T12:00:00Z",

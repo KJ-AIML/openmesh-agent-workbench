@@ -65,11 +65,7 @@ fn push_message(
     }
     let mut text = redact_secrets(&cleaned);
     if text.chars().count() > MAX_CHARS_PER_MESSAGE {
-        text = text
-            .chars()
-            .take(MAX_CHARS_PER_MESSAGE)
-            .collect::<String>()
-            + "\n…[truncated]";
+        text = text.chars().take(MAX_CHARS_PER_MESSAGE).collect::<String>() + "\n…[truncated]";
         *truncated = true;
     }
     if *total_chars + text.len() > MAX_TOTAL_CHARS {
@@ -434,7 +430,14 @@ fn extract_grok(path: &Path) -> ForeignTranscript {
     }
 
     let preview_only = messages.is_empty();
-    finalize("grok", &summary_path, title, messages, truncated, preview_only)
+    finalize(
+        "grok",
+        &summary_path,
+        title,
+        messages,
+        truncated,
+        preview_only,
+    )
 }
 
 fn extract_opencode(path: &Path) -> ForeignTranscript {
@@ -488,7 +491,10 @@ fn extract_opencode(path: &Path) -> ForeignTranscript {
 /// Read a foreign provider session file as an inert message list for OpenMesh Chat.
 ///
 /// This is read-only: the path is opened for reading only; nothing is written back.
-pub fn read_foreign_transcript(tool: &str, session_path: &str) -> Result<ForeignTranscript, String> {
+pub fn read_foreign_transcript(
+    tool: &str,
+    session_path: &str,
+) -> Result<ForeignTranscript, String> {
     let canonical = normalize_tool(tool).ok_or_else(|| {
         format!(
             "Tool '{tool}' is not supported for transcript import. Allowed: codex, claude, cursor, gemini, grok, opencode"
@@ -602,11 +608,7 @@ mod tests {
             r#"{{"type":"user","content":[{{"type":"text","text":"<user_query>\nFix the login bug\n</user_query>"}}]}}"#,
         )
         .unwrap();
-        writeln!(
-            f,
-            r#"{{"type":"reasoning","content":null}}"#,
-        )
-        .unwrap();
+        writeln!(f, r#"{{"type":"reasoning","content":null}}"#,).unwrap();
         writeln!(
             f,
             r#"{{"type":"assistant","content":"Hi! How can I help you today?"}}"#,

@@ -15,10 +15,7 @@ pub struct ProviderConfig {
 }
 
 impl ProviderConfig {
-    pub fn from_definition(
-        def: &AgentDefinition,
-        api_key: &str,
-    ) -> Result<Self, AgentEngineError> {
+    pub fn from_definition(def: &AgentDefinition, api_key: &str) -> Result<Self, AgentEngineError> {
         if api_key.trim().is_empty() {
             return Err(AgentEngineError::MissingApiKey);
         }
@@ -35,6 +32,19 @@ impl ProviderConfig {
                 AgentEngineError::Provider("baseUrl required for openai-compatible".into())
             })?,
         };
+        let base_url = base_url.trim();
+        let parsed = reqwest::Url::parse(base_url)
+            .map_err(|_| AgentEngineError::Provider("provider endpoint is invalid".into()))?;
+        if !matches!(parsed.scheme(), "http" | "https") || parsed.host_str().is_none() {
+            return Err(AgentEngineError::Provider(
+                "provider endpoint must use http or https".into(),
+            ));
+        }
+        if parsed.username() != "" || parsed.password().is_some() || parsed.query().is_some() {
+            return Err(AgentEngineError::Provider(
+                "provider endpoint must not contain credentials or query parameters".into(),
+            ));
+        }
         Ok(Self {
             api_key: api_key.to_string(),
             model: def.model.clone(),
@@ -134,10 +144,7 @@ impl OpenAiCompatibleProvider {
             {
                 "Coding Plan endpoint rejected this client. Use a pay-as-you-go / OpenAI-compatible provider.".into()
             } else {
-                format!(
-                    "HTTP {status}: {}",
-                    sanitize_err(truncate(&text, 280))
-                )
+                format!("HTTP {status}: {}", sanitize_err(truncate(&text, 280)))
             };
             return Ok(ProviderProbeResult {
                 ok: false,
@@ -163,8 +170,18 @@ impl OpenAiCompatibleProvider {
 }
 
 fn redact_base(base_url: &str) -> String {
-    // Keep host path; never include query secrets.
-    base_url.split('?').next().unwrap_or(base_url).to_string()
+    // Keep only scheme, host, and port; custom paths and query strings may carry secrets.
+    match reqwest::Url::parse(base_url) {
+        Ok(url) => {
+            let host = url.host_str().unwrap_or("provider");
+            let port = url
+                .port()
+                .map(|value| format!(":{value}"))
+                .unwrap_or_default();
+            format!("{}://{}{port}", url.scheme(), host)
+        }
+        Err(_) => "provider endpoint".into(),
+    }
 }
 
 /// Resolve provider kind + base URL from Settings-style fields.
@@ -223,8 +240,7 @@ Slash tools still work without the LLM."
         let mut body = build_request_body(&self.config.model, messages, tools);
         // Harmless for most providers; required by some Qwen-compatible hosts.
         if let Some(obj) = body.as_object_mut() {
-            obj.entry("enable_thinking")
-                .or_insert(Value::Bool(false));
+            obj.entry("enable_thinking").or_insert(Value::Bool(false));
         }
 
         let resp = self
@@ -267,12 +283,20 @@ fn is_dashscope_coding_plan_base(base_url: &str) -> bool {
 }
 
 fn sanitize_err(s: String) -> String {
-    // Never echo long bodies that might contain credentials.
+    // Provider responses and transport errors may contain URLs, userinfo, or credentials.
     let lower = s.to_lowercase();
-    if lower.contains("bearer ") || lower.contains("api_key") || lower.contains("authorization") {
+    if lower.contains("bearer ")
+        || lower.contains("api_key")
+        || lower.contains("authorization")
+        || lower.contains("token")
+        || lower.contains("secret")
+        || lower.contains("password")
+        || lower.contains("http://")
+        || lower.contains("https://")
+    {
         "provider request failed (details redacted)".into()
     } else {
-        s
+        truncate(&s, 240)
     }
 }
 
@@ -382,8 +406,8 @@ struct RawFunction {
 }
 
 pub fn parse_chat_completion(body: &str) -> Result<AssistantTurn, AgentEngineError> {
-    let parsed: ChatCompletionResponse = serde_json::from_str(body)
-        .map_err(|e| AgentEngineError::InvalidResponse(e.to_string()))?;
+    let parsed: ChatCompletionResponse =
+        serde_json::from_str(body).map_err(|e| AgentEngineError::InvalidResponse(e.to_string()))?;
     let msg = parsed
         .choices
         .first()

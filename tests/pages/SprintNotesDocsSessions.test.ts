@@ -15,6 +15,7 @@ vi.mock("vue-router", () => ({
 }));
 
 vi.mock("@/lib/scanConfiguredSessions", () => ({
+  scanConfiguredSessionsResult: vi.fn().mockResolvedValue({ ok: true, sessions: [] }),
   scanConfiguredSessions: vi.fn().mockResolvedValue([]),
 }));
 

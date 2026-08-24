@@ -61,7 +61,7 @@ const activeBoard = computed(
 );
 
 const viewBox = computed(() => {
-  canvas.fitToken.value;
+  void canvas.fitToken.value;
   if (!nodes.value.length) return "0 0 900 560";
   const xs = nodes.value.map((n) => n.x);
   const ys = nodes.value.map((n) => n.y);

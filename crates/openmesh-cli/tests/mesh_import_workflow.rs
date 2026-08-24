@@ -64,7 +64,9 @@ fn export_then_import_across_two_projects() {
     .expect("event");
 
     let peer = run(
-        &["mesh", "peer", "add", "--label", "Yo", "--id", "yo", "--json"],
+        &[
+            "mesh", "peer", "add", "--label", "Yo", "--id", "yo", "--json",
+        ],
         &ter,
     );
     assert!(peer.status.success());

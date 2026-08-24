@@ -13,6 +13,21 @@ export type AgentToolStep = {
   summary: string;
 };
 
+export type EngineRouteTransport = "direct-provider";
+export type EngineEndpointKind = "provider-default" | "custom-compatible";
+export type EngineTurnOutcome =
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "budget-limited";
+
+export type EngineRouteMetadata = {
+  transport: EngineRouteTransport;
+  providerLabel: string;
+  endpointKind: EngineEndpointKind;
+  outcome: EngineTurnOutcome;
+};
+
 export type EngineTurnResult = {
   assistantText: string;
   toolSteps: AgentToolStep[];
@@ -21,6 +36,7 @@ export type EngineTurnResult = {
   provider: string;
   refused: boolean;
   error?: string | null;
+  route?: EngineRouteMetadata | null;
 };
 
 export type AgentUiMessage = {

@@ -1,11 +1,10 @@
 //! Dev Track 0.1.11 Checkpoints B–C — pack selection + staging storage.
 
-use crate::mesh::{
-    read_outbox_envelope, MeshEnvelope, MeshSensitivityMax, MESH_OUTBOX_DIR,
-};
+use crate::mesh::{read_outbox_envelope, MeshEnvelope, MeshSensitivityMax, MESH_OUTBOX_DIR};
 use crate::relay::contract::{
     validate_package_id_for_storage, validate_relay_package, RelayPackage, RelayPolicySnapshot,
-    RelayValidationError, RELAY_PACKAGE_PROTOCOL_VERSION, RELAY_STAGING_DIR, MAX_ENVELOPES_PER_PACKAGE,
+    RelayValidationError, MAX_ENVELOPES_PER_PACKAGE, RELAY_PACKAGE_PROTOCOL_VERSION,
+    RELAY_STAGING_DIR,
 };
 use crate::storage::{get_project_dir, read_project, Project};
 use std::fs::{self, OpenOptions};
@@ -66,9 +65,8 @@ pub fn build_relay_package(
         if envelopes.len() >= MAX_ENVELOPES_PER_PACKAGE {
             break;
         }
-        let env = read_outbox_envelope(project_path, id).map_err(|_| {
-            RelayPackageError::EnvelopeNotFound(id.clone())
-        })?;
+        let env = read_outbox_envelope(project_path, id)
+            .map_err(|_| RelayPackageError::EnvelopeNotFound(id.clone()))?;
         envelopes.push(env);
     }
 
@@ -161,10 +159,7 @@ fn load_project(project_path: &str) -> Result<Project, RelayPackageError> {
         .ok_or(RelayPackageError::ProjectNotInitialized)
 }
 
-fn write_json_atomic<T: serde::Serialize>(
-    path: &Path,
-    value: &T,
-) -> Result<(), RelayPackageError> {
+fn write_json_atomic<T: serde::Serialize>(path: &Path, value: &T) -> Result<(), RelayPackageError> {
     let parent = path.parent().ok_or(RelayPackageError::Io)?;
     fs::create_dir_all(parent).map_err(|_| RelayPackageError::Io)?;
     let temp = path.with_extension(STAGING_TEMP);

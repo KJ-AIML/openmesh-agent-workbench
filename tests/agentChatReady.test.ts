@@ -70,6 +70,19 @@ describe("chat provider gate", () => {
     expect(checks.every((c) => !c.done)).toBe(true);
   });
 
+  it("does not let legacy OAuth flags bypass direct provider readiness", () => {
+    const legacy = baseSettings({
+      provider: {
+        apiKeyConfigured: false,
+        usageTrackingEnabled: false,
+      },
+      models: { codingModel: "legacy-model", localModelEnabled: false },
+      oauth: { managementPort: 8317, sidecarEnabled: true },
+    });
+    expect(isChatProviderReady(legacy)).toBe(false);
+    expect(getChatSetupChecks(legacy)[0].id).toBe("provider");
+  });
+
   it("secretConfigured override beats stale apiKeyConfigured flag", () => {
     const flagged = baseSettings({
       provider: {

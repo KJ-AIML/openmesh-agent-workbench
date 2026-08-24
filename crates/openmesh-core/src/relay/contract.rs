@@ -1,9 +1,7 @@
 //! Dev Track 0.1.11 Checkpoint A — RelayPackage wire contract (pure, no I/O).
 
 use crate::domain::validate_utc_timestamp;
-use crate::mesh::{
-    validate_mesh_envelope, MeshEnvelope, MeshSensitivityMax, MeshValidationError,
-};
+use crate::mesh::{validate_mesh_envelope, MeshEnvelope, MeshSensitivityMax, MeshValidationError};
 use serde::{Deserialize, Serialize};
 
 pub const RELAY_PACKAGE_PROTOCOL_VERSION: &str = "1.0";

@@ -49,7 +49,15 @@ fn bootstrap_team(p: &Path) {
     .status
     .success());
     assert!(run(
-        &["team", "init", "--name", "Lab", "--owner-label", "Ter", "--json"],
+        &[
+            "team",
+            "init",
+            "--name",
+            "Lab",
+            "--owner-label",
+            "Ter",
+            "--json"
+        ],
         p,
     )
     .status

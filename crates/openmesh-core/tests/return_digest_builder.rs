@@ -1,10 +1,10 @@
 //! Dev Track 0.1.9 — pending projection + return digest builder integration tests.
 
-use openmesh_core::authority_policy::{
-    AuthorityPolicyDecision, QuestionRiskCategory,
-};
-use openmesh_core::continuity::{
-    build_current_state_projection, load_continuity_input_snapshot,
+use openmesh_core::authority_policy::{AuthorityPolicyDecision, QuestionRiskCategory};
+use openmesh_core::context::Sensitivity;
+use openmesh_core::continuity::{build_current_state_projection, load_continuity_input_snapshot};
+use openmesh_core::domain::{
+    ActorRef, ProducerRef, WorkSignal, WorkSignalKind, WORK_SIGNAL_PROTOCOL_VERSION,
 };
 use openmesh_core::domain::{
     CatchUpWindow, EvidenceAttachment, EvidenceRef, ProxyAuthorityLevel, WorkEvent,
@@ -16,10 +16,6 @@ use openmesh_core::return_digest::{
 };
 use openmesh_core::signals::write_signal;
 use openmesh_core::storage::init_project;
-use openmesh_core::context::Sensitivity;
-use openmesh_core::domain::{
-    ActorRef, ProducerRef, WorkSignal, WorkSignalKind, WORK_SIGNAL_PROTOCOL_VERSION,
-};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 static COUNTER: AtomicU64 = AtomicU64::new(0);

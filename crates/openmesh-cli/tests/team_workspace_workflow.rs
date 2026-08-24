@@ -52,7 +52,15 @@ fn team_init_member_add_list_show() {
     .success());
 
     let init = run(
-        &["team", "init", "--name", "Lab Team", "--owner-label", "Ter", "--json"],
+        &[
+            "team",
+            "init",
+            "--name",
+            "Lab Team",
+            "--owner-label",
+            "Ter",
+            "--json",
+        ],
         &p,
     );
     assert!(
@@ -73,22 +81,16 @@ fn team_init_member_add_list_show() {
 
     let add = run(
         &[
-            "team",
-            "member",
-            "add",
-            "--label",
-            "Yo",
-            "--id",
-            "m-yo",
-            "--peer",
-            "yo",
-            "--role",
-            "member",
-            "--json",
+            "team", "member", "add", "--label", "Yo", "--id", "m-yo", "--peer", "yo", "--role",
+            "member", "--json",
         ],
         &p,
     );
-    assert!(add.status.success(), "{}", String::from_utf8_lossy(&add.stderr));
+    assert!(
+        add.status.success(),
+        "{}",
+        String::from_utf8_lossy(&add.stderr)
+    );
 
     let list = run(&["team", "member", "list", "--json"], &p);
     assert!(list.status.success());

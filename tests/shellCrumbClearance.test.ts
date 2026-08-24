@@ -20,6 +20,7 @@ vi.mock("@/lib/adapters/terminalAdapter", () => ({
 }));
 
 vi.mock("@/lib/scanConfiguredSessions", () => ({
+  scanConfiguredSessionsResult: vi.fn().mockResolvedValue({ ok: true, sessions: [] }),
   scanConfiguredSessions: vi.fn(),
 }));
 

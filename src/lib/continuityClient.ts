@@ -633,6 +633,16 @@ export async function addTeamMember(
   });
 }
 
+export async function removeTeamMember(
+  projectPath: string,
+  memberId: string,
+): Promise<TeamWorkspaceView> {
+  return invoke<TeamWorkspaceView>("team_remove_member", {
+    projectPath,
+    request: { memberId },
+  });
+}
+
 export async function initTeamTrustPolicy(
   projectPath: string,
 ): Promise<TeamTrustPolicyView> {
@@ -669,6 +679,19 @@ export async function addTeamTrustAllowlist(
       memberId: opts.memberId,
       meshPeerId: opts.meshPeerId,
       note: opts.note,
+    },
+  });
+}
+
+export async function removeTeamTrustAllowlist(
+  projectPath: string,
+  opts: { memberId?: string; meshPeerId?: string },
+): Promise<TeamTrustPolicyView> {
+  return invoke<TeamTrustPolicyView>("team_trust_allowlist_remove", {
+    projectPath,
+    request: {
+      memberId: opts.memberId,
+      meshPeerId: opts.meshPeerId,
     },
   });
 }

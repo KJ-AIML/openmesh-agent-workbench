@@ -36,7 +36,8 @@ fn try_redact_at(chars: &[char], start: usize, out: &mut Vec<char>) -> usize {
         true
     };
 
-    let is_token_char = |c: char| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '/' | '+' | '=' | ':');
+    let is_token_char =
+        |c: char| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.' | '/' | '+' | '=' | ':');
 
     // sk-... / sk-proj-... / gsk_... / xai-... / gh*_... style tokens
     let prefixes: &[&[u8]] = &[

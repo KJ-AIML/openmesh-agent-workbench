@@ -11,6 +11,10 @@ import NotesPage from "./pages/NotesPage.vue";
 import ContextPage from "./pages/ContextPage.vue";
 import ContinuityPage from "./pages/ContinuityPage.vue";
 import CanvasPage from "./pages/CanvasPage.vue";
+import OAuthPage from "./pages/OAuthPage.vue";
+import ProxyRuntimePage from "./pages/ProxyRuntimePage.vue";
+import ProxyProvidersPage from "./pages/ProxyProvidersPage.vue";
+import UsageAnalyticsPage from "./pages/UsageAnalyticsPage.vue";
 
 const router = createRouter({
 	history: createWebHistory(),
@@ -30,6 +34,21 @@ const router = createRouter({
 			path: "/agent-sessions",
 			name: "agent-sessions",
 			component: AgentSessionsPage,
+		},
+		{
+			path: "/oauth",
+			name: "oauth",
+			component: OAuthPage,
+		},
+		{
+			path: "/proxy-runtime",
+			name: "proxy-runtime",
+			component: ProxyRuntimePage,
+		},
+		{
+			path: "/proxy-providers",
+			name: "proxy-providers",
+			component: ProxyProvidersPage,
 		},
 		{
 			path: "/context",
@@ -56,7 +75,11 @@ const router = createRouter({
 		{ path: "/dev-connector", redirect: { path: "/settings", query: { section: "tools" } } },
 		{ path: "/server", redirect: { path: "/settings", query: { section: "server" } } },
 		{ path: "/status", redirect: { path: "/settings", query: { section: "overview" } } },
-		{ path: "/usage", redirect: { path: "/settings", query: { section: "overview" } } },
+		{
+			path: "/usage",
+			name: "usage",
+			component: UsageAnalyticsPage,
+		},
 	],
 });
 

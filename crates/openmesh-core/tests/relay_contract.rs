@@ -1,5 +1,6 @@
 //! Dev Track 0.1.11 Checkpoint A — relay contract tests.
 
+use openmesh_core::domain::{CatchUpWindow, EvidenceRef};
 use openmesh_core::mesh::{
     MeshEnvelope, MeshEvidenceItem, MeshEvidenceSourceKind, MeshPeerRef, MeshSensitivityMax,
     MESH_ENVELOPE_PROTOCOL_VERSION,
@@ -8,7 +9,6 @@ use openmesh_core::relay::{
     is_package_approved, validate_relay_package, RelayPackage, RelayPolicySnapshot,
     RELAY_PACKAGE_PROTOCOL_VERSION,
 };
-use openmesh_core::domain::{CatchUpWindow, EvidenceRef};
 
 fn sample_envelope() -> MeshEnvelope {
     MeshEnvelope {

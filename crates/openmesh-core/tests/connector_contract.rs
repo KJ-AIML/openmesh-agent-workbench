@@ -1,8 +1,8 @@
 //! Dev Track 0.1.18 — connector contract tests.
 
 use openmesh_core::connectors::{
-    collect_github_stub, validate_connector_descriptor, validate_connector_run, ConnectorDescriptor,
-    ConnectorKind, ConnectorRole, ConnectorRun, CONNECTOR_PROTOCOL_VERSION,
+    collect_github_stub, validate_connector_descriptor, validate_connector_run,
+    ConnectorDescriptor, ConnectorKind, ConnectorRole, ConnectorRun, CONNECTOR_PROTOCOL_VERSION,
 };
 
 fn sample_descriptor() -> ConnectorDescriptor {

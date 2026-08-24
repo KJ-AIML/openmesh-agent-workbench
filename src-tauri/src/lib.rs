@@ -1,9 +1,12 @@
-mod continuity_desktop;
 mod agent_engine_desktop;
 mod canvas_desktop;
+mod continuity_desktop;
 mod extensions_desktop;
+mod oauth_desktop;
+mod proxy_runtime_desktop;
 mod pty_desktop;
 mod update_desktop;
+mod usage_tracking;
 mod voice;
 mod voice_desktop;
 
@@ -438,7 +441,10 @@ fn open_agent_cli(
         .map(str::trim)
         .filter(|s| !s.is_empty())
     {
-        if sid.chars().any(|c| c.is_whitespace() || c == ';' || c == '|' || c == '&' || c == '`' || c == '$') {
+        if sid
+            .chars()
+            .any(|c| c.is_whitespace() || c == ';' || c == '|' || c == '&' || c == '`' || c == '$')
+        {
             return AgentCliLaunchResult {
                 success: false,
                 error: Some("invalid resume session id".into()),
@@ -458,7 +464,9 @@ fn open_agent_cli(
             if a.is_empty() {
                 continue;
             }
-            if a.chars().any(|c| c == ';' || c == '|' || c == '&' || c == '`' || c == '$' || c == '\n') {
+            if a.chars()
+                .any(|c| c == ';' || c == '|' || c == '&' || c == '`' || c == '$' || c == '\n')
+            {
                 return AgentCliLaunchResult {
                     success: false,
                     error: Some("invalid extra arg".into()),
@@ -727,11 +735,7 @@ fn scan_workspace_agent_sessions(
     limit: Option<u32>,
     overrides: Option<session_readers::SessionScanOverrides>,
 ) -> ScanAgentSessionsResult {
-    match session_readers::scan_workspace_sessions(
-        &workspace_cwd,
-        limit,
-        overrides.as_ref(),
-    ) {
+    match session_readers::scan_workspace_sessions(&workspace_cwd, limit, overrides.as_ref()) {
         Ok(sessions) => ScanAgentSessionsResult {
             success: true,
             sessions,
@@ -1278,6 +1282,12 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .manage(std::sync::Arc::new(pty_desktop::PtyManager::default()))
+        .manage(std::sync::Arc::new(
+            proxy_runtime_desktop::BuiltInProxyManager::default(),
+        ))
+        .manage(std::sync::Arc::new(
+            oauth_desktop::OAuthDesktopManager::default(),
+        ))
         .invoke_handler(tauri::generate_handler![
             greet,
             get_host_os,
@@ -1361,6 +1371,7 @@ pub fn run() {
             continuity_desktop::team_list_members,
             continuity_desktop::team_init,
             continuity_desktop::team_add_member,
+            continuity_desktop::team_remove_member,
             // Team Cloud Beta (0.1.16)
             continuity_desktop::team_cloud_status,
             continuity_desktop::team_cloud_sync_scaffold,
@@ -1371,6 +1382,7 @@ pub fn run() {
             continuity_desktop::team_trust_set_remote_query,
             continuity_desktop::team_trust_set_query_mode,
             continuity_desktop::team_trust_allowlist_add,
+            continuity_desktop::team_trust_allowlist_remove,
             // Connector Layer (0.1.18)
             continuity_desktop::connector_list,
             continuity_desktop::org_graph_show,
@@ -1413,6 +1425,33 @@ pub fn run() {
             agent_engine_desktop::agent_delegate_record_launch,
             agent_engine_desktop::agent_runs_recent,
             agent_engine_desktop::agent_handoff_approve,
+            // OpenMesh-owned built-in proxy lifecycle.
+            proxy_runtime_desktop::proxy_runtime_status,
+            proxy_runtime_desktop::proxy_runtime_start,
+            proxy_runtime_desktop::proxy_runtime_start_default,
+            proxy_runtime_desktop::proxy_runtime_stop,
+            proxy_runtime_desktop::proxy_management_config,
+            proxy_runtime_desktop::proxy_management_update,
+            // OpenMesh-owned proxy compatibility commands.
+            oauth_desktop::oauth_config_status,
+            oauth_desktop::oauth_set_management_port,
+            oauth_desktop::oauth_set_management_secret,
+            oauth_desktop::oauth_set_sidecar_client_key,
+            oauth_desktop::oauth_clear_sidecar_client_key,
+            oauth_desktop::oauth_set_sidecar_enabled,
+            oauth_desktop::oauth_connection_status,
+            oauth_desktop::oauth_runtime_status,
+            oauth_desktop::oauth_model_definitions,
+            oauth_desktop::oauth_clear_management_secret,
+            oauth_desktop::oauth_start,
+            oauth_desktop::oauth_status,
+            oauth_desktop::oauth_submit_callback,
+            oauth_desktop::oauth_cancel,
+            oauth_desktop::oauth_open_url,
+            // Usage Analytics + Ecosystem Tools (Phase 1)
+            usage_tracking::usage_summary,
+            usage_tracking::usage_timeseries,
+            usage_tracking::usage_request_logs,
             // Skills / Hooks / Plugins (local marketplace MVP)
             extensions_desktop::extensions_list,
             extensions_desktop::extensions_catalog,

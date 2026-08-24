@@ -116,7 +116,10 @@ pub fn validate_team_cloud_config(c: &TeamCloudConfig) -> Result<(), TeamCloudVa
         }
     }
     if let Some(id) = &c.online_proxy_id {
-        if id.trim().is_empty() || id.len() > MAX_TEAM_ID_BYTES || id.contains("..") || id.contains('/')
+        if id.trim().is_empty()
+            || id.len() > MAX_TEAM_ID_BYTES
+            || id.contains("..")
+            || id.contains('/')
         {
             return Err(TeamCloudValidationError::InvalidOnlineProxyId);
         }
@@ -134,7 +137,9 @@ pub fn validate_team_cloud_config(c: &TeamCloudConfig) -> Result<(), TeamCloudVa
     Ok(())
 }
 
-pub fn validate_team_cloud_sync_plan(p: &TeamCloudSyncPlan) -> Result<(), TeamCloudValidationError> {
+pub fn validate_team_cloud_sync_plan(
+    p: &TeamCloudSyncPlan,
+) -> Result<(), TeamCloudValidationError> {
     if p.protocol_version != TEAM_CLOUD_PROTOCOL_VERSION {
         return Err(TeamCloudValidationError::UnsupportedProtocol {
             found: p.protocol_version.clone(),

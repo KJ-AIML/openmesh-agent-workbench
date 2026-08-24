@@ -3,8 +3,8 @@
 use openmesh_core::domain::{CatchUpWindow, EvidenceRef};
 use openmesh_core::mesh::{
     validate_envelope_id_for_storage, validate_mesh_envelope, MeshEnvelope, MeshEvidenceItem,
-    MeshEvidenceSourceKind, MeshPeerRef, MeshSensitivityMax, MeshValidationError,
-    MESH_ENVELOPE_PROTOCOL_VERSION, MESH_DIR, MESH_INBOX_DIR, MESH_OUTBOX_DIR, MESH_PEERS_DIR,
+    MeshEvidenceSourceKind, MeshPeerRef, MeshSensitivityMax, MeshValidationError, MESH_DIR,
+    MESH_ENVELOPE_PROTOCOL_VERSION, MESH_INBOX_DIR, MESH_OUTBOX_DIR, MESH_PEERS_DIR,
 };
 
 fn sample_item() -> MeshEvidenceItem {

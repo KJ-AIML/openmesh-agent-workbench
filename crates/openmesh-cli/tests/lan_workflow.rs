@@ -132,16 +132,7 @@ fn lan_serve_send_ask_status_loopback() {
     assert_eq!(st["running"], true);
 
     assert!(run(
-        &[
-            "mesh",
-            "peer",
-            "add",
-            "--label",
-            "Server",
-            "--id",
-            "server",
-            "--json"
-        ],
+        &["mesh", "peer", "add", "--label", "Server", "--id", "server", "--json"],
         &client
     )
     .status

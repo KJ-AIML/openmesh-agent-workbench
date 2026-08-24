@@ -77,9 +77,7 @@ fn looks_like_openrouter(api_key: &str, provider: &str, base_url: &str) -> bool 
     let key = api_key.trim();
     let provider = provider.trim().to_ascii_lowercase();
     let base = base_url.trim().to_ascii_lowercase();
-    key.starts_with("sk-or-")
-        || provider.contains("openrouter")
-        || base.contains("openrouter.ai")
+    key.starts_with("sk-or-") || provider.contains("openrouter") || base.contains("openrouter.ai")
 }
 
 fn transcribe_openrouter(

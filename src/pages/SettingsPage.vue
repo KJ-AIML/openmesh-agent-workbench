@@ -33,6 +33,11 @@ import {
   testAgentProvider,
   type ProviderProbeResult,
 } from "../lib/agentEngineClient";
+import {
+  getBuiltInProxyStatus,
+  startBuiltInProxyFromSettings,
+  stopBuiltInProxy,
+} from "../lib/builtinProxyClient";
 import { getAppVersion } from "../lib/updates/appVersion";
 import {
   hasKnownUpdate,
@@ -60,6 +65,7 @@ type SectionId =
 
 const form = ref(JSON.parse(JSON.stringify(settings.value)));
 const apiKeyInput = ref("");
+const builtInProxyRunning = ref(false);
 const toast = ref("");
 const activeSection = ref<SectionId>("overview");
 const activeGroup = ref<"setup" | "runtime" | "project" | "app">("setup");
@@ -210,6 +216,38 @@ async function testProviderConnection() {
   }
 }
 
+async function saveBuiltInProxySettings() {
+  const port = Number(form.value.oauth?.managementPort);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    showToast("Built-in proxy port must be between 1 and 65535");
+    return;
+  }
+  try {
+    await saveSettings({
+      oauth: {
+        managementPort: port,
+        sidecarEnabled: false,
+      },
+    });
+    form.value.oauth.sidecarEnabled = false;
+    showToast("Built-in proxy settings saved");
+  } catch (e) {
+    showToast(e instanceof Error ? e.message : String(e));
+  }
+}
+
+async function toggleBuiltInProxy() {
+  try {
+    const status = builtInProxyRunning.value
+      ? await stopBuiltInProxy()
+      : await startBuiltInProxyFromSettings();
+    builtInProxyRunning.value = status.running;
+    showToast(status.running ? "Built-in proxy started" : "Built-in proxy stopped");
+  } catch (e) {
+    showToast(e instanceof Error ? e.message : String(e));
+  }
+}
+
 function selectGroup(id: "setup" | "runtime" | "project" | "app") {
   activeGroup.value = id;
   const g = groups.find((x) => x.id === id);
@@ -248,6 +286,13 @@ onMounted(async () => {
     }
   } catch {
     /* web / mock — keep settings flag */
+  }
+  try {
+    const status = await getBuiltInProxyStatus();
+    builtInProxyRunning.value = status.running;
+    if (status.port) form.value.oauth.managementPort = status.port;
+  } catch {
+    builtInProxyRunning.value = false;
   }
 });
 
@@ -755,6 +800,38 @@ const statusLine = computed(() => {
         <button @click="checkHealth" class="btn-secondary text-[12px]">
           Check
         </button>
+      </div>
+      <div class="border-t pt-4 space-y-4" style="border-color: var(--border)">
+        <div>
+          <p class="settings__panel-title">OpenMesh Built-in Proxy</p>
+          <p class="settings__panel-desc">
+            OpenMesh owns this local OpenAI-compatible server. It uses the saved
+            Provider key as an upstream credential and never requires a
+            separate proxy process.
+          </p>
+        </div>
+        <div>
+          <label class="block text-caption font-medium mb-2 text-muted">Proxy Port</label>
+          <input
+            v-model.number="form.oauth.managementPort"
+            type="number"
+            min="1"
+            max="65535"
+            inputmode="numeric"
+            class="input-luxury w-full"
+          />
+          <p class="text-[11px] mt-2 text-subtle">Loopback endpoint: 127.0.0.1:{{ form.oauth.managementPort }}.</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <span class="text-caption text-muted">Runtime:</span>
+          <span class="badge" :class="builtInProxyRunning ? 'badge-success' : 'badge-muted'">
+            {{ builtInProxyRunning ? "Running" : "Stopped" }}
+          </span>
+          <button type="button" class="btn-secondary text-[12px]" @click="toggleBuiltInProxy">
+            {{ builtInProxyRunning ? "Stop proxy" : "Start proxy" }}
+          </button>
+        </div>
+        <button type="button" class="btn-primary" @click="saveBuiltInProxySettings">Save Built-in Proxy Settings</button>
       </div>
       <button @click="saveSection('server')" class="btn-primary">
         Save Server

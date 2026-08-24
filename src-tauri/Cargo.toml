@@ -1,6 +1,6 @@
 [package]
 name = "openmesh"
-version = "0.1.30"
+version = "0.1.40"
 rust-version = "1.92.0"
 description = "Personal workbench for resuming work"
 authors = ["Openmesh Team"]
@@ -16,12 +16,15 @@ tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+async-trait = "0.1"
 open = "5"
 git2 = { version = "0.19", features = ["vendored-openssl"] }
 chrono = { version = "0.4", features = ["serde"] }
 tempfile = "3"
 base64 = "0.22"
 dirs = "5"
-tokio = { version = "1", features = ["rt", "macros"] }
+tokio = { version = "1", features = ["rt", "macros", "sync"] }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "multipart", "json", "rustls-tls"] }
 portable-pty = "0.9"
+rusqlite = { version = "0.30", features = ["bundled"] }
+uuid = { version = "1", features = ["v4"] }

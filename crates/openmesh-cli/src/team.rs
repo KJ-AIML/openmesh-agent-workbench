@@ -6,8 +6,8 @@ use openmesh_core::authority_policy::FreshnessTier;
 use openmesh_core::mesh::{query_remote_peer_proxy, MeshRemoteQueryRequest};
 use openmesh_core::profile::read_work_proxy_profile;
 use openmesh_core::team::{
-    add_team_member, init_team_workspace, list_team_members, read_team_workspace, remove_team_member,
-    TeamMember, TeamMemberRole, TeamStorageError,
+    add_team_member, init_team_workspace, list_team_members, read_team_workspace,
+    remove_team_member, TeamMember, TeamMemberRole, TeamStorageError,
 };
 use openmesh_core::team_cloud::{
     build_sync_scaffold, init_team_cloud, read_team_cloud, TeamCloudMode, TeamCloudStorageError,
@@ -219,14 +219,13 @@ fn run_init(args: &TeamInitArgs, cwd: &Path) -> i32 {
     let owner = args
         .owner_label
         .clone()
-        .or_else(|| read_work_proxy_profile(&project_path).ok().map(|p| p.owner_label))
+        .or_else(|| {
+            read_work_proxy_profile(&project_path)
+                .ok()
+                .map(|p| p.owner_label)
+        })
         .unwrap_or_else(|| "local-owner".into());
-    match init_team_workspace(
-        &project_path,
-        &args.name,
-        &owner,
-        args.team_id.clone(),
-    ) {
+    match init_team_workspace(&project_path, &args.name, &owner, args.team_id.clone()) {
         Ok(ws) => {
             if args.json {
                 println!("{}", serde_json::to_value(&ws).unwrap_or(json!({})));
@@ -367,14 +366,19 @@ fn run_query(args: &TeamQueryArgs, cwd: &Path) -> i32 {
         Err(e) => return err_team(e, args.json),
     };
     let key = args.member.trim().to_ascii_lowercase();
-    let member = match ws.members.iter().find(|m| {
-        m.member_id.to_ascii_lowercase() == key || m.label.to_ascii_lowercase() == key
-    }) {
-        Some(m) => m,
-        None => {
-            return err_msg(args.json, "member", &format!("member not found: {}", args.member));
-        }
-    };
+    let member =
+        match ws.members.iter().find(|m| {
+            m.member_id.to_ascii_lowercase() == key || m.label.to_ascii_lowercase() == key
+        }) {
+            Some(m) => m,
+            None => {
+                return err_msg(
+                    args.json,
+                    "member",
+                    &format!("member not found: {}", args.member),
+                );
+            }
+        };
     let peer = match &member.mesh_peer_id {
         Some(p) => p.clone(),
         None => {
@@ -468,7 +472,6 @@ fn slug(s: &str) -> String {
         .collect()
 }
 
-
 fn run_cloud_init(args: &TeamCloudInitArgs, cwd: &Path) -> i32 {
     let resolved = match resolve_project(args.project.as_deref(), cwd) {
         Ok(r) => r,
@@ -514,7 +517,10 @@ fn run_cloud_show(args: &TeamCloudShowArgs, cwd: &Path) -> i32 {
                     "online_proxy_id={}",
                     cfg.online_proxy_id.as_deref().unwrap_or("-")
                 );
-                println!("last_sync_at={}", cfg.last_sync_at.as_deref().unwrap_or("-"));
+                println!(
+                    "last_sync_at={}",
+                    cfg.last_sync_at.as_deref().unwrap_or("-")
+                );
                 for p in &cfg.sync_paths {
                     println!("  path={p}");
                 }
