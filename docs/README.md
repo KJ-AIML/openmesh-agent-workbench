@@ -12,6 +12,7 @@ Start here if the app feels big. These docs map **what exists in code today**, n
 
 | If you want… | Read |
 |--------------|------|
+| What OpenMesh **is** for v0.2 (product center + ADR) | [architecture/PRODUCT_CENTER.md](./architecture/PRODUCT_CENTER.md) |
 | What the app can do (user bible) | [PRODUCT_GUIDE.md](./PRODUCT_GUIDE.md) |
 | Fillable dogfood pass/fail (v0.1.40) | [DOGFOOD_v0.1.40.md](./DOGFOOD_v0.1.40.md) |
 | Older dogfood ticks (v0.1.28) | [DOGFOOD_v0.1.28.md](./DOGFOOD_v0.1.28.md) |

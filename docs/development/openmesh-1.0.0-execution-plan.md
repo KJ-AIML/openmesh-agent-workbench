@@ -1,6 +1,10 @@
 # OpenMesh 1.0.0 — Real-Team Coordination Platform
 
-**Status:** PLAN_FROZEN — UNLOCKED FOR IMPLEMENTATION  
+> **Historical.** This plan is **not** the current product program.
+> Active program: **v0.2.0 unified agent workbench** — see [`docs/architecture/PRODUCT_CENTER.md`](../architecture/PRODUCT_CENTER.md) and [`ADR-0001`](../architecture/ADR-0001-agent-workbench-center.md).
+> Do not treat “UNLOCKED FOR IMPLEMENTATION” below as authorization to start 1.0 packaging or new Continuity tracks.
+
+**Status:** HISTORICAL (frozen 2026-08-02; superseded by v0.2.0 on 2026-09-08)
 **Human unlock:** 2026-08-02 (“Unlock all”)  
 **Depends on:** prior package track RELEASED (sequential ship) + RC dogfood at real-team scale  
 **Branch (suggested):** `feat/openmesh-1.0.0`
