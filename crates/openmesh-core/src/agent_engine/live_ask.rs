@@ -4,6 +4,7 @@
 //! and returns structured errors when the peer cannot answer.
 
 use super::engine_loop::run_agent_turn;
+use super::policy::{authorize_agent_turn, AgentOrigin, AgentRequestContext};
 use super::provider::{
     resolve_provider_kind, ChatProvider, OpenAiCompatibleProvider, ProviderConfig,
 };
@@ -29,6 +30,8 @@ pub struct LiveAskRequest {
     pub base_url: Option<String>,
     /// Extra system prompt lines (after the live-ask base prompt).
     pub system_extra: Option<String>,
+    /// Must be a remote query origin (`LanPeer` or `ContinuityQuery`).
+    pub origin: AgentOrigin,
 }
 
 #[derive(Debug, Error)]
@@ -37,6 +40,10 @@ pub enum LiveAskError {
     MissingApiKey,
     #[error("empty question")]
     EmptyQuestion,
+    #[error("live ask origin is not a remote query origin")]
+    InvalidOrigin,
+    #[error("policy: {0}")]
+    Policy(String),
     #[error("provider: {0}")]
     Provider(String),
     #[error("engine: {0}")]
@@ -48,6 +55,8 @@ impl LiveAskError {
         match self {
             LiveAskError::MissingApiKey => "missing_api_key",
             LiveAskError::EmptyQuestion => "empty_question",
+            LiveAskError::InvalidOrigin => "invalid_origin",
+            LiveAskError::Policy(_) => "policy_error",
             LiveAskError::Provider(_) => "provider_error",
             LiveAskError::Engine(_) => "engine_error",
         }
@@ -128,6 +137,7 @@ fn compose_user_text(request: &LiveAskRequest) -> String {
 
 /// Run a live ask with an injected provider (unit tests / ScriptedProvider).
 pub fn run_live_ask_with_provider(
+    project_path: &str,
     def: &AgentDefinition,
     request: &LiveAskRequest,
     provider: &dyn ChatProvider,
@@ -136,9 +146,14 @@ pub fn run_live_ask_with_provider(
     if request.question.trim().is_empty() {
         return Err(LiveAskError::EmptyQuestion);
     }
+    if !request.origin.is_live_ask() {
+        return Err(LiveAskError::InvalidOrigin);
+    }
+    let auth = authorize_agent_turn(&AgentRequestContext::live_ask(request.origin, project_path))
+        .map_err(|e| LiveAskError::Policy(e.to_string()))?;
     let mut session = AgentSession::default();
     let user_text = compose_user_text(request);
-    run_agent_turn(def, &mut session, &user_text, provider, executor)
+    run_agent_turn(&auth, def, &mut session, &user_text, provider, executor)
         .map_err(|e| LiveAskError::Engine(e.to_string()))
 }
 
@@ -155,7 +170,7 @@ pub fn run_live_ask(
     let executor = WorkspaceToolExecutor {
         project_path: project_path.to_string(),
     };
-    run_live_ask_with_provider(&def, request, &client, &executor)
+    run_live_ask_with_provider(project_path, &def, request, &client, &executor)
 }
 
 /// Map AgentEngineError missing-key into LiveAskError when constructing providers manually.
@@ -209,8 +224,10 @@ mod tests {
             model: Some("test-model".into()),
             base_url: None,
             system_extra: None,
+            origin: AgentOrigin::LanPeer,
         };
-        let result = run_live_ask_with_provider(&def, &req, &provider, &executor).unwrap();
+        let result =
+            run_live_ask_with_provider(&project, &def, &req, &provider, &executor).unwrap();
         assert!(result.assistant_text.contains("Agent Engine"));
         let _ = fs::remove_dir_all(&project);
     }
@@ -229,9 +246,35 @@ mod tests {
             model: None,
             base_url: None,
             system_extra: None,
+            origin: AgentOrigin::LanPeer,
         };
-        let err = run_live_ask_with_provider(&def, &req, &provider, &executor).unwrap_err();
+        let err =
+            run_live_ask_with_provider("/tmp/ws", &def, &req, &provider, &executor).unwrap_err();
         assert_eq!(err.code(), "empty_question");
+    }
+
+    #[test]
+    fn local_chat_origin_cannot_use_live_ask_path() {
+        let provider = ScriptedProvider::new(vec![AssistantTurn {
+            content: "should not run".into(),
+            tool_calls: vec![],
+        }]);
+        let executor = StubToolExecutor {
+            responses: BTreeMap::new(),
+        };
+        let def = AgentDefinition::default_workspace_agent("m");
+        let req = LiveAskRequest {
+            question: "hello".into(),
+            context_prefix: None,
+            provider_name: None,
+            model: None,
+            base_url: None,
+            system_extra: None,
+            origin: AgentOrigin::LocalChat,
+        };
+        let err =
+            run_live_ask_with_provider("/tmp/ws", &def, &req, &provider, &executor).unwrap_err();
+        assert_eq!(err.code(), "invalid_origin");
     }
 
     #[test]

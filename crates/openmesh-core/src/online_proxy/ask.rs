@@ -136,6 +136,7 @@ pub fn ask_online_proxy(
             "You are the local Continuity Proxy for owner '{}'. Config mode label is {:?} (scaffold label only; you answer via Agent Engine).",
             config.owner_label, config.mode
         )),
+        origin: crate::agent_engine::AgentOrigin::ContinuityQuery,
     };
 
     let engine = run_live_ask(project_path, &live_req)?;

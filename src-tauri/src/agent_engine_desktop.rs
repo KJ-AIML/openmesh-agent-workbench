@@ -1,16 +1,16 @@
 //! Dev Track 0.1.23 — OpenMesh Agent Engine Desktop IPC.
 
 use openmesh_core::agent_engine::{
-    apply_patch, cancel_recipe_run, cancel_turn, enrich_system_prompt, format_patch_summary,
-    get_recipe, list_recent_runs, list_recipes, load_chat_sessions, load_inventory, probe_provider,
-    read_patch, record_delegate_launch, register_turn, reject_patch, remove_turn,
-    resolve_provider_kind, rollback_patch, run_agent_turn_with_progress, run_recipe_with_patch,
-    save_chat_sessions, suggest_verify_recipe, tools_for_mode, write_delegate_brief,
-    AgentDefinition, AgentProviderKind, AgentSecretStore, AgentSession, CascadingSecretStore,
-    ChatMessage, ChatRole, EngineRouteMetadata, EngineTurnOutcome, EngineTurnResult, LogCallback,
-    OpenAiCompatibleProvider, PatchRecord, ProviderConfig, ProviderProbeResult, Recipe,
-    RecipeRunResult, StoredChatSession, ToolExecutor, TurnProgressCallback, TurnProgressEvent,
-    WorkspaceToolExecutor,
+    apply_patch, authorize_agent_turn, cancel_recipe_run, cancel_turn, enrich_system_prompt,
+    format_patch_summary, get_recipe, list_recent_runs, list_recipes, load_chat_sessions,
+    load_inventory, probe_provider, read_patch, record_delegate_launch, register_turn,
+    reject_patch, remove_turn, resolve_provider_kind, rollback_patch, run_agent_turn_with_progress,
+    run_recipe_with_patch, save_chat_sessions, suggest_verify_recipe, write_delegate_brief,
+    AgentDefinition, AgentOrigin, AgentProviderKind, AgentRequestContext, AgentSecretStore,
+    AgentSession, CascadingSecretStore, ChatMessage, ChatRole, EngineRouteMetadata,
+    EngineTurnOutcome, EngineTurnResult, LogCallback, OpenAiCompatibleProvider, PatchRecord,
+    ProviderConfig, ProviderProbeResult, Recipe, RecipeRunResult, StoredChatSession, ToolExecutor,
+    TurnProgressCallback, TurnProgressEvent, WorkspaceToolExecutor,
 };
 use openmesh_core::storage::{default_settings, read_global, Settings};
 use serde::{Deserialize, Serialize};
@@ -187,13 +187,18 @@ fn agent_engine_turn_blocking(
     def.provider = provider;
     def.base_url = base_url;
     let mode = request.mode.as_deref().unwrap_or("ask");
-    def.tool_allowlist = tools_for_mode(mode);
-    // Mode-specific budgets — Ask should stay snappy; each provider hop is slow.
-    def.max_tool_iterations = match mode.trim().to_ascii_lowercase().as_str() {
-        "plan" | "act" => 5,
-        "delegate" => 3,
-        _ => 3, // ask
+    let origin = match mode.trim().to_ascii_lowercase().as_str() {
+        "delegate" => AgentOrigin::LocalDelegate,
+        _ => AgentOrigin::LocalChat,
     };
+    let auth = authorize_agent_turn(&AgentRequestContext {
+        origin,
+        project_path: project_path.clone(),
+        mode: Some(mode.to_string()),
+    })
+    .map_err(|e| e.to_string())?;
+    def.tool_allowlist = auth.tool_allowlist().to_vec();
+    def.max_tool_iterations = auth.max_tool_iterations();
 
     let mut session = AgentSession {
         messages: request
@@ -277,6 +282,7 @@ fn agent_engine_turn_blocking(
     });
     let turn_start = Instant::now();
     let result = run_agent_turn_with_progress(
+        &auth,
         &def,
         &mut session,
         &request.question,

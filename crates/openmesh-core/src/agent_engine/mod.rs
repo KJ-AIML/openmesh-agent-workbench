@@ -10,6 +10,7 @@ pub mod extensions;
 pub mod live_ask;
 pub mod patch;
 pub mod path_safety;
+pub mod policy;
 pub mod provider;
 pub mod recipes;
 pub mod registry;
@@ -41,6 +42,10 @@ pub use live_ask::{
 pub use patch::{
     apply_patch, format_patch_summary, list_recent_runs, propose_patch_from_args, read_patch,
     reject_patch, rollback_patch, AgentRunRecord, PatchRecord, PatchStatus,
+};
+pub use policy::{
+    authorize_agent_turn, AgentOrigin, AgentPolicyError, AgentRequestContext, AgentScope,
+    AuthorizedAgentTurn, SecretPolicy,
 };
 pub use provider::{
     build_request_body, parse_chat_completion, probe_provider, resolve_provider_kind,

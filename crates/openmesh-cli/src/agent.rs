@@ -2,9 +2,9 @@
 
 use clap::{Args, Subcommand};
 use openmesh_core::agent_engine::{
-    probe_provider, resolve_provider_kind, run_agent_turn, AgentDefinition, AgentSecretStore,
-    AgentSession, CascadingSecretStore, OpenAiCompatibleProvider, ProviderConfig,
-    WorkspaceToolExecutor,
+    authorize_agent_turn, probe_provider, resolve_provider_kind, run_agent_turn, AgentDefinition,
+    AgentRequestContext, AgentSecretStore, AgentSession, CascadingSecretStore,
+    OpenAiCompatibleProvider, ProviderConfig, WorkspaceToolExecutor,
 };
 use serde_json::json;
 use std::path::Path;
@@ -188,8 +188,24 @@ fn run_ask(args: &AgentAskArgs, cwd: &Path) -> i32 {
     let executor = WorkspaceToolExecutor {
         project_path: project_path.clone(),
     };
+    let auth = match authorize_agent_turn(&AgentRequestContext::local_cli(&project_path)) {
+        Ok(auth) => auth,
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 2;
+        }
+    };
+    def.tool_allowlist = auth.tool_allowlist().to_vec();
+    def.max_tool_iterations = auth.max_tool_iterations();
     let mut session = AgentSession::default();
-    match run_agent_turn(&def, &mut session, &args.question, &client, &executor) {
+    match run_agent_turn(
+        &auth,
+        &def,
+        &mut session,
+        &args.question,
+        &client,
+        &executor,
+    ) {
         Ok(result) => {
             if args.json {
                 println!(

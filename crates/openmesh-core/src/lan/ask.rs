@@ -97,6 +97,7 @@ pub fn answer_live_ask(
         system_extra: Some(
             "This question arrived over trusted-LAN HTTP from a peer. Answer from this host's local workspace only. Do not claim WAN mesh or e2e encryption.".into(),
         ),
+        origin: crate::agent_engine::AgentOrigin::LanPeer,
     };
 
     let engine = run_live_ask(project_path, &live_req)?;
@@ -249,8 +250,10 @@ mod tests {
             model: Some("stub".into()),
             base_url: None,
             system_extra: None,
+            origin: crate::agent_engine::AgentOrigin::LanPeer,
         };
-        let engine = run_live_ask_with_provider(&def, &live, &provider, &executor).unwrap();
+        let engine =
+            run_live_ask_with_provider(&project, &def, &live, &provider, &executor).unwrap();
         assert!(engine.assistant_text.contains("on track"));
 
         let now = Utc::now();

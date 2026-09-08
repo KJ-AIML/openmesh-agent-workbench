@@ -1,5 +1,6 @@
 //! Agent tool loop — OpenMesh Agent Engine (0.1.23).
 
+use super::policy::AuthorizedAgentTurn;
 use super::provider::ChatProvider;
 use super::registry::{filter_tools, ToolExecutor};
 use super::turn_cancel;
@@ -28,16 +29,18 @@ pub enum TurnProgressEvent {
 pub type TurnProgressCallback = Arc<dyn Fn(TurnProgressEvent) + Send + Sync>;
 
 pub fn run_agent_turn(
+    auth: &AuthorizedAgentTurn,
     def: &AgentDefinition,
     session: &mut AgentSession,
     user_text: &str,
     provider: &dyn ChatProvider,
     executor: &dyn ToolExecutor,
 ) -> Result<EngineTurnResult, AgentEngineError> {
-    run_agent_turn_cancellable(def, session, user_text, provider, executor, None)
+    run_agent_turn_cancellable(auth, def, session, user_text, provider, executor, None)
 }
 
 pub fn run_agent_turn_cancellable(
+    auth: &AuthorizedAgentTurn,
     def: &AgentDefinition,
     session: &mut AgentSession,
     user_text: &str,
@@ -45,10 +48,13 @@ pub fn run_agent_turn_cancellable(
     executor: &dyn ToolExecutor,
     cancel: Option<Arc<AtomicBool>>,
 ) -> Result<EngineTurnResult, AgentEngineError> {
-    run_agent_turn_with_progress(def, session, user_text, provider, executor, cancel, None)
+    run_agent_turn_with_progress(
+        auth, def, session, user_text, provider, executor, cancel, None,
+    )
 }
 
 pub fn run_agent_turn_with_progress(
+    auth: &AuthorizedAgentTurn,
     def: &AgentDefinition,
     session: &mut AgentSession,
     user_text: &str,
@@ -57,6 +63,7 @@ pub fn run_agent_turn_with_progress(
     cancel: Option<Arc<AtomicBool>>,
     on_progress: Option<TurnProgressCallback>,
 ) -> Result<EngineTurnResult, AgentEngineError> {
+    let def = apply_authorized_policy(def, auth);
     let tools = filter_tools(&def.tool_allowlist);
     ensure_system_prompt(session, &def.system_prompt);
     session.messages.push(ChatMessage {
@@ -245,6 +252,13 @@ pub fn run_agent_turn_with_progress(
     }
 }
 
+fn apply_authorized_policy(def: &AgentDefinition, auth: &AuthorizedAgentTurn) -> AgentDefinition {
+    let mut def = def.clone();
+    def.tool_allowlist = auth.tool_allowlist().to_vec();
+    def.max_tool_iterations = auth.max_tool_iterations();
+    def
+}
+
 fn ensure_system_prompt(session: &mut AgentSession, prompt: &str) {
     if let Some(first) = session.messages.first_mut() {
         if first.role == ChatRole::System {
@@ -276,9 +290,18 @@ fn clip(s: &str, max: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent_engine::policy::{authorize_agent_turn, AgentRequestContext};
     use crate::agent_engine::provider::{AssistantTurn, ScriptedProvider};
     use crate::agent_engine::registry::StubToolExecutor;
     use crate::agent_engine::types::ToolCallRequest;
+
+    fn local_chat_auth() -> crate::agent_engine::policy::AuthorizedAgentTurn {
+        authorize_agent_turn(&AgentRequestContext::local_chat(
+            "/tmp/openmesh-policy-test",
+            Some("ask"),
+        ))
+        .expect("test policy")
+    }
     use std::collections::BTreeMap;
     use std::sync::atomic::Ordering;
 
@@ -304,6 +327,7 @@ mod tests {
         let def = AgentDefinition::default_workspace_agent("test-model");
         let mut session = AgentSession::default();
         let result = run_agent_turn(
+            &local_chat_auth(),
             &def,
             &mut session,
             "What project am I in?",
@@ -354,6 +378,7 @@ mod tests {
             }
         });
         let result = run_agent_turn_with_progress(
+            &local_chat_auth(),
             &def,
             &mut session,
             "x",
@@ -379,7 +404,15 @@ mod tests {
         };
         let def = AgentDefinition::default_workspace_agent("m");
         let mut session = AgentSession::default();
-        let result = run_agent_turn(&def, &mut session, "hi", &provider, &executor).unwrap();
+        let result = run_agent_turn(
+            &local_chat_auth(),
+            &def,
+            &mut session,
+            "hi",
+            &provider,
+            &executor,
+        )
+        .unwrap();
         assert_eq!(result.assistant_text, "Hello.");
         assert!(result.tool_steps.is_empty());
     }
@@ -397,6 +430,7 @@ mod tests {
         let mut session = AgentSession::default();
         let flag = Arc::new(AtomicBool::new(true));
         let result = run_agent_turn_cancellable(
+            &local_chat_auth(),
             &def,
             &mut session,
             "hi",
@@ -433,7 +467,15 @@ mod tests {
         let executor = StubToolExecutor { responses };
         let def = AgentDefinition::default_workspace_agent("m");
         let mut session = AgentSession::default();
-        let result = run_agent_turn(&def, &mut session, "x", &provider, &executor).unwrap();
+        let result = run_agent_turn(
+            &local_chat_auth(),
+            &def,
+            &mut session,
+            "x",
+            &provider,
+            &executor,
+        )
+        .unwrap();
         let executed = result
             .tool_steps
             .iter()
@@ -446,5 +488,39 @@ mod tests {
             .map(|t| t.summary.contains("[tool budget]"))
             .unwrap_or(false));
         assert_eq!(result.assistant_text, "Done with budget.");
+    }
+
+    #[test]
+    fn remote_policy_strips_mutating_tools_from_definition() {
+        let provider = ScriptedProvider::new(vec![
+            AssistantTurn {
+                content: String::new(),
+                tool_calls: vec![ToolCallRequest {
+                    id: "call_1".into(),
+                    name: "propose_patch".into(),
+                    arguments: "{}".into(),
+                }],
+            },
+            AssistantTurn {
+                content: "refused".into(),
+                tool_calls: vec![],
+            },
+        ]);
+        let executor = StubToolExecutor {
+            responses: BTreeMap::new(),
+        };
+        let mut def = AgentDefinition::default_workspace_agent("m");
+        def.tool_allowlist = crate::agent_engine::registry::tools_for_mode("act");
+        let auth = authorize_agent_turn(&AgentRequestContext::live_ask(
+            crate::agent_engine::policy::AgentOrigin::LanPeer,
+            "/tmp/openmesh-policy-test",
+        ))
+        .unwrap();
+        let mut session = AgentSession::default();
+        let result =
+            run_agent_turn(&auth, &def, &mut session, "patch it", &provider, &executor).unwrap();
+        assert_eq!(result.tool_steps.len(), 1);
+        assert!(!result.tool_steps[0].ok);
+        assert!(result.tool_steps[0].summary.contains("tool not allowed"));
     }
 }
