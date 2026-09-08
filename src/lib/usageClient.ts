@@ -135,35 +135,6 @@ function parseRequestLogEntry(value: unknown): RequestLogEntry {
   };
 }
 
-function parseProviderQuota(value: unknown): ProviderQuota {
-  if (!isRecord(value)) throw new Error(SAFE_USAGE_ERROR);
-  const status = value.status;
-  if (status !== "ok" && status !== "warning" && status !== "critical" && status !== "unknown") {
-    throw new Error(SAFE_USAGE_ERROR);
-  }
-  return {
-    provider: requiredString(value.provider, 64),
-    requestsRemaining: optionalNumber(value.requestsRemaining),
-    requestsLimit: optionalNumber(value.requestsLimit),
-    tokensRemaining: optionalNumber(value.tokensRemaining),
-    tokensLimit: optionalNumber(value.tokensLimit),
-    resetsAt: optionalString(value.resetsAt, 80),
-    status,
-  };
-}
-
-function parseAccountInfo(value: unknown): AccountInfo {
-  if (!isRecord(value)) throw new Error(SAFE_USAGE_ERROR);
-  return {
-    name: requiredString(value.name, 240),
-    provider: requiredString(value.provider, 64),
-    enabled: typeof value.enabled === "boolean" ? value.enabled : false,
-    isActive: typeof value.isActive === "boolean" ? value.isActive : false,
-    unavailable: typeof value.unavailable === "boolean" ? value.unavailable : false,
-    priority: typeof value.priority === "number" ? value.priority : 0,
-  };
-}
-
 export async function getUsageSummary(start: string, end: string): Promise<UsageSummary> {
   try {
     const value: unknown = await invoke("usage_summary", { start, end });
@@ -206,48 +177,26 @@ export async function getUsageRequestLogs(
 }
 
 export async function getQuotaStatus(): Promise<ProviderQuota[]> {
-  try {
-    const value: unknown = await invoke("usage_quota_status");
-    if (!Array.isArray(value)) throw new Error(SAFE_USAGE_ERROR);
-    return value.map(parseProviderQuota);
-  } catch (error) {
-    throw new Error(parseUsageError(error));
-  }
+  // Live quota polling is deferred (docs/builtin-proxy-parity.md). There is
+  // no registered Tauri command for this; do not invoke a ghost name.
+  return [];
 }
 
 export async function getListAccounts(): Promise<AccountInfo[]> {
-  try {
-    const value: unknown = await invoke("usage_list_accounts");
-    if (!Array.isArray(value)) throw new Error(SAFE_USAGE_ERROR);
-    return value.map(parseAccountInfo);
-  } catch (error) {
-    throw new Error(parseUsageError(error));
-  }
+  // Account listing for the usage chrome is not a Tauri command. Provider
+  // accounts are managed through the built-in proxy management API.
+  return [];
 }
 
 export async function setActiveAccount(
-  provider: string,
-  accountName: string,
+  _provider: string,
+  _accountName: string,
 ): Promise<void> {
-  try {
-    await invoke("usage_set_active_account", { provider, accountName });
-  } catch (error) {
-    throw new Error(parseUsageError(error));
-  }
+  throw new Error(SAFE_USAGE_ERROR);
 }
 
 export async function getActiveAccounts(): Promise<Record<string, string>> {
-  try {
-    const value: unknown = await invoke("usage_get_active_accounts");
-    if (!isRecord(value)) throw new Error(SAFE_USAGE_ERROR);
-    const result: Record<string, string> = {};
-    for (const [key, val] of Object.entries(value)) {
-      if (typeof val === "string") result[key] = val;
-    }
-    return result;
-  } catch (error) {
-    throw new Error(parseUsageError(error));
-  }
+  return {};
 }
 
 export function formatTokenCount(count: number): string {

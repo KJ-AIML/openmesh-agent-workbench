@@ -114,19 +114,16 @@ fn context_source() -> String {
 
 #[test]
 fn context_cli_exposes_only_build_show_and_validate() {
-    let help = context_help().to_ascii_lowercase();
+    // Assert via subcommand --help so the check does not depend on clap's
+    // TTY vs captured-stdout help table layout.
     for required in ["build", "show", "validate"] {
-        assert!(help.contains(required), "missing subcommand {required}");
+        let output = run_raw(&["context", required, "--help"]);
+        assert!(
+            output.status.success(),
+            "context {required} --help should succeed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
-    let lines: Vec<_> = help
-        .lines()
-        .filter(|line| {
-            line.trim_start().starts_with("build")
-                || line.trim_start().starts_with("show")
-                || line.trim_start().starts_with("validate")
-        })
-        .collect();
-    assert!(lines.len() >= 3);
 }
 
 #[test]

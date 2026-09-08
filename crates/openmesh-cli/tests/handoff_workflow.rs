@@ -78,10 +78,6 @@ fn handoff_help() -> String {
     String::from_utf8_lossy(&run_raw(&["handoff", "--help"]).stdout).into_owned()
 }
 
-fn top_level_help() -> String {
-    String::from_utf8_lossy(&run_raw(&["--help"]).stdout).into_owned()
-}
-
 #[test]
 fn handoff_cli_exposes_create_show_approve_and_export() {
     let help = handoff_help().to_ascii_lowercase();
@@ -92,13 +88,20 @@ fn handoff_cli_exposes_create_show_approve_and_export() {
 
 #[test]
 fn top_level_handoff_is_distinct_from_signal_handoff_kind() {
-    let top = top_level_help().to_ascii_lowercase();
-    assert!(top.contains("handoff"));
-    let signal_help =
-        String::from_utf8_lossy(&run_raw(&["signal", "--help"]).stdout).to_ascii_lowercase();
-    assert!(signal_help.contains("handoff"));
-    assert!(top.contains("  handoff"));
-    assert!(top.contains("signal"));
+    // Both surfaces must exist as invocable commands. Do not parse clap's
+    // indented help table — that layout is TTY-dependent.
+    let handoff = run_raw(&["handoff", "--help"]);
+    assert!(
+        handoff.status.success(),
+        "top-level handoff --help should succeed: {}",
+        String::from_utf8_lossy(&handoff.stderr)
+    );
+    let signal_handoff = run_raw(&["signal", "handoff", "--help"]);
+    assert!(
+        signal_handoff.status.success(),
+        "signal handoff --help should succeed: {}",
+        String::from_utf8_lossy(&signal_handoff.stderr)
+    );
 }
 
 #[test]
