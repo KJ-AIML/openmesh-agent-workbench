@@ -365,9 +365,12 @@ pub async fn agent_chat_save(
     project_path: String,
     sessions: Vec<StoredChatSession>,
 ) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || save_chat_sessions(&project_path, &sessions))
-        .await
-        .map_err(|e| format!("chat save failed to join: {e}"))?
+    tauri::async_runtime::spawn_blocking(move || {
+        let project_path = crate::command_guard::authorize_project_path(&project_path)?;
+        save_chat_sessions(&project_path, &sessions)
+    })
+    .await
+    .map_err(|e| format!("chat save failed to join: {e}"))?
 }
 
 /// Direct read-tool invoke for Agent Chat slash/keyword fast paths.
@@ -385,6 +388,7 @@ pub async fn agent_workspace_tool(
     request: AgentWorkspaceToolRequest,
 ) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
+        let project_path = crate::command_guard::authorize_project_path(&project_path)?;
         let allowed = [
             "list_dir",
             "read_file",
@@ -517,6 +521,7 @@ pub async fn agent_recipe_run(
         .unwrap_or_else(|| format!("{}:{}", project_path, recipe_id));
     let patch_id = request.patch_id;
     tauri::async_runtime::spawn_blocking(move || {
+        let project_path = crate::command_guard::authorize_project_path(&project_path)?;
         let app_log = app.clone();
         let key_for_events = run_key.clone();
         let on_log: LogCallback = Arc::new(move |line| {

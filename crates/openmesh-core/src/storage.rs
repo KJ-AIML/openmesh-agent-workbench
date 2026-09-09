@@ -1049,4 +1049,17 @@ mod tests {
 
         let _ = fs::remove_dir_all(project);
     }
+
+    #[test]
+    fn safe_child_path_rejects_traversal_and_absolute() {
+        let base = temp_project("safe-child");
+        let docs = base.join(".openmesh").join("docs");
+        assert!(safe_child_path(&docs, "../secret").is_err());
+        assert!(safe_child_path(&docs, "..").is_err());
+        assert!(safe_child_path(&docs, "/etc/passwd").is_err());
+        assert!(safe_child_path(&docs, "folder/../../outside").is_err());
+        let ok = safe_child_path(&docs, "folder/ok.md").unwrap();
+        assert!(ok.ends_with("folder/ok.md") || ok.ends_with("folder\\ok.md"));
+        let _ = fs::remove_dir_all(base);
+    }
 }

@@ -5,11 +5,11 @@
 //! 2. resolve it to a registered project root (`projects.json`)
 //! 3. then execute
 //!
-//! Applied in A4.2 to a bounded sensitive subset (not all ~180 commands):
-//! - filesystem mutation: `write_snapshot`
+//! Applied to sensitive IPC:
+//! - filesystem mutation: docs/notes/project JSON writes, `write_snapshot`
 //! - patch apply / rollback: `agent_patch_apply`, `agent_patch_rollback`
 //! - PTY / process: `pty_create`, `open_terminal`, `open_agent_cli`, `run_command_preset`
-//! - model turn: `agent_engine_turn`
+//! - model turn / recipes / workspace tools
 //! - LAN start: `lan_serve_start`
 //!
 //! Secret mutation (`agent_secret_set` / `agent_secret_clear`) has no path:
@@ -57,6 +57,23 @@ pub fn require_registered_project(
 /// Production helper: resolve against the live `projects.json` list.
 pub fn require_registered_project_path(candidate: &str) -> Result<PathBuf, String> {
     require_registered_project(candidate, &registered_projects())
+}
+
+/// Canonical existing directory; does not consult the project registry.
+/// Used for first-time `init_project_cmd` before the path is registered.
+pub fn require_existing_directory(candidate: &str) -> Result<PathBuf, String> {
+    let trimmed = candidate.trim();
+    if trimmed.is_empty() {
+        return Err(ERR_INVALID_PROJECT_PATH.into());
+    }
+    canonicalize_existing_dir(Path::new(trimmed))
+}
+
+/// Registered project path as a host string for mutating IPC.
+pub fn authorize_project_path(candidate: &str) -> Result<String, String> {
+    Ok(host_path_string(&require_registered_project_path(
+        candidate,
+    )?))
 }
 
 /// Canonical path as a host string. Strips Windows `\\?\` so terminal launchers
@@ -211,5 +228,19 @@ mod tests {
         #[cfg(windows)]
         assert!(!rendered.starts_with(r"\\?\"));
         assert!(std::path::Path::new(&rendered).is_dir());
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn symlink_escape_is_rejected() {
+        let outside = touch_dir();
+        let proj = touch_dir();
+        let link = proj.path().join("escape");
+        std::os::unix::fs::symlink(outside.path(), &link).unwrap();
+        let registered = vec![proj.path().to_string_lossy().into_owned()];
+        assert_eq!(
+            require_registered_project(&link.to_string_lossy(), &registered).unwrap_err(),
+            ERR_UNREGISTERED_PROJECT_PATH
+        );
     }
 }

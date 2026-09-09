@@ -192,27 +192,8 @@ fn validate_argv(argv: &[String]) -> Result<(), String> {
         return Err("recipe argv is empty".into());
     }
     for a in argv {
-        if a.contains('\0')
-            || a.contains('$')
-            || a.contains('`')
-            || a.contains('|')
-            || a.contains(';')
-        {
-            return Err("recipe argv contains forbidden characters".into());
-        }
-    }
-    // Block obvious destructive / remote commands in defaults usage.
-    let joined = argv.join(" ").to_lowercase();
-    for bad in [
-        "git push",
-        "rm -rf",
-        "curl ",
-        "wget ",
-        "npm publish",
-        "cargo publish",
-    ] {
-        if joined.contains(bad) {
-            return Err(format!("recipe blocked: contains '{bad}'"));
+        if a.is_empty() || a.contains('\0') || a.contains('\n') || a.contains('\r') {
+            return Err("recipe argv contains invalid tokens".into());
         }
     }
     Ok(())
@@ -269,14 +250,9 @@ pub fn run_recipe_with_patch(
     validate_argv(&recipe.argv)?;
 
     let cwd = if recipe.cwd_rel.trim().is_empty() {
-        PathBuf::from(project_path)
+        super::path_safety::workspace_root(project_path)?
     } else {
-        let root = PathBuf::from(project_path);
-        let joined = crate::storage::safe_child_path(&root, recipe.cwd_rel.trim())?;
-        if !joined.is_dir() {
-            return Err("recipe cwd is not a directory".into());
-        }
-        joined
+        super::path_safety::resolve_dir_in_workspace(project_path, &recipe.cwd_rel)?
     };
 
     let cancel = register_cancel(run_key);
@@ -484,24 +460,85 @@ mod tests {
     }
 
     #[test]
-    fn blocks_forbidden_argv() {
+    fn rejects_nul_argv() {
         let project = temp_project();
         let dir = recipes_dir(&project);
         fs::create_dir_all(&dir).unwrap();
         let recipe = Recipe {
-            id: "bad-push".into(),
-            title: "blocked".into(),
-            argv: vec!["git".into(), "push".into(), "origin".into(), "main".into()],
+            id: "nul-arg".into(),
+            title: "nul".into(),
+            argv: vec!["echo".into(), "ok\0evil".into()],
             cwd_rel: String::new(),
             timeout_ms: 5_000,
         };
         atomic_write(
-            &dir.join("bad-push.json"),
+            &dir.join("nul-arg.json"),
             &serde_json::to_string_pretty(&recipe).unwrap(),
         )
         .unwrap();
-        let err = run_recipe(&project, "bad-push", "test-blocked", None).unwrap_err();
-        assert!(err.contains("blocked"), "{err}");
+        let err = run_recipe(&project, "nul-arg", "test-nul", None).unwrap_err();
+        assert!(err.contains("invalid"), "{err}");
+        let _ = fs::remove_dir_all(&project);
+    }
+
+    #[test]
+    fn echo_keeps_metacharacter_argument() {
+        let project = temp_project();
+        let dir = recipes_dir(&project);
+        fs::create_dir_all(&dir).unwrap();
+        let recipe = Recipe {
+            id: "echo-meta".into(),
+            title: "echo".into(),
+            argv: vec![
+                "echo".into(),
+                "hello; rm -rf /".into(),
+                "file name.txt".into(),
+            ],
+            cwd_rel: String::new(),
+            timeout_ms: 5_000,
+        };
+        atomic_write(
+            &dir.join("echo-meta.json"),
+            &serde_json::to_string_pretty(&recipe).unwrap(),
+        )
+        .unwrap();
+        let result = run_recipe(&project, "echo-meta", "test-meta", None).unwrap();
+        assert!(result.ok, "{result:?}");
+        assert!(
+            result.stdout.contains("hello; rm -rf /"),
+            "{:?}",
+            result.stdout
+        );
+        assert!(
+            result.stdout.contains("file name.txt"),
+            "{:?}",
+            result.stdout
+        );
+        let _ = fs::remove_dir_all(&project);
+    }
+
+    #[test]
+    fn rejects_cwd_escape() {
+        let project = temp_project();
+        let dir = recipes_dir(&project);
+        fs::create_dir_all(&dir).unwrap();
+        let recipe = Recipe {
+            id: "cwd-escape".into(),
+            title: "escape".into(),
+            argv: vec!["echo".into(), "nope".into()],
+            cwd_rel: "../".into(),
+            timeout_ms: 5_000,
+        };
+        atomic_write(
+            &dir.join("cwd-escape.json"),
+            &serde_json::to_string_pretty(&recipe).unwrap(),
+        )
+        .unwrap();
+        let err = run_recipe(&project, "cwd-escape", "test-cwd", None).unwrap_err();
+        assert!(
+            err.contains("Invalid path") || err.contains("escape") || err.contains("not found"),
+            "{err}"
+        );
         let _ = fs::remove_dir_all(&project);
     }
 

@@ -4,6 +4,7 @@ mod command_guard;
 mod continuity_desktop;
 mod extensions_desktop;
 mod oauth_desktop;
+mod process_launch;
 mod proxy_runtime_desktop;
 mod pty_desktop;
 mod update_desktop;
@@ -416,263 +417,89 @@ fn open_agent_cli(
         }
     };
 
-    // Determine command to run: prefer configured path, else the canonical tool name
-    let mut command = cli_path.unwrap_or_else(|| canonical_tool.to_string());
-    // Append resume / extra args (no shell expansion — space-joined literals only).
+    let program = cli_path
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| canonical_tool.to_string());
+    if let Err(e) = process_launch::validate_program(&program) {
+        return AgentCliLaunchResult {
+            success: false,
+            error: Some(e),
+        };
+    }
+
+    let mut args: Vec<String> = Vec::new();
     if let Some(sid) = resume_session_id
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
     {
-        if sid
-            .chars()
-            .any(|c| c.is_whitespace() || c == ';' || c == '|' || c == '&' || c == '`' || c == '$')
-        {
+        if process_launch::validate_token(sid).is_err() || sid.chars().any(char::is_whitespace) {
             return AgentCliLaunchResult {
                 success: false,
                 error: Some("invalid resume session id".into()),
             };
         }
-        let resume_flag = match canonical_tool {
-            "codex" => format!(" resume {sid}"),
-            "claude" => format!(" --resume {sid}"),
-            "opencode" => format!(" --session {sid}"),
-            _ => format!(" --resume {sid}"),
-        };
-        command.push_str(&resume_flag);
+        match canonical_tool {
+            "codex" => {
+                args.push("resume".into());
+                args.push(sid.to_string());
+            }
+            "opencode" => {
+                args.push("--session".into());
+                args.push(sid.to_string());
+            }
+            _ => {
+                args.push("--resume".into());
+                args.push(sid.to_string());
+            }
+        }
     }
-    if let Some(args) = extra_args {
-        for a in args {
-            let a = a.trim();
+    if let Some(extra) = extra_args {
+        for a in extra {
             if a.is_empty() {
                 continue;
             }
-            if a.chars()
-                .any(|c| c == ';' || c == '|' || c == '&' || c == '`' || c == '$' || c == '\n')
-            {
+            if let Err(e) = process_launch::validate_token(&a) {
                 return AgentCliLaunchResult {
                     success: false,
-                    error: Some("invalid extra arg".into()),
+                    error: Some(e),
                 };
             }
-            command.push(' ');
-            command.push_str(a);
+            args.push(a);
         }
     }
-    // Surface OpenMesh brief path in the terminal before the agent CLI starts.
-    if let Some(bp) = brief_path
+    let brief_path = match brief_path
         .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
     {
-        if bp.chars().any(|c| {
-            c == ';'
-                || c == '|'
-                || c == '&'
-                || c == '`'
-                || c == '$'
-                || c == '\n'
-                || c == '\r'
-                || c == '"'
-                || c == '\''
-        }) {
-            return AgentCliLaunchResult {
-                success: false,
-                error: Some("invalid brief path".into()),
-            };
-        }
-        #[cfg(target_os = "windows")]
-        {
-            command = format!("echo OpenMesh brief: {} && {}", bp, command);
-        }
-        #[cfg(not(target_os = "windows"))]
-        {
-            command = format!("echo 'OpenMesh brief: {}' && {}", bp, command);
-        }
-    }
-
-    #[cfg(target_os = "windows")]
-    {
-        // Escape double quotes inside the command for safe embedding in cmd /k "...".
-        let escaped_command = command.replace('"', "\"\"");
-        let cwd_escaped = cwd.replace('"', "\"\"");
-
-        // Strategy: open a visible terminal that runs the command and stays open.
-        // Priority: Windows Terminal (wt.exe) → PowerShell → cmd.exe.
-
-        // 1. Try Windows Terminal: wt.exe -d "<cwd>" cmd /k "<command>"
-        //    cmd /k keeps the shell open after the command exits.
-        let wt_result = Command::new("wt")
-            .arg("-d")
-            .arg(&cwd)
-            .arg("cmd")
-            .arg("/k")
-            .arg(&escaped_command)
-            .spawn();
-
-        if wt_result.is_ok() {
-            if cfg!(debug_assertions) {
-                eprintln!(
-                    "[open_agent_cli] Windows Terminal launched: {} in {}",
-                    command, cwd
-                );
-            }
-            return AgentCliLaunchResult {
-                success: true,
-                error: None,
-            };
-        }
-
-        // 2. Fallback to PowerShell: powershell -NoExit -Command "Set-Location '<cwd>'; & '<command>'"
-        let ps_result = Command::new("powershell")
-            .arg("-NoExit")
-            .arg("-Command")
-            .arg(format!(
-                "Set-Location '{}'; & '{}'",
-                cwd_escaped, escaped_command
-            ))
-            .spawn();
-
-        if ps_result.is_ok() {
-            if cfg!(debug_assertions) {
-                eprintln!(
-                    "[open_agent_cli] PowerShell launched: {} in {}",
-                    command, cwd
-                );
-            }
-            return AgentCliLaunchResult {
-                success: true,
-                error: None,
-            };
-        }
-
-        // 3. Final fallback to cmd.exe: cmd /K "cd /d "<cwd>" && <command>"
-        let cmd_result = Command::new("cmd")
-            .arg("/C")
-            .arg("start")
-            .arg("cmd")
-            .arg("/K")
-            .arg(format!("cd /d \"{}\" && {}", cwd_escaped, escaped_command))
-            .spawn();
-
-        match cmd_result {
-            Ok(_) => {
-                if cfg!(debug_assertions) {
-                    eprintln!("[open_agent_cli] cmd.exe launched: {} in {}", command, cwd);
-                }
-                AgentCliLaunchResult {
-                    success: true,
-                    error: None,
-                }
-            }
-            Err(e) => {
-                let msg = format!(
-                    "Could not launch {} using `{}`. It may not be installed or not available in PATH for Tauri. Try setting a command override in Settings. (Error: {})",
-                    canonical_tool, command, e
-                );
-                if cfg!(debug_assertions) {
-                    eprintln!("[open_agent_cli] All terminal launchers failed: {}", msg);
-                }
-                AgentCliLaunchResult {
-                    success: false,
-                    error: Some(msg),
-                }
-            }
-        }
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        // Use osascript to tell Terminal.app to open a new window, cd to cwd, and run the command.
-        // The trailing "; exec bash" keeps the shell open after the command exits.
-        let script = format!(
-            "tell application \"Terminal\" to do script \"cd '{}' && {}; exec bash\"",
-            cwd.replace('\'', "'\\''"),
-            command.replace('\'', "'\\''")
-        );
-
-        match Command::new("osascript").arg("-e").arg(&script).spawn() {
-            Ok(_) => {
-                if cfg!(debug_assertions) {
-                    eprintln!(
-                        "[open_agent_cli] Terminal.app launched: {} in {}",
-                        command, cwd
-                    );
-                }
-                AgentCliLaunchResult {
-                    success: true,
-                    error: None,
-                }
-            }
-            Err(e) => {
-                let msg = format!(
-                    "Could not launch {} using `{}`. (Error: {})",
-                    canonical_tool, command, e
-                );
-                AgentCliLaunchResult {
-                    success: false,
-                    error: Some(msg),
-                }
-            }
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        // Try common Linux terminals. Each runs the command in cwd and keeps the shell open.
-        let terminals: &[(&str, &[&str])] = &[
-            (
-                "gnome-terminal",
-                &["--working-directory", "--", "bash", "-c"],
-            ),
-            ("konsole", &["--workdir", "--", "bash", "-c"]),
-            ("xterm", &["-e", "bash", "-c"]),
-        ];
-
-        let keep_open_cmd = format!(
-            "cd '{}' && {}; exec bash",
-            cwd.replace('\'', "'\\''"),
-            command.replace('\'', "'\\''")
-        );
-
-        for (terminal, prefix_args) in terminals.iter() {
-            let mut cmd = Command::new(terminal);
-            for arg in *prefix_args {
-                cmd.arg(arg);
-            }
-            // For gnome-terminal/konsole, the -c arg comes after --; for xterm, after -e.
-            cmd.arg(&keep_open_cmd);
-
-            if cmd.spawn().is_ok() {
-                if cfg!(debug_assertions) {
-                    eprintln!(
-                        "[open_agent_cli] {} launched: {} in {}",
-                        terminal, command, cwd
-                    );
-                }
+        Some(bp) => {
+            if let Err(e) = process_launch::validate_token(bp) {
                 return AgentCliLaunchResult {
-                    success: true,
-                    error: None,
+                    success: false,
+                    error: Some(e),
                 };
             }
+            Some(bp.to_string())
         }
+        None => None,
+    };
 
-        let msg = format!(
-            "Could not launch {} using `{}`. No supported terminal found. Install gnome-terminal, konsole, or xterm.",
-            canonical_tool, command
-        );
-        AgentCliLaunchResult {
+    match process_launch::launch_visible_terminal(&process_launch::TerminalLaunch {
+        program,
+        args,
+        cwd,
+        brief_path,
+    }) {
+        Ok(()) => AgentCliLaunchResult {
+            success: true,
+            error: None,
+        },
+        Err(e) => AgentCliLaunchResult {
             success: false,
-            error: Some(msg),
-        }
-    }
-
-    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
-    {
-        AgentCliLaunchResult {
-            success: false,
-            error: Some("Unsupported platform".to_string()),
-        }
+            error: Some(format!("Could not launch {}. {e}", canonical_tool)),
+        },
     }
 }
 
@@ -787,110 +614,35 @@ fn run_command_preset(command: String, args: Vec<String>, cwd: String) -> RunCom
         }
     };
     let cwd = command_guard::host_path_string(&cwd_path);
-
-    // Block dangerous commands
-    let dangerous_patterns = [
-        "rm -rf",
-        "rm -fr",
-        "del /s",
-        "del /f",
-        "rmdir /s",
-        "git reset --hard",
-        "git clean -fd",
-        "git push --force",
-        "git push -f",
-        "format c:",
-        "format d:",
-        "format e:",
-        "mkfs",
-    ];
-
-    let full_command = format!("{} {}", command, args.join(" "));
-    for pattern in dangerous_patterns.iter() {
-        if full_command.contains(pattern) {
+    if let Err(e) = process_launch::validate_program(&command) {
+        return RunCommandPresetResult {
+            success: false,
+            error: Some(e),
+        };
+    }
+    for a in &args {
+        if let Err(e) = process_launch::validate_token(a) {
             return RunCommandPresetResult {
                 success: false,
-                error: Some(format!(
-                    "Command blocked: contains dangerous pattern '{}'",
-                    pattern
-                )),
+                error: Some(e),
             };
         }
     }
 
-    // Launch command in terminal
-    #[cfg(target_os = "windows")]
-    {
-        let mut cmd = Command::new("cmd");
-        cmd.arg("/C").arg("start").arg("cmd").arg("/K");
-        cmd.arg(&command);
-        for arg in &args {
-            cmd.arg(arg);
-        }
-        cmd.current_dir(&cwd);
-
-        match cmd.spawn() {
-            Ok(_) => RunCommandPresetResult {
-                success: true,
-                error: None,
-            },
-            Err(e) => RunCommandPresetResult {
-                success: false,
-                error: Some(format!("Failed to run command: {}", e)),
-            },
-        }
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        // Escape single quotes for AppleScript (double them) and backslashes.
-        let esc = |s: &str| s.replace('\\', "\\\\").replace('\'', "'\\''");
-        let full_cmd = format!("{} {}", command, args.join(" "));
-        let script = format!(
-            "tell application \"Terminal\" to do script \"cd '{}' && {}\"",
-            esc(&cwd),
-            esc(&full_cmd)
-        );
-        match Command::new("osascript").arg("-e").arg(&script).spawn() {
-            Ok(_) => RunCommandPresetResult {
-                success: true,
-                error: None,
-            },
-            Err(e) => RunCommandPresetResult {
-                success: false,
-                error: Some(format!("Failed to run command: {}", e)),
-            },
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        let terminals = ["gnome-terminal", "konsole", "xterm"];
-        for terminal in terminals.iter() {
-            let mut cmd = Command::new(terminal);
-            cmd.arg("--working-directory").arg(&cwd);
-            cmd.arg("-e").arg(format!("{} {}", command, args.join(" ")));
-
-            if cmd.spawn().is_ok() {
-                return RunCommandPresetResult {
-                    success: true,
-                    error: None,
-                };
-            }
-        }
-
-        RunCommandPresetResult {
+    match process_launch::launch_visible_terminal(&process_launch::TerminalLaunch {
+        program: command,
+        args,
+        cwd,
+        brief_path: None,
+    }) {
+        Ok(()) => RunCommandPresetResult {
+            success: true,
+            error: None,
+        },
+        Err(e) => RunCommandPresetResult {
             success: false,
-            error: Some("No supported terminal found".to_string()),
-        }
-    }
-
-    #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "linux")))]
-    {
-        RunCommandPresetResult {
-            success: false,
-            error: Some("Unsupported platform".to_string()),
-        }
+            error: Some(e),
+        },
     }
 }
 
@@ -919,6 +671,7 @@ fn get_projects_list() -> Vec<String> {
 
 #[tauri::command]
 fn add_project_to_list(path: String) -> Result<(), String> {
+    command_guard::require_existing_directory(&path)?;
     let mut projects = get_projects_list();
     if !projects.contains(&path) {
         projects.push(path);
@@ -950,6 +703,7 @@ fn save_app_state(state: AppState) -> Result<(), String> {
 
 #[tauri::command]
 fn init_project_cmd(project_path: String) -> Result<(), String> {
+    command_guard::require_existing_directory(&project_path)?;
     init_project(&project_path)?;
     add_project_to_list(project_path).map_err(|e| e.to_string())?;
     Ok(())
@@ -962,11 +716,13 @@ fn get_project(project_path: String) -> Option<Project> {
 
 #[tauri::command]
 fn save_project(project_path: String, project: Project) -> Result<(), String> {
+    let project_path = command_guard::authorize_project_path(&project_path)?;
     write_project(&project_path, "project.json", &project)
 }
 
 #[tauri::command]
 fn delete_project_cmd(project_path: String) -> Result<(), String> {
+    let project_path = command_guard::authorize_project_path(&project_path)?;
     delete_project_data(&project_path)?;
     remove_project_from_list(project_path).map_err(|e| e.to_string())?;
     Ok(())
@@ -981,6 +737,7 @@ fn get_sessions(project_path: String) -> Vec<AgentSession> {
 
 #[tauri::command]
 fn save_sessions(project_path: String, sessions: Vec<AgentSession>) -> Result<(), String> {
+    let project_path = command_guard::authorize_project_path(&project_path)?;
     write_project(&project_path, "sessions.json", &sessions)
 }
 
@@ -991,6 +748,7 @@ fn get_sprint(project_path: String) -> Option<Sprint> {
 
 #[tauri::command]
 fn save_sprint(project_path: String, sprint: Sprint) -> Result<(), String> {
+    let project_path = command_guard::authorize_project_path(&project_path)?;
     write_project(&project_path, "sprint.json", &sprint)
 }
 
@@ -1001,6 +759,7 @@ fn get_tasks(project_path: String) -> Vec<Task> {
 
 #[tauri::command]
 fn save_tasks(project_path: String, tasks: Vec<Task>) -> Result<(), String> {
+    let project_path = command_guard::authorize_project_path(&project_path)?;
     write_project(&project_path, "tasks.json", &tasks)
 }
 
@@ -1011,6 +770,7 @@ fn get_presets(project_path: String) -> Vec<CommandPreset> {
 
 #[tauri::command]
 fn save_presets(project_path: String, presets: Vec<CommandPreset>) -> Result<(), String> {
+    let project_path = command_guard::authorize_project_path(&project_path)?;
     write_project(&project_path, "presets.json", &presets)
 }
 
@@ -1021,6 +781,7 @@ fn get_recent(project_path: String) -> Vec<RecentItem> {
 
 #[tauri::command]
 fn save_recent(project_path: String, items: Vec<RecentItem>) -> Result<(), String> {
+    let project_path = command_guard::authorize_project_path(&project_path)?;
     write_project(&project_path, "recent.json", &items)
 }
 
@@ -1046,18 +807,21 @@ fn read_doc(project_path: String, filename: String) -> Result<String, String> {
 
 #[tauri::command]
 fn write_doc(project_path: String, filename: String, content: String) -> Result<(), String> {
+    let project_path = command_guard::authorize_project_path(&project_path)?;
     let path = safe_child_path(&get_project_dir(&project_path).join("docs"), &filename)?;
     write_file_content(&path.to_string_lossy(), &content)
 }
 
 #[tauri::command]
 fn delete_doc(project_path: String, filename: String) -> Result<(), String> {
+    let project_path = command_guard::authorize_project_path(&project_path)?;
     let path = safe_child_path(&get_project_dir(&project_path).join("docs"), &filename)?;
     delete_file(&path.to_string_lossy())
 }
 
 #[tauri::command]
 fn create_doc_folder(project_path: String, folder_name: String) -> Result<(), String> {
+    let project_path = command_guard::authorize_project_path(&project_path)?;
     create_docs_folder(&project_path, &folder_name)
 }
 
@@ -1067,16 +831,19 @@ fn rename_doc_folder(
     old_name: String,
     new_name: String,
 ) -> Result<(), String> {
+    let project_path = command_guard::authorize_project_path(&project_path)?;
     rename_docs_folder(&project_path, &old_name, &new_name)
 }
 
 #[tauri::command]
 fn delete_doc_folder(project_path: String, folder_name: String) -> Result<(), String> {
+    let project_path = command_guard::authorize_project_path(&project_path)?;
     delete_docs_folder(&project_path, &folder_name)
 }
 
 #[tauri::command]
 fn move_doc(project_path: String, filename: String, target_folder: String) -> Result<(), String> {
+    let project_path = command_guard::authorize_project_path(&project_path)?;
     storage::move_doc_fn(&project_path, &filename, &target_folder)
 }
 
@@ -1086,6 +853,7 @@ fn rename_doc(
     old_filename: String,
     new_filename: String,
 ) -> Result<(), String> {
+    let project_path = command_guard::authorize_project_path(&project_path)?;
     storage::rename_doc_fn(&project_path, &old_filename, &new_filename)
 }
 
@@ -1105,12 +873,14 @@ fn read_note(project_path: String, filename: String) -> Result<String, String> {
 
 #[tauri::command]
 fn write_note(project_path: String, filename: String, content: String) -> Result<(), String> {
+    let project_path = command_guard::authorize_project_path(&project_path)?;
     let path = safe_child_path(&get_project_dir(&project_path).join("notes"), &filename)?;
     write_file_content(&path.to_string_lossy(), &content)
 }
 
 #[tauri::command]
 fn delete_note(project_path: String, filename: String) -> Result<(), String> {
+    let project_path = command_guard::authorize_project_path(&project_path)?;
     let path = safe_child_path(&get_project_dir(&project_path).join("notes"), &filename)?;
     delete_file(&path.to_string_lossy())
 }
@@ -1121,6 +891,7 @@ fn rename_note(
     old_filename: String,
     new_filename: String,
 ) -> Result<(), String> {
+    let project_path = command_guard::authorize_project_path(&project_path)?;
     storage::rename_note_fn(&project_path, &old_filename, &new_filename)
 }
 
@@ -1131,6 +902,7 @@ fn import_file(
     filename: String,
     content: String,
 ) -> Result<(), String> {
+    let project_path = command_guard::authorize_project_path(&project_path)?;
     if folder != "docs" && folder != "notes" {
         return Err("Invalid import folder".to_string());
     }
