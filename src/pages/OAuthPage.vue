@@ -151,7 +151,7 @@ onMounted(() => {
         <p class="text-caption uppercase tracking-[0.18em] text-muted">OpenMesh runtime</p>
         <h1 class="settings__title">Connections</h1>
         <p class="oauth-page__lede">
-          OpenMesh owns the local proxy, provider registry, and client authentication. No external proxy process is required.
+          OAuth connections for provider accounts. Chat API keys live in Settings → Provider. The HTTP proxy listener is optional.
         </p>
       </div>
       <div class="oauth-page__head-actions">
@@ -196,7 +196,7 @@ onMounted(() => {
             <CircleDashed v-if="busy" class="h-3.5 w-3.5 animate-spin" />
             {{ status.running ? "Stop built-in proxy" : "Start built-in proxy" }}
           </button>
-          <RouterLink to="/proxy/providers" class="btn-secondary">
+          <RouterLink to="/proxy-providers" class="btn-secondary">
             <KeyRound class="h-3.5 w-3.5" />
             Provider registry
           </RouterLink>
@@ -236,7 +236,7 @@ onMounted(() => {
             <p class="text-caption uppercase tracking-[0.16em] text-muted">Configured upstreams</p>
             <h2>{{ config.upstreamCount }} provider records</h2>
           </div>
-          <RouterLink to="/proxy/providers" class="oauth-card__link">
+          <RouterLink to="/proxy-providers" class="oauth-card__link">
             Manage <ExternalLink class="h-3.5 w-3.5" />
           </RouterLink>
         </div>

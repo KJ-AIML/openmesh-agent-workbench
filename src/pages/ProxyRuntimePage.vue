@@ -71,10 +71,11 @@ onMounted(() => {
         <p class="text-caption uppercase tracking-[0.18em] text-muted">
           OpenMesh runtime
         </p>
-        <h1 class="settings__title">Proxy Runtime</h1>
+        <h1 class="settings__title">HTTP proxy</h1>
         <p class="proxy-runtime-page__lede">
-          OpenMesh serves its own local OpenAI-compatible proxy. The desktop
-          app owns lifecycle, authentication, and the upstream connection.
+          Optional local OpenAI-compatible listener. Agent Chat uses the
+          configured provider directly and does not require this listener to
+          be running.
         </p>
       </div>
       <div class="proxy-runtime-page__head-actions">

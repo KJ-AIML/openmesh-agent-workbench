@@ -150,7 +150,7 @@ onMounted(() => void loadConfig());
 <template>
   <div class="proxy-providers-page animate-fade-in">
     <header class="proxy-providers-page__head">
-      <div><p class="text-caption uppercase tracking-[0.18em] text-muted">OpenMesh runtime</p><h1 class="settings__title">Provider configuration</h1><p class="proxy-providers-page__lede">Manage the upstream registry owned by the running OpenMesh proxy. Credentials are write-only in this view and never returned.</p></div>
+      <div><p class="text-caption uppercase tracking-[0.18em] text-muted">OpenMesh runtime</p><h1 class="settings__title">Providers</h1><p class="proxy-providers-page__lede">HTTP proxy upstream registry. Chat provider keys live in Settings → Provider. Credentials here are write-only and never returned.</p></div>
       <div class="proxy-providers-page__head-actions"><span class="proxy-providers-page__count">{{ config?.upstreams.length ?? 0 }} upstream{{ config?.upstreams.length === 1 ? "" : "s" }}</span><button type="button" class="btn-secondary" :disabled="loading || busy" @click="loadConfig"><RefreshCw class="h-3.5 w-3.5" :class="{ 'animate-spin': loading }" /> Refresh</button><button type="button" class="btn-primary" :disabled="!canEdit" @click="openCreate"><Plus class="h-3.5 w-3.5" /> Add upstream</button></div>
     </header>
     <div v-if="error" class="proxy-providers-page__alert is-error" role="alert"><AlertCircle class="h-4 w-4" /> {{ error }}</div><div v-else-if="notice" class="proxy-providers-page__alert is-success" role="status"><Check class="h-4 w-4" /> {{ notice }}</div>

@@ -408,8 +408,8 @@ function formatBytes(bytes: number): string {
       <p class="text-sm text-muted max-w-md mx-auto">
         {{
           currentProject
-            ? "No foreign agent sessions found for this project folder yet. Run Codex/Claude/Cursor/Grok here, then refresh."
-            : "Select a project — OpenMesh lists agent sessions for that workspace path by default."
+            ? "No imported Codex, Claude, Cursor, OpenCode, Gemini, or Grok sessions found for this project folder yet. Run one of those agents here, then refresh."
+            : "Open a project to list imported coding-agent sessions for that workspace."
         }}
       </p>
       <button

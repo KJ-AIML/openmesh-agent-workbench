@@ -215,8 +215,8 @@ onMounted(() => {
   <div class="usage-page animate-fade-in">
     <header class="usage-page__head">
       <div>
-        <p class="text-caption uppercase tracking-[0.18em] text-muted">Analytics</p>
-        <h1 class="settings__title">Usage Analytics</h1>
+        <p class="text-caption uppercase tracking-[0.18em] text-muted">Runtime</p>
+        <h1 class="settings__title">Usage</h1>
       </div>
       <div class="usage-page__head-actions">
         <div class="usage-page__presets">
