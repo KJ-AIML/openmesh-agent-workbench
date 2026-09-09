@@ -56,23 +56,23 @@ describe("agent chat tool routing", () => {
     ]);
   });
 
-  it("routes plain-language keywords", () => {
-    expect(__test_resolve("please check pilot readiness")).toContain(
-      "pilot_check",
+  it("does not route plain-language keywords (A7 regression)", () => {
+    expect(__test_resolve("please check pilot readiness")).toEqual([]);
+    expect(__test_resolve("show org graph")).toEqual([]);
+    expect(resolveToolsForMessage("create handoff for teammate")).toEqual([]);
+    expect(resolveToolsForMessage("please continue from pending work")).toEqual(
+      [],
     );
-    expect(__test_resolve("show org graph")).toContain("org_graph");
+    expect(__test_resolve("create handoff")).toEqual([]);
   });
 
-  it("prefers /continue for handoff continuity keywords", () => {
-    expect(resolveToolsForMessage("create handoff for teammate").map((t) => t.id)[0]).toBe(
-      "continue",
-    );
-    expect(resolveToolsForMessage("please continue from pending work").map((t) => t.id)).toContain(
-      "continue",
-    );
-    expect(__test_resolve("create handoff")).toEqual(
-      expect.arrayContaining(["continue"]),
-    );
+  it("resolves /mesh as the peers command", () => {
+    expect(resolveToolsForMessage("/mesh").map((t) => t.id)).toEqual([
+      "mesh_peers",
+    ]);
+    expect(resolveToolsForMessage("/peers").map((t) => t.id)).toEqual([
+      "mesh_peers",
+    ]);
   });
 
   it("help text lists slash commands", () => {

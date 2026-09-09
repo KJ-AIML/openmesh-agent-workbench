@@ -163,7 +163,7 @@ export async function saveDurableChats(
   return invoke("agent_chat_save", { projectPath, sessions });
 }
 
-/** Read-mostly workspace tool for slash/keyword fast paths (no LLM). */
+/** Workspace tool for explicit slash commands (no LLM). */
 export async function runAgentWorkspaceTool(
   projectPath: string,
   toolName: string,

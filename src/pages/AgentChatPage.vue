@@ -28,11 +28,8 @@ import {
   runAgentChatTurn,
   type ChatTurnProgress,
 } from "../lib/agentChat/runner";
-import {
-  isToolsHelpText,
-  resolveToolsForMessage,
-  summarizeToolsHelp,
-} from "../lib/agentChat/tools";
+import { isToolsHelpText, summarizeToolsHelp } from "../lib/agentChat/tools";
+import { isLocalChatCommand } from "../lib/agentChat/commandRouting";
 import { chatModelId } from "../lib/agentChat/ready";
 import {
   cancelAgentEngineTurn,
@@ -880,8 +877,7 @@ async function send(text: string) {
   touchSession(session);
   afterSessionMutation(session);
 
-  const usesLocalTools =
-    trimmed.startsWith("/") || resolveToolsForMessage(trimmed).length > 0;
+  const usesLocalTools = isLocalChatCommand(trimmed);
   busyLabel.value = usesLocalTools ? "Working…" : "Thinking…";
   busyDetail.value = null;
   busy.value = true;

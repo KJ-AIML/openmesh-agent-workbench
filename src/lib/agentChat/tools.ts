@@ -1,4 +1,4 @@
-// Slash/keyword fast-path tools (IPC). Freeform LLM tool-loop is Agent Engine (0.1.23).
+// Slash-command fast-path tools (IPC). Freeform LLM tool-loop is Agent Engine.
 import { store } from "../store";
 import { searchContext } from "../contextClient";
 import { getGitStatus } from "../adapters/gitAdapter";
@@ -42,8 +42,8 @@ export type AgentTool = {
   description: string;
   /** Slash command, e.g. /pilot */
   slash: string;
-  /** Keyword fragments (lowercase) that route a free-text message here */
-  keywords: string[];
+  /** Extra leading-slash names that resolve to this tool (e.g. /mesh → /peers). */
+  aliases?: string[];
   run: (projectPath: string, question: string) => Promise<AgentToolResult>;
 };
 
@@ -62,7 +62,6 @@ export const AGENT_TOOLS: AgentTool[] = [
     title: "Project info",
     description: "Active workspace path and project metadata",
     slash: "/project",
-    keywords: ["project info", "which project", "workspace path", "current project"],
     async run(projectPath) {
       const project = await store.getProject(projectPath);
       return {
@@ -81,7 +80,6 @@ export const AGENT_TOOLS: AgentTool[] = [
     title: "List docs",
     description: "Files under project docs",
     slash: "/docs",
-    keywords: ["list docs", "show docs", "documents", "doc tree"],
     async run(projectPath) {
       const docs = await store.listDocs(projectPath);
       const names = docs.map((d) => d.name ?? d.path ?? String(d));
@@ -99,7 +97,6 @@ export const AGENT_TOOLS: AgentTool[] = [
     title: "Context search",
     description: "Search indexed project context",
     slash: "/search",
-    keywords: ["search context", "search docs", "find in context", "context search"],
     async run(projectPath, question) {
       const q = question
         .replace(/^\/search\s*/i, "")
@@ -134,7 +131,6 @@ export const AGENT_TOOLS: AgentTool[] = [
     title: "Git status",
     description: "Branch and dirty/staged/untracked counts",
     slash: "/git",
-    keywords: ["git status", "git", "branch", "dirty"],
     async run(projectPath) {
       const result = await getGitStatus(projectPath);
       if (!result.success || !result.data) {
@@ -156,7 +152,6 @@ export const AGENT_TOOLS: AgentTool[] = [
     title: "List directory",
     description: "List files under a workspace-relative path",
     slash: "/ls",
-    keywords: ["list dir", "list directory", "ls ", "show folder"],
     async run(projectPath, question) {
       const path = question
         .replace(/^\/ls\s*/i, "")
@@ -178,7 +173,6 @@ export const AGENT_TOOLS: AgentTool[] = [
     title: "Read file",
     description: "Read a UTF-8 source file in the workspace (bounded)",
     slash: "/read",
-    keywords: ["read file", "show file", "open file", "cat "],
     async run(projectPath, question) {
       const path = question
         .replace(/^\/read\s*/i, "")
@@ -203,7 +197,6 @@ export const AGENT_TOOLS: AgentTool[] = [
     title: "Grep workspace",
     description: "Search file contents under the workspace root",
     slash: "/grep",
-    keywords: ["grep ", "search code", "find in code", "rg "],
     async run(projectPath, question) {
       const rest = question
         .replace(/^\/grep\s*/i, "")
@@ -234,7 +227,6 @@ export const AGENT_TOOLS: AgentTool[] = [
     title: "Git diff",
     description: "Read-only git diff (optional path; use /diff --staged)",
     slash: "/diff",
-    keywords: ["git diff", "show diff", "unstaged changes", "staged diff"],
     async run(projectPath, question) {
       const rest = question.replace(/^\/diff\s*/i, "").trim();
       const staged = /(--staged|--cached)\b/i.test(rest);
@@ -261,7 +253,6 @@ export const AGENT_TOOLS: AgentTool[] = [
     title: "Patch approve",
     description: "Show / apply / reject a proposed patch by id",
     slash: "/patch",
-    keywords: ["apply patch", "reject patch", "show patch"],
     async run(projectPath, question) {
       const rest = question.replace(/^\/patch\s*/i, "").trim();
       const [actionRaw, id] = rest.split(/\s+/);
@@ -307,7 +298,6 @@ export const AGENT_TOOLS: AgentTool[] = [
     title: "Verify recipe",
     description: "Run an approved check recipe (list or run by id)",
     slash: "/verify",
-    keywords: ["verify", "run tests", "typecheck", "recipe"],
     async run(projectPath, question) {
       const rest = question
         .replace(/^\/verify\s*/i, "")
@@ -362,7 +352,6 @@ export const AGENT_TOOLS: AgentTool[] = [
     title: "Delegate to CLI",
     description: "Launch Codex/Claude/OpenCode (optional resume session id)",
     slash: "/delegate",
-    keywords: ["delegate", "launch codex", "launch claude", "resume session"],
     async run(projectPath, question) {
       const rest = question.replace(/^\/delegate\s*/i, "").trim();
       const parts = rest.split(/\s+/).filter(Boolean);
@@ -412,7 +401,6 @@ export const AGENT_TOOLS: AgentTool[] = [
     title: "Continue",
     description: "Continuity helpers: pending, handoff draft, link session",
     slash: "/continue",
-    keywords: ["continue", "handoff", "create handoff", "catch up"],
     async run(projectPath, question) {
       const rest = question.replace(/^\/continue\s*/i, "").trim();
       const [action, ...tail] = rest.split(/\s+/).filter(Boolean);
@@ -480,7 +468,6 @@ export const AGENT_TOOLS: AgentTool[] = [
     title: "List notes",
     description: "Project notes",
     slash: "/notes",
-    keywords: ["list notes", "show notes", "my notes"],
     async run(projectPath) {
       const notes = await store.listNotes(projectPath);
       const names = notes.map((n) => n.name ?? n.path ?? String(n));
@@ -498,7 +485,6 @@ export const AGENT_TOOLS: AgentTool[] = [
     title: "Sprint status",
     description: "Sprint board snapshot",
     slash: "/sprint",
-    keywords: ["sprint", "board", "tasks", "kanban"],
     async run(projectPath) {
       const sprint = await store.getSprint(projectPath);
       const tasks = await store.getTasks(projectPath);
@@ -518,7 +504,6 @@ export const AGENT_TOOLS: AgentTool[] = [
     title: "Continuity hub",
     description: "Pending / peers / envelopes / online-proxy summary",
     slash: "/continuity",
-    keywords: ["continuity", "hub summary", "pending count"],
     async run(projectPath) {
       const hub = await getContinuityHubSummary(projectPath);
       return {
@@ -533,7 +518,6 @@ export const AGENT_TOOLS: AgentTool[] = [
     title: "Pending questions",
     description: "Items that need a person",
     slash: "/pending",
-    keywords: ["pending", "needs me", "open questions"],
     async run(projectPath) {
       const view = await getPendingQuestions(projectPath);
       const lines = view.items.slice(0, 20).map(
@@ -551,7 +535,6 @@ export const AGENT_TOOLS: AgentTool[] = [
     title: "Return digest",
     description: "What you missed while away",
     slash: "/digest",
-    keywords: ["digest", "catch up", "what i missed", "return digest"],
     async run(projectPath) {
       const digest = await getReturnDigest(projectPath);
       return {
@@ -568,7 +551,6 @@ export const AGENT_TOOLS: AgentTool[] = [
     title: "Team workspace",
     description: "Team registry and members",
     slash: "/team",
-    keywords: ["team", "members", "team workspace"],
     async run(projectPath) {
       const team = await getTeamWorkspace(projectPath);
       if (!team) {
@@ -590,7 +572,6 @@ export const AGENT_TOOLS: AgentTool[] = [
     title: "Trust / privacy policy",
     description: "Query mode and fail-closed invariants",
     slash: "/trust",
-    keywords: ["trust", "privacy", "allowlist", "secret"],
     async run(projectPath) {
       const policy = await getTeamTrustPolicy(projectPath);
       if (!policy) {
@@ -612,7 +593,6 @@ export const AGENT_TOOLS: AgentTool[] = [
     title: "Connectors",
     description: "Evidence-producer connectors",
     slash: "/connectors",
-    keywords: ["connector", "connectors", "github stub"],
     async run(projectPath) {
       const list = await listConnectors(projectPath);
       return {
@@ -629,7 +609,6 @@ export const AGENT_TOOLS: AgentTool[] = [
     title: "Org graph",
     description: "Evidence-backed org projection",
     slash: "/org",
-    keywords: ["org", "org graph", "organization"],
     async run(projectPath) {
       const graph = await getOrgGraph(projectPath);
       if (!graph) {
@@ -653,7 +632,6 @@ export const AGENT_TOOLS: AgentTool[] = [
     title: "Pilot readiness",
     description: "Enterprise pilot checklist pack",
     slash: "/pilot",
-    keywords: ["pilot", "pilot check", "pilot ready", "readiness"],
     async run(projectPath) {
       const pack = await getPilotStatus(projectPath);
       const fails = pack.checks.filter((c) => c.status === "fail");
@@ -675,7 +653,6 @@ export const AGENT_TOOLS: AgentTool[] = [
     title: "RC readiness",
     description: "1.0 RC pack + freeze policy",
     slash: "/rc",
-    keywords: ["rc", "rc check", "rc ready", "release candidate", "freeze"],
     async run(projectPath) {
       const pack = await getRcStatus(projectPath);
       return {
@@ -699,7 +676,7 @@ export const AGENT_TOOLS: AgentTool[] = [
     title: "Mesh peers",
     description: "Registered mesh peers",
     slash: "/peers",
-    keywords: ["mesh", "peers", "peer list"],
+    aliases: ["/mesh"],
     async run(projectPath) {
       const peers = await listMeshPeers(projectPath);
       return {
@@ -717,7 +694,6 @@ export const AGENT_TOOLS: AgentTool[] = [
     description:
       "Live Agent Engine ask with freshness disclosure (requires API key in Settings)",
     slash: "/ask",
-    keywords: ["ask proxy", "online proxy", "ask my proxy", "live ask"],
     async run(projectPath, question) {
       const status = await getOnlineProxyStatus(projectPath);
       if (!status) {
@@ -757,7 +733,7 @@ export function listToolsHelp(): string {
   return (
     `${TOOLS_HELP_PREFIX} (scoped to the active project path):\n\n` +
     AGENT_TOOLS.map((t) => `- ${t.slash} — ${t.title}: ${t.description}`).join("\n") +
-    "\n\nTip: type a slash command, or ask in plain language (e.g. “check pilot”, “show team”, “rc status”)."
+    "\n\nTip: type a slash command (for example /verify or /peers). Ordinary language goes to the agent."
   );
 }
 
@@ -778,32 +754,20 @@ export function summarizeToolsHelp(text: string): string {
   return `${names.length} tools · ${preview}${more}`;
 }
 
+/** Slash-only resolver. Ordinary language never selects a local tool. */
 export function resolveToolsForMessage(message: string): AgentTool[] {
   const trimmed = message.trim();
   if (!trimmed) return [];
 
-  if (trimmed === "/tools" || trimmed === "/help" || /^help\b/i.test(trimmed)) {
+  if (trimmed === "/tools" || trimmed === "/help") {
     return [];
   }
 
-  const slash = trimmed.match(/^\/([a-z-]+)\b/i);
-  if (slash) {
-    const name = `/${slash[1].toLowerCase()}`;
-    const hit = AGENT_TOOLS.find((t) => t.slash === name);
-    return hit ? [hit] : [];
-  }
-
-  const lower = trimmed.toLowerCase();
-  // Score by longest matching keyword so Continuity phrases like
-  // "create handoff" prefer `/continue` over shorter overlaps.
-  const ranked = AGENT_TOOLS.map((t) => {
-    let best = 0;
-    for (const k of t.keywords) {
-      if (lower.includes(k) && k.length > best) best = k.length;
-    }
-    return { tool: t, score: best };
-  })
-    .filter((r) => r.score > 0)
-    .sort((a, b) => b.score - a.score);
-  return ranked.slice(0, 3).map((r) => r.tool);
+  const slash = trimmed.match(/^\/([a-z][a-z0-9-]*)\b/i);
+  if (!slash) return [];
+  const name = `/${slash[1].toLowerCase()}`;
+  const hit = AGENT_TOOLS.find(
+    (t) => t.slash === name || t.aliases?.includes(name),
+  );
+  return hit ? [hit] : [];
 }

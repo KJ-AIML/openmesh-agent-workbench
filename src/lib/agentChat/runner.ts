@@ -1,9 +1,13 @@
 import {
   AGENT_TOOLS,
   listToolsHelp,
-  resolveToolsForMessage,
   type AgentToolResult,
 } from "./tools";
+import {
+  helpCommandText,
+  parseChatInput,
+  unknownCommandMessage,
+} from "./commandRouting";
 import {
   runAgentEngineTurn,
   type EngineRouteMetadata,
@@ -54,8 +58,8 @@ export type ChatTurnOptions = {
   mode?: "ask" | "plan" | "act" | "delegate";
   turnId?: string;
   /**
-   * Skip local keyword/slash tool shortcuts (used by voice so prompt words
-   * like "Sprint" don't dump JSON into the HUD).
+   * Skip the `/` command namespace entirely (voice). Transcribed text always
+   * goes to Agent Engine; A7 does not parse spoken slash commands.
    */
   skipLocalTools?: boolean;
 };
@@ -89,16 +93,23 @@ export async function runAgentChatTurn(
     return { assistantText: "Say something, or type /tools.", toolCalls: [] };
   }
 
-  if (
-    trimmed === "/tools" ||
-    trimmed === "/help" ||
-    /^help\b/i.test(trimmed) ||
-    /^what can you do/i.test(trimmed)
-  ) {
-    return { assistantText: listToolsHelp(), toolCalls: [] };
+  const parsed = opts.skipLocalTools
+    ? ({ kind: "agent", text: trimmed } as const)
+    : parseChatInput(trimmed);
+
+  if (parsed.kind === "unknown-command") {
+    return {
+      assistantText: unknownCommandMessage(parsed.name),
+      toolCalls: [],
+    };
   }
 
-  const tools = opts.skipLocalTools ? [] : resolveToolsForMessage(trimmed);
+  if (parsed.kind === "command" && parsed.tool === "help") {
+    return { assistantText: helpCommandText(), toolCalls: [] };
+  }
+
+  const tools =
+    parsed.kind === "command" && parsed.tool !== "help" ? [parsed.tool] : [];
   const toolCalls: ChatToolCall[] = [];
 
   if (tools.length > 0) {
@@ -219,9 +230,13 @@ export async function runAgentChatTurn(
   }
 }
 
-/** Exposed for tests */
+/** Exposed for tests: local command tool ids, empty for agent messages. */
 export function __test_resolve(message: string) {
-  return resolveToolsForMessage(message).map((t) => t.id);
+  const parsed = parseChatInput(message);
+  if (parsed.kind === "command" && parsed.tool !== "help") {
+    return [parsed.tool.id];
+  }
+  return [];
 }
 
 export const __test_toolIds = () => AGENT_TOOLS.map((t) => t.id);

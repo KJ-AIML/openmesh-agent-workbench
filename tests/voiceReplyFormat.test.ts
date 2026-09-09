@@ -29,14 +29,11 @@ Sprint {
 });
 
 describe("voice prompt vs local tools", () => {
-  it("voice turns must skip local keyword tools (prompt may mention action types)", () => {
+  it("voice system prompt is not an explicit slash command", () => {
     const prompt = buildVoicePrompt("Hey, do you hear me?");
-    // Prompt may include tool type names; runner uses skipLocalTools for voice.
     expect(prompt).toContain("app_propose_action");
     expect(prompt).toContain("User said: Hey, do you hear me?");
-    // Sanity: keyword matcher is still aggressive — voice must not use it.
-    const hits = resolveToolsForMessage(prompt);
-    expect(hits.length).toBeGreaterThanOrEqual(0);
-    void resolveToolsForMessage;
+    expect(prompt.trimStart().startsWith("/")).toBe(false);
+    expect(resolveToolsForMessage(prompt)).toEqual([]);
   });
 });
