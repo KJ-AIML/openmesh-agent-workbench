@@ -103,7 +103,7 @@ const groups: {
   { id: "setup", label: "Setup", sections: ["overview", "provider", "voice"] },
   {
     id: "runtime",
-    label: "Runtime",
+    label: "Local tools",
     sections: ["agents", "extensions", "sessions", "server"],
   },
   { id: "project", label: "Project", sections: ["tools", "paths"] },
@@ -520,6 +520,9 @@ const statusLine = computed(() => {
       <div class="settings__head-main">
         <h1 class="settings__title">Settings</h1>
         <p class="settings__meta">{{ statusLine }} · v{{ appVersion }}</p>
+        <p class="settings__lede">
+          Application preferences and Chat provider keys. HTTP proxy, OAuth, usage, and LAN live under Runtime.
+        </p>
       </div>
       <button
         v-if="updateBadge"
@@ -1396,6 +1399,14 @@ const statusLine = computed(() => {
   font-size: 0.78rem;
   color: var(--muted-foreground);
   font-variant-numeric: tabular-nums;
+}
+
+.settings__lede {
+  margin: 0.35rem 0 0;
+  max-width: 42rem;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--muted-foreground);
 }
 
 .settings__panel-title {

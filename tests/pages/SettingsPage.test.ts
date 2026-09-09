@@ -191,6 +191,8 @@ describe("SettingsPage", () => {
     expect(wrapper.text()).toContain("Setup");
     expect(wrapper.text()).toContain("Overview");
     expect(wrapper.text()).toContain("Provider");
+    expect(wrapper.text()).toContain("Local tools");
+    expect(wrapper.text()).toContain("Chat provider keys");
   });
 
   it("Provider section shows provider name and save controls", async () => {
@@ -236,10 +238,10 @@ describe("SettingsPage", () => {
     await flushPromises();
     await nextTick();
 
-    // Navigate Runtime → Extensions if query didn't land (route watch).
+    // Navigate Local tools → Extensions if query didn't land (route watch).
     const runtime = wrapper
       .findAll('[role="tab"]')
-      .find((b) => b.text().trim() === "Runtime");
+      .find((b) => b.text().trim() === "Local tools");
     if (runtime) {
       await runtime.trigger("click");
       await nextTick();
