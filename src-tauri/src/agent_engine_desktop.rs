@@ -234,8 +234,11 @@ fn agent_engine_turn_blocking(
         .any(|m| matches!(m.role, ChatRole::User | ChatRole::Assistant));
     def.system_prompt = enrich_system_prompt(&def.system_prompt, &inventory, is_new_chat);
 
-    let cfg = ProviderConfig::from_definition(&def, &api_key).map_err(|e| e.to_string())?;
-    let provider_client = OpenAiCompatibleProvider::new(cfg).map_err(|e| e.to_string())?;
+    let spec = ProviderConfig::from_definition(&def, &api_key)
+        .map_err(|e| e.to_string())?
+        .to_runtime_spec("agent");
+    let provider_client =
+        OpenAiCompatibleProvider::from_runtime_spec(spec).map_err(|e| e.to_string())?;
     let executor = WorkspaceToolExecutor {
         project_path: project_path.clone(),
     };

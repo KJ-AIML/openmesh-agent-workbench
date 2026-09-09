@@ -162,10 +162,11 @@ pub fn run_live_ask(
     request: &LiveAskRequest,
 ) -> Result<EngineTurnResult, LiveAskError> {
     let (api_key, def) = resolve_live_ask_config(request)?;
-    let cfg = ProviderConfig::from_definition(&def, &api_key)
+    let spec = ProviderConfig::from_definition(&def, &api_key)
+        .map_err(|e| LiveAskError::Provider(e.to_string()))?
+        .to_runtime_spec("live-ask");
+    let client = OpenAiCompatibleProvider::from_runtime_spec(spec)
         .map_err(|e| LiveAskError::Provider(e.to_string()))?;
-    let client =
-        OpenAiCompatibleProvider::new(cfg).map_err(|e| LiveAskError::Provider(e.to_string()))?;
     let executor = WorkspaceToolExecutor {
         project_path: project_path.to_string(),
     };

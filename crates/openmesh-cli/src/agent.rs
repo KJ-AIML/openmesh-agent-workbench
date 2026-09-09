@@ -171,14 +171,14 @@ fn run_ask(args: &AgentAskArgs, cwd: &Path) -> i32 {
     def.provider = provider;
     def.base_url = base_url;
 
-    let cfg = match ProviderConfig::from_definition(&def, &api_key) {
-        Ok(c) => c,
+    let spec = match ProviderConfig::from_definition(&def, &api_key) {
+        Ok(c) => c.to_runtime_spec("agent"),
         Err(e) => {
             eprintln!("error: {e}");
             return 2;
         }
     };
-    let client = match OpenAiCompatibleProvider::new(cfg) {
+    let client = match OpenAiCompatibleProvider::from_runtime_spec(spec) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("error: {e}");
