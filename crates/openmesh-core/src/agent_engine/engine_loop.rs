@@ -7,7 +7,7 @@ use super::types::{
     AgentDefinition, AgentEngineError, AgentSession, ChatMessage, ChatRole, EngineTurnResult,
     ToolStep, DEFAULT_MAX_TOOLS_PER_ITERATION, DEFAULT_TOOL_RESULT_MAX_CHARS,
 };
-use crate::llm_runtime::LlmRuntime;
+use crate::llm_runtime::{LlmRuntime, LlmUsage};
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
@@ -77,6 +77,7 @@ pub fn run_agent_turn_with_progress(
     let mut tool_steps = Vec::new();
     let mut iterations = 0u32;
     let mut total_tools: usize = 0;
+    let mut usage: Option<LlmUsage> = None;
 
     loop {
         if cancel
@@ -93,6 +94,9 @@ pub fn run_agent_turn_with_progress(
                 refused: false,
                 error: Some("cancelled".into()),
                 route: None,
+                input_tokens: usage.as_ref().and_then(|u| u.input_tokens),
+                output_tokens: usage.as_ref().and_then(|u| u.output_tokens),
+                total_tokens: usage.as_ref().and_then(|u| u.total_tokens),
             });
         }
 
@@ -111,10 +115,16 @@ pub fn run_agent_turn_with_progress(
                 refused: false,
                 error: Some(format!("max_iterations:{}", def.max_tool_iterations)),
                 route: None,
+                input_tokens: usage.as_ref().and_then(|u| u.input_tokens),
+                output_tokens: usage.as_ref().and_then(|u| u.output_tokens),
+                total_tokens: usage.as_ref().and_then(|u| u.total_tokens),
             });
         }
 
         let turn = provider.complete(&session.messages, &tools)?;
+        if turn.usage.is_some() {
+            usage = turn.usage.clone();
+        }
 
         if turn.tool_calls.is_empty() {
             let text = turn.content.trim().to_string();
@@ -138,6 +148,9 @@ pub fn run_agent_turn_with_progress(
                 refused: false,
                 error: None,
                 route: None,
+                input_tokens: usage.as_ref().and_then(|u| u.input_tokens),
+                output_tokens: usage.as_ref().and_then(|u| u.output_tokens),
+                total_tokens: usage.as_ref().and_then(|u| u.total_tokens),
             });
         }
 
@@ -172,6 +185,9 @@ pub fn run_agent_turn_with_progress(
                     refused: false,
                     error: Some("cancelled".into()),
                     route: None,
+                    input_tokens: usage.as_ref().and_then(|u| u.input_tokens),
+                    output_tokens: usage.as_ref().and_then(|u| u.output_tokens),
+                    total_tokens: usage.as_ref().and_then(|u| u.total_tokens),
                 });
             }
             if let Some(cb) = on_progress.as_ref() {
@@ -247,6 +263,9 @@ pub fn run_agent_turn_with_progress(
                 refused: false,
                 error: Some(format!("max_tools:{hard_cap}")),
                 route: None,
+                input_tokens: usage.as_ref().and_then(|u| u.input_tokens),
+                output_tokens: usage.as_ref().and_then(|u| u.output_tokens),
+                total_tokens: usage.as_ref().and_then(|u| u.total_tokens),
             });
         }
     }

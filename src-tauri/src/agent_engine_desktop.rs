@@ -44,6 +44,9 @@ fn failed_turn_result(
             custom_base_url,
             EngineTurnOutcome::Failed,
         )),
+        input_tokens: None,
+        output_tokens: None,
+        total_tokens: None,
     }
 }
 
@@ -326,9 +329,9 @@ fn agent_engine_turn_blocking(
             provider: result.provider.clone(),
             model: result.model.clone(),
             duration_ms: turn_duration_ms,
-            input_tokens: 0,
-            output_tokens: 0,
-            total_tokens: 0,
+            input_tokens: result.input_tokens.unwrap_or(0),
+            output_tokens: result.output_tokens.unwrap_or(0),
+            total_tokens: result.total_tokens.unwrap_or(0),
             outcome: format!("{:?}", outcome),
             error_message: result.error.clone(),
         })

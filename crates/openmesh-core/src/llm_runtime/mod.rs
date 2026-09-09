@@ -89,6 +89,20 @@ impl LlmRuntimeError {
     }
 
     /// Map HTTP status + body (already redacted/truncated by the caller).
+    pub fn user_message(&self) -> String {
+        match self {
+            Self::MissingCredentials => "API key not configured".into(),
+            Self::Authentication => "Provider rejected the credential".into(),
+            Self::ProviderUnavailable => "Provider is unavailable".into(),
+            Self::RateLimited => "Provider rate-limited the request".into(),
+            Self::InvalidModel => "Unknown or invalid model".into(),
+            Self::ContextLimit => "Prompt exceeds the model context limit".into(),
+            Self::Cancelled => "Request was cancelled".into(),
+            Self::InvalidResponse(s) => format!("Invalid provider response: {s}"),
+            Self::Upstream(s) => s.clone(),
+        }
+    }
+
     pub fn from_http_status(status: u16, body: &str) -> Self {
         let lower = body.to_ascii_lowercase();
         match status {
@@ -112,7 +126,9 @@ impl From<LlmRuntimeError> for AgentEngineError {
         match err {
             LlmRuntimeError::MissingCredentials => AgentEngineError::MissingApiKey,
             LlmRuntimeError::InvalidResponse(s) => AgentEngineError::InvalidResponse(s),
-            other => AgentEngineError::Provider(format!("{}: {}", other.code(), other)),
+            other => {
+                AgentEngineError::Provider(format!("{}: {}", other.code(), other.user_message()))
+            }
         }
     }
 }
@@ -157,6 +173,10 @@ mod tests {
         assert_eq!(
             LlmRuntimeError::from_http_status(500, "boom").code(),
             "upstream"
+        );
+        assert_eq!(
+            LlmRuntimeError::Authentication.user_message(),
+            "Provider rejected the credential"
         );
     }
 
