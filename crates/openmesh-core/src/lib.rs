@@ -207,6 +207,7 @@ pub mod proxy_server;
 pub mod session_readers;
 pub mod signals;
 pub mod storage;
+pub mod workbench_continuity;
 
 pub use events::{
     append_event_correction, inspect_event, AppendCorrectionResult, EventCorrectionRequest,

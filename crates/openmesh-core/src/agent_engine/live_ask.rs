@@ -167,9 +167,7 @@ pub fn run_live_ask(
     let spec = crate::llm_runtime::resolve_blocking_spec(&agent_cfg);
     let client = OpenAiCompatibleProvider::from_runtime_spec(spec)
         .map_err(|e| LiveAskError::Provider(e.to_string()))?;
-    let executor = WorkspaceToolExecutor {
-        project_path: project_path.to_string(),
-    };
+    let executor = WorkspaceToolExecutor::new(project_path.to_string(), request.origin);
     run_live_ask_with_provider(project_path, &def, request, &client, &executor)
 }
 

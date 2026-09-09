@@ -185,9 +185,10 @@ fn run_ask(args: &AgentAskArgs, cwd: &Path) -> i32 {
             return 2;
         }
     };
-    let executor = WorkspaceToolExecutor {
-        project_path: project_path.clone(),
-    };
+    let executor = WorkspaceToolExecutor::new(
+        project_path.clone(),
+        openmesh_core::agent_engine::AgentOrigin::LocalCLI,
+    );
     let auth = match authorize_agent_turn(&AgentRequestContext::local_cli(&project_path)) {
         Ok(auth) => auth,
         Err(e) => {

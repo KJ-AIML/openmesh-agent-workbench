@@ -10,6 +10,7 @@ use super::path_safety::{
     deny_sensitive_path, normalize_rel, resolve_dir_in_workspace, resolve_file_in_workspace,
     workspace_root,
 };
+use super::policy::AgentOrigin;
 use super::recipes;
 use super::registry::ToolExecutor;
 use crate::context_service;
@@ -36,6 +37,18 @@ const MAX_DIFF_CHARS: usize = 24_000;
 /// Workspace tools (reads + propose_patch + Continuity helpers; no silent apply).
 pub struct WorkspaceToolExecutor {
     pub project_path: String,
+    /// Origin of the engine turn that is executing tools. Remote origins must
+    /// not record workbench Continuity writes.
+    pub origin: AgentOrigin,
+}
+
+impl WorkspaceToolExecutor {
+    pub fn new(project_path: impl Into<String>, origin: AgentOrigin) -> Self {
+        Self {
+            project_path: project_path.into(),
+            origin,
+        }
+    }
 }
 
 impl ToolExecutor for WorkspaceToolExecutor {
@@ -496,9 +509,7 @@ mod tests {
         )
         .unwrap();
 
-        let exec = WorkspaceToolExecutor {
-            project_path: project.clone(),
-        };
+        let exec = WorkspaceToolExecutor::new(project.clone(), AgentOrigin::LocalChat);
         let out = exec.execute("list_docs", "{}").unwrap();
         assert!(out.contains("hello.md"), "out={out}");
         assert!(!out.contains("decoy.md"), "out={out}");
@@ -511,9 +522,7 @@ mod tests {
         let notes = get_project_dir(&project).join("notes");
         fs::write(notes.join("scratch.md"), "note").unwrap();
 
-        let exec = WorkspaceToolExecutor {
-            project_path: project.clone(),
-        };
+        let exec = WorkspaceToolExecutor::new(project.clone(), AgentOrigin::LocalChat);
         let out = exec.execute("list_notes", "{}").unwrap();
         assert!(out.contains("scratch.md"), "out={out}");
         let _ = fs::remove_dir_all(&project);
@@ -525,9 +534,7 @@ mod tests {
         fs::create_dir_all(Path::new(&project).join("src")).unwrap();
         fs::write(Path::new(&project).join("src/main.rs"), "fn main() {}\n").unwrap();
 
-        let exec = WorkspaceToolExecutor {
-            project_path: project.clone(),
-        };
+        let exec = WorkspaceToolExecutor::new(project.clone(), AgentOrigin::LocalChat);
         let out = exec
             .execute("read_file", r#"{"path":"src/main.rs"}"#)
             .unwrap();
@@ -557,9 +564,7 @@ mod tests {
         )
         .unwrap();
 
-        let exec = WorkspaceToolExecutor {
-            project_path: project.clone(),
-        };
+        let exec = WorkspaceToolExecutor::new(project.clone(), AgentOrigin::LocalChat);
         let listing = exec.execute("list_dir", r#"{"path":"src"}"#).unwrap();
         assert!(listing.contains("lib.rs"), "listing={listing}");
 
@@ -573,9 +578,7 @@ mod tests {
     #[test]
     fn ui_navigate_allowlists_routes() {
         let project = temp_project();
-        let exec = WorkspaceToolExecutor {
-            project_path: project.clone(),
-        };
+        let exec = WorkspaceToolExecutor::new(project.clone(), AgentOrigin::LocalChat);
         let out = exec.execute("ui_navigate", r#"{"route":"docs"}"#).unwrap();
         assert!(out.contains("\"/docs\""), "out={out}");
         assert!(out.contains("ui_navigate"), "out={out}");

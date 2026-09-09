@@ -241,9 +241,7 @@ fn agent_engine_turn_blocking(
     let spec = openmesh_core::llm_runtime::resolve_blocking_spec(&agent_cfg);
     let provider_client =
         OpenAiCompatibleProvider::from_runtime_spec(spec).map_err(|e| e.to_string())?;
-    let executor = WorkspaceToolExecutor {
-        project_path: project_path.clone(),
-    };
+    let executor = WorkspaceToolExecutor::new(project_path.clone(), origin);
 
     let turn_id = request
         .turn_id
@@ -426,7 +424,7 @@ pub async fn agent_workspace_tool(
         } else {
             request.arguments_json
         };
-        let executor = WorkspaceToolExecutor { project_path };
+        let executor = WorkspaceToolExecutor::new(project_path, AgentOrigin::LocalChat);
         executor.execute(&request.tool_name, &args)
     })
     .await
