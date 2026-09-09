@@ -172,6 +172,28 @@ describe("AgentChatPage", () => {
     expect(wrapper.text()).toContain("Chat");
     expect(wrapper.find("textarea").exists()).toBe(true);
     expect(wrapper.text()).not.toContain("Set up provider before chat");
+    expect(wrapper.find('[data-testid="chat-provider-setup"]').exists()).toBe(true);
+    expect(wrapper.text()).toContain("Open Provider settings");
+    expect(wrapper.text()).toContain("HTTP proxy listener is optional");
+  });
+
+  it("offers Open Project when no workspace is selected", async () => {
+    mockStore.currentProjectPath.value = null;
+    mockStore.currentProject.value = null;
+    const wrapper = mount(AgentChatPage);
+    await flushPromises();
+    await nextTick();
+    expect(wrapper.text()).toContain("Select a project first");
+    expect(wrapper.find('[data-testid="chat-open-project"]').exists()).toBe(true);
+  });
+
+  it("does not require the HTTP proxy listener to render Chat", async () => {
+    const wrapper = mount(AgentChatPage);
+    await flushPromises();
+    await nextTick();
+    expect(wrapper.find('[data-testid="chat-main"]').exists()).toBe(true);
+    expect(wrapper.text()).not.toContain("Start built-in proxy");
+    expect(wrapper.text()).not.toContain("Start from Provider settings");
   });
 
   it("renders Chat shell with slim composer when ready", async () => {

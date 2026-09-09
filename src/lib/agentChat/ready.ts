@@ -44,19 +44,19 @@ export function getChatSetupChecks(
       id: "provider",
       label: "Provider name",
       done: name.length > 0,
-      hint: "Settings → Provider name",
+      hint: "Settings → Provider",
     },
     {
       id: "apiKey",
       label: "API key",
       done: apiKey,
-      hint: "Settings → API key (save to user secret store)",
+      hint: "Settings → Provider (saved to the user secret store)",
     },
     {
       id: "model",
       label: "Default model",
       done: model.length > 0,
-      hint: "Settings → Default model or Coding model",
+      hint: "Settings → Provider (default or coding model)",
     },
   ];
 }
