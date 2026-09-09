@@ -801,20 +801,32 @@ pub fn now_iso() -> String {
 /// Write data to a file atomically by writing to a temp file first, then renaming.
 /// This prevents corruption if the app crashes mid-write.
 pub fn atomic_write(path: &Path, content: &str) -> Result<(), String> {
-    let temp_path = path.with_extension("tmp");
+    let parent = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(parent).map_err(|e| format!("Failed to create parent: {e}"))?;
+    let file_name = path.file_name().and_then(|s| s.to_str()).unwrap_or("file");
+    // Unique sibling: `with_extension("tmp")` collides (`a.json` and `a.md`
+    // both become `a.tmp`) and races under parallel tests.
+    let temp_path = parent.join(format!(
+        ".{file_name}.{}.tmp",
+        uuid::Uuid::new_v4().as_simple()
+    ));
 
-    // Write to temp file
-    let mut file =
-        fs::File::create(&temp_path).map_err(|e| format!("Failed to create temp file: {}", e))?;
-    file.write_all(content.as_bytes())
-        .map_err(|e| format!("Failed to write temp file: {}", e))?;
-    file.flush()
-        .map_err(|e| format!("Failed to flush temp file: {}", e))?;
-
-    // Rename temp file to final path (atomic on most filesystems)
-    fs::rename(&temp_path, path).map_err(|e| format!("Failed to rename temp file: {}", e))?;
-
-    Ok(())
+    let write_temp = (|| {
+        let mut file =
+            fs::File::create(&temp_path).map_err(|e| format!("Failed to create temp file: {e}"))?;
+        file.write_all(content.as_bytes())
+            .map_err(|e| format!("Failed to write temp file: {e}"))?;
+        file.flush()
+            .map_err(|e| format!("Failed to flush temp file: {e}"))?;
+        fs::rename(&temp_path, path).map_err(|e| format!("Failed to rename temp file: {e}"))
+    })();
+    if write_temp.is_err() {
+        let _ = fs::remove_file(&temp_path);
+    }
+    write_temp
 }
 
 // ============================================================================
@@ -1061,5 +1073,20 @@ mod tests {
         let ok = safe_child_path(&docs, "folder/ok.md").unwrap();
         assert!(ok.ends_with("folder/ok.md") || ok.ends_with("folder\\ok.md"));
         let _ = fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn atomic_write_uses_unique_temp_and_replaces_target() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("project.json");
+        atomic_write(&path, "{\"a\":1}").unwrap();
+        atomic_write(&path, "{\"a\":2}").unwrap();
+        assert_eq!(fs::read_to_string(&path).unwrap(), "{\"a\":2}");
+        let leftovers: Vec<_> = fs::read_dir(dir.path())
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_name().to_string_lossy().ends_with(".tmp"))
+            .collect();
+        assert!(leftovers.is_empty(), "{leftovers:?}");
     }
 }
