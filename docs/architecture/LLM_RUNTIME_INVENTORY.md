@@ -174,7 +174,6 @@ Work Proxy drafts do **not** use that seam. The HTTP proxy is an external-tool a
 
 ## Implications for A5 (observation only)
 
-- Unifying Chat with the HTTP proxy means sharing **provider selection, credentials, request/response, errors, usage** — not forcing Engine through localhost.
-- AXGA uniquely owns Anthropic/DeepSeek **native** streaming plus Work Proxy draft/authority behavior, not the Chat tool loop.
-- Two credential planes (agent file/env vs proxy YAML/OAuth) are the A5.4 problem.
-- Agent Engine has no streaming to preserve beyond “still non-streaming unless explicitly added.”
+Recorded at A5.0. Later A5 slices introduced `LlmRuntime` / `ProviderRuntimeSpec`;
+see [ADR-0002](./ADR-0002-axga-runtime-role.md) for the AXGA retention decision.
+This file remains a snapshot of **pre-unification** paths.
