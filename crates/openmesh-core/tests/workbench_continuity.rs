@@ -1,7 +1,9 @@
 //! v0.2 A6 — Workbench Continuity Bridge: provenance, idempotency, origin gate,
 //! and existing promotion rules (no WorkEvent bypass).
 
-use openmesh_core::agent_engine::AgentOrigin;
+use openmesh_core::agent_engine::{
+    create_handoff_draft, write_delegate_brief, AgentOrigin, ToolExecutor, WorkspaceToolExecutor,
+};
 use openmesh_core::continuity::list_pending_signals;
 use openmesh_core::domain::{ActorRef, ProducerRef, WorkSignal, WorkSignalKind};
 use openmesh_core::events::list_events;
@@ -481,6 +483,66 @@ fn chat_signals_obey_existing_promotion_and_do_not_bypass_it() {
     )
     .unwrap();
     assert!(list_events(&project).unwrap_or_default().is_empty());
+    cleanup(&project);
+}
+
+#[test]
+fn local_chat_propose_patch_emits_review_required() {
+    let project = temp_project();
+    fs::create_dir_all(PathBuf::from(&project).join("src")).unwrap();
+    fs::write(PathBuf::from(&project).join("src/a.txt"), "old\n").unwrap();
+    let exec = WorkspaceToolExecutor::new(project.clone(), AgentOrigin::LocalChat);
+    let out = exec
+        .execute(
+            "propose_patch",
+            r#"{"summary":"update a","files":[{"path":"src/a.txt","newContent":"new\n"}]}"#,
+        )
+        .unwrap();
+    assert!(out.contains("patchId"), "{out}");
+    let signals = pending_signals(&project);
+    assert_eq!(signals.len(), 1);
+    assert_eq!(signals[0].kind, WorkSignalKind::ReviewRequired);
+    assert!(signals[0].signal_id.starts_with("wb-patch-proposed-"));
+    cleanup(&project);
+}
+
+#[test]
+fn lan_peer_executor_propose_patch_does_not_write_continuity() {
+    let project = temp_project();
+    fs::write(PathBuf::from(&project).join("f.txt"), "v1\n").unwrap();
+    let exec = WorkspaceToolExecutor::new(project.clone(), AgentOrigin::LanPeer);
+    let out = exec
+        .execute(
+            "propose_patch",
+            r#"{"summary":"x","files":[{"path":"f.txt","newContent":"v2\n"}]}"#,
+        )
+        .unwrap();
+    assert!(out.contains("patchId"), "{out}");
+    assert!(
+        pending_signals(&project).is_empty(),
+        "LanPeer must not persist WorkSignals"
+    );
+    cleanup(&project);
+}
+
+#[test]
+fn delegate_brief_and_handoff_draft_emit_signals() {
+    let project = temp_project();
+    write_delegate_brief(&project, "codex", "gap-fill").unwrap();
+    create_handoff_draft(&project, r#"{"recipient":"Yo","role":"engineer"}"#).unwrap();
+    let signals = pending_signals(&project);
+    assert!(
+        signals
+            .iter()
+            .any(|s| s.kind == WorkSignalKind::Progress && s.signal_id.starts_with("wb-delegate-")),
+        "missing delegate signal: {signals:?}"
+    );
+    assert!(
+        signals
+            .iter()
+            .any(|s| s.kind == WorkSignalKind::Handoff && s.signal_id.starts_with("wb-handoff-")),
+        "missing handoff signal: {signals:?}"
+    );
     cleanup(&project);
 }
 

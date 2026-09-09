@@ -223,6 +223,15 @@ pub fn create_handoff_draft(project_path: &str, arguments_json: &str) -> Result<
             "hasContext": args.get("context").and_then(|v| v.as_str()).is_some(),
         }),
     );
+    let _ = crate::workbench_continuity::record_boundary(
+        project_path,
+        crate::workbench_continuity::BoundarySource::HostAuthorized,
+        &crate::workbench_continuity::WorkBoundary::HandoffDraft {
+            handoff_id: note.handoff_id.clone(),
+            created_at: note.updated_at.clone(),
+        },
+    );
+
     Ok(serde_json::to_string_pretty(&json!({
         "handoffId": note.handoff_id,
         "status": note.status,
@@ -305,16 +314,24 @@ pub fn write_delegate_brief(
             .unwrap_or(0)
     );
     let path = dir.join(format!("{id}.md"));
-    let body = format!(
-        "# OpenMesh delegate brief\n\nTool: {tool}\nCreated: {}\n\n{summary}\n",
-        now_iso()
-    );
+    let created_at = now_iso();
+    let body =
+        format!("# OpenMesh delegate brief\n\nTool: {tool}\nCreated: {created_at}\n\n{summary}\n");
     atomic_write(&path, &body)?;
     let _ = append_run(
         project_path,
         "delegate_brief",
         "ok",
         json!({ "tool": tool, "path": path.to_string_lossy() }),
+    );
+    let _ = crate::workbench_continuity::record_boundary(
+        project_path,
+        crate::workbench_continuity::BoundarySource::HostAuthorized,
+        &crate::workbench_continuity::WorkBoundary::DelegateBrief {
+            brief_id: id,
+            tool: tool.to_string(),
+            created_at,
+        },
     );
     Ok(path)
 }

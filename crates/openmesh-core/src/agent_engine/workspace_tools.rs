@@ -5,7 +5,7 @@
 //! `propose_patch` stages changes for human approval (does not apply).
 
 use super::continue_ops;
-use super::patch::propose_patch_from_args;
+use super::patch::{propose_patch_from_args, read_patch};
 use super::path_safety::{
     deny_sensitive_path, normalize_rel, resolve_dir_in_workspace, resolve_file_in_workspace,
     workspace_root,
@@ -23,6 +23,7 @@ use crate::pilot::build_pilot_pack;
 use crate::rc::build_rc_pack;
 use crate::return_digest::build_pending_questions_view;
 use crate::storage::{get_project_dir, read_project, safe_child_path, Project};
+use crate::workbench_continuity::{record_boundary, BoundarySource, WorkBoundary};
 use serde_json::json;
 use std::fs;
 use std::io::{BufRead, BufReader};
@@ -92,7 +93,11 @@ impl ToolExecutor for WorkspaceToolExecutor {
                     .unwrap_or(false);
                 git_diff_text(&self.project_path, path, staged)
             }
-            "propose_patch" => propose_patch_from_args(&self.project_path, arguments_json),
+            "propose_patch" => {
+                let out = propose_patch_from_args(&self.project_path, arguments_json)?;
+                record_patch_proposal(&self.project_path, self.origin, &out);
+                Ok(out)
+            }
             "list_recipes" => {
                 let list = recipes::list_recipes(&self.project_path)?;
                 Ok(serde_json::to_string_pretty(&list).unwrap_or_else(|_| "[]".into()))
@@ -403,6 +408,28 @@ fn list_openmesh_dir_names(project_path: &str, folder: &str) -> Result<String, S
     }
     names.sort();
     Ok(serde_json::to_string_pretty(&names).unwrap_or_else(|_| "[]".into()))
+}
+
+fn record_patch_proposal(project_path: &str, origin: AgentOrigin, json_out: &str) {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(json_out) else {
+        return;
+    };
+    let Some(patch_id) = value.get("patchId").and_then(|v| v.as_str()) else {
+        return;
+    };
+    let Ok(patch) = read_patch(project_path, patch_id) else {
+        return;
+    };
+    let _ = record_boundary(
+        project_path,
+        BoundarySource::Origin(origin),
+        &WorkBoundary::PatchProposed {
+            patch_id: patch.id,
+            summary: patch.summary,
+            created_at: patch.created_at,
+            file_count: patch.files.len(),
+        },
+    );
 }
 
 fn continuity_summary_json(project_path: &str) -> Result<String, String> {
