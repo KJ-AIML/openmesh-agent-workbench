@@ -1,6 +1,6 @@
 # Chat command routing (A7)
 
-**Status:** implemented contract for v0.2 A7
+**Status:** implemented (v0.2 A7)
 **Does not:** rewrite Agent Chat, add a plugin command framework, or parse spoken commands
 
 ## 1. Current routing (pre-A7)
@@ -58,7 +58,7 @@ parseChatInput
 - `/mesh` is an alias of `/peers`.
 - `/help` and `/tools` list the same registry.
 - `@` remains mention/context insertion only.
-- Voice still uses `skipLocalTools` so transcribed text never enters the `/` namespace (no spoken-command parser in A7).
+- Voice still uses `skipLocalTools` so transcribed text never enters the `/` namespace (no spoken-command parser in A7). The flag is **not** obsolete: it is the voice “always AgentMessage” hatch, not a keyword workaround.
 - Slash handlers keep existing IPC/host authority (`/patch apply` still host IPC; `/verify` still `runAgentRecipe` / A6 evidence). Commands that never invoke Agent Engine do not invent extra Continuity writes.
 
 Unknown `/does-not-exist` is an explicit error with available-command guidance. It is not forwarded to the model.

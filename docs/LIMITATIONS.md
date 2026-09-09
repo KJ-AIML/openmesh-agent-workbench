@@ -106,6 +106,7 @@ Repo helper: [`scripts/macos-unquarantine.sh`](../scripts/macos-unquarantine.sh)
 - Max tool-loop iterations bounded; long turns can still be heavy (mitigated with spawn_blocking + debounced persist)
 - Delegate / verify / patch depth is MVP — expect rough edges
 - Chat Continuity integration is boundary-based (patches, verify, handoff, import), not a transcript ledger
+- Chat routing is explicit: `/command` is local; ordinary language always goes to Agent Engine. Keyword/substring shortcuts are gone.
 - Voice is optional and environment-dependent (mic permissions, TTS)
 
 ---

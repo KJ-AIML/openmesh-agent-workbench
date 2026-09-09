@@ -22,7 +22,7 @@
 
 ## Purpose
 
-Primary workspace surface: talk to the **OpenMesh Agent Engine** with confined tools, or run **slash fast-paths** over existing IPC (docs, continuity, git, …). Chat is first-class chrome — not buried under Agents.
+Primary workspace surface: talk to the **OpenMesh Agent Engine** with confined tools, or run **explicit slash commands** over existing IPC (docs, continuity, git, …). Ordinary language always reaches the agent. Chat is first-class chrome — not buried under Agents.
 
 ---
 
@@ -67,6 +67,8 @@ Code: `src/lib/agentChat/composerMenus.ts`, `ChatComposer.vue`.
 - Starters: `/pilot` `/read` `/diff` `/verify` `/continue`
 - Full inventory: `/tools` or `/help`
 - Filter as you type after `/`
+- Grammar: a message that **starts with** `/command` is a local command. ` /mesh` after trim counts. Words like `mesh` or `verify` inside a sentence do **not**.
+- `/mesh` is an alias of `/peers`. Unknown `/name` is an error, not a model prompt.
 
 ### `@` mentions
 
@@ -94,10 +96,10 @@ Frontend inventory: `src/lib/agentChat/tools.ts` (`AGENT_TOOLS`).
 | `/continuity` `/pending` `/digest` | Continuity summaries |
 | `/team` `/trust` `/connectors` `/org` | Team/trust/org views |
 | `/pilot` `/rc` | Gate status |
-| `/peers` | Mesh peers |
+| `/peers` `/mesh` | Mesh peers |
 | `/ask` | Continuity / online proxy live ask path |
 
-Slash paths are IPC fast-paths; freeform LLM tool-calling is separate (Agent Engine).
+Slash paths are IPC fast-paths; freeform LLM tool-calling is separate (Agent Engine). See [CHAT_ROUTING.md](./architecture/CHAT_ROUTING.md).
 
 ---
 
@@ -165,7 +167,7 @@ Code: `src/lib/agentChat/resumeIntoChat.ts`.
 | Feature | Behavior |
 |---------|----------|
 | **Stop** | Cancel in-flight Agent Engine turn and/or verify recipe |
-| **Voice** | Optional STT/TTS via Voice HUD + `voiceBridge` (Settings → Voice) |
+| **Voice** | Optional STT/TTS via Voice HUD + `voiceBridge`. Transcripts always go to Agent Engine (`skipLocalTools`); spoken `/` commands are not parsed. |
 | **Terminal** | Right sidebar embedded PTY — [TERMINAL.md](./TERMINAL.md) |
 
 ---
