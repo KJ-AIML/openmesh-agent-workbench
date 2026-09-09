@@ -1,8 +1,10 @@
-//! OpenMesh-owned OpenAI-compatible proxy server.
+//! OpenAI-compatible HTTP adapter over OpenMesh provider runtime.
 //!
-//! This module is the transport boundary for the built-in runtime. It is
-//! intentionally independent of Tauri so the same server can be hosted by the
-//! desktop app or by `openmesh-cli proxy serve`.
+//! Agent Engine talks to `llm_runtime` in-process and does **not** require this
+//! listener. Starting or stopping the bind (default `127.0.0.1`) must not
+//! delete proxy YAML / upstream credentials used by `ProviderRuntimeSpec`.
+//! This module is independent of Tauri so desktop and `openmesh-cli proxy serve`
+//! can host the same adapter.
 
 mod config;
 mod rate_limiter;

@@ -1,8 +1,8 @@
-//! Tauri lifecycle commands for the OpenMesh-owned proxy runtime.
+//! Tauri lifecycle for the OpenMesh HTTP proxy **listener**.
 //!
-//! The HTTP implementation lives in `openmesh-core`; this module only owns
-//! desktop lifecycle state and intentionally exposes no provider-specific
-//! transport logic.
+//! Provider configuration lives in proxy YAML and is independent of whether
+//! this listener is running. Agent Chat uses `llm_runtime::resolve_blocking_spec`
+//! and does not require `proxy_runtime_start`. Stop only unbinds the port.
 
 use openmesh_core::agent_engine::{AgentSecretStore, CascadingSecretStore};
 use openmesh_core::proxy_server::{
