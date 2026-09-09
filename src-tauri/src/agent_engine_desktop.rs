@@ -234,9 +234,8 @@ fn agent_engine_turn_blocking(
         .any(|m| matches!(m.role, ChatRole::User | ChatRole::Assistant));
     def.system_prompt = enrich_system_prompt(&def.system_prompt, &inventory, is_new_chat);
 
-    let spec = ProviderConfig::from_definition(&def, &api_key)
-        .map_err(|e| e.to_string())?
-        .to_runtime_spec("agent");
+    let agent_cfg = ProviderConfig::from_definition(&def, &api_key).map_err(|e| e.to_string())?;
+    let spec = openmesh_core::llm_runtime::resolve_blocking_spec(&agent_cfg);
     let provider_client =
         OpenAiCompatibleProvider::from_runtime_spec(spec).map_err(|e| e.to_string())?;
     let executor = WorkspaceToolExecutor {

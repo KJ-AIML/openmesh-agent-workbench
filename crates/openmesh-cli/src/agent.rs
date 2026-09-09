@@ -172,7 +172,7 @@ fn run_ask(args: &AgentAskArgs, cwd: &Path) -> i32 {
     def.base_url = base_url;
 
     let spec = match ProviderConfig::from_definition(&def, &api_key) {
-        Ok(c) => c.to_runtime_spec("agent"),
+        Ok(c) => openmesh_core::llm_runtime::resolve_blocking_spec(&c),
         Err(e) => {
             eprintln!("error: {e}");
             return 2;

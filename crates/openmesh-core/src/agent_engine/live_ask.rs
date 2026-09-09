@@ -162,9 +162,9 @@ pub fn run_live_ask(
     request: &LiveAskRequest,
 ) -> Result<EngineTurnResult, LiveAskError> {
     let (api_key, def) = resolve_live_ask_config(request)?;
-    let spec = ProviderConfig::from_definition(&def, &api_key)
-        .map_err(|e| LiveAskError::Provider(e.to_string()))?
-        .to_runtime_spec("live-ask");
+    let agent_cfg = ProviderConfig::from_definition(&def, &api_key)
+        .map_err(|e| LiveAskError::Provider(e.to_string()))?;
+    let spec = crate::llm_runtime::resolve_blocking_spec(&agent_cfg);
     let client = OpenAiCompatibleProvider::from_runtime_spec(spec)
         .map_err(|e| LiveAskError::Provider(e.to_string()))?;
     let executor = WorkspaceToolExecutor {

@@ -4,9 +4,14 @@
 //! the provider-transport contract: messages in, completion (optional tools and
 //! usage) out. It is not an authority layer.
 
+pub mod catalog;
 pub mod http;
 pub mod spec;
 
+pub use catalog::{
+    looks_like_builtin_proxy_url, prefer_in_process_spec, resolve_blocking_spec,
+    spec_from_proxy_config,
+};
 pub use http::{
     classify_chat_http, complete_openai_chat_async, complete_openai_chat_blocking,
     is_dashscope_coding_plan_base,
