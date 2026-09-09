@@ -10,6 +10,7 @@ pub mod chat;
 pub mod client;
 pub mod contract;
 pub mod last_peers;
+pub mod pairing;
 pub mod peer;
 pub mod serve;
 pub mod server;
@@ -24,18 +25,22 @@ pub use chat::{
 };
 pub use client::{
     ask_peer, health_check, health_check_quick, parse_host_port, probe_presence,
-    probe_presence_many, send_chat_message, send_package_to_peer, LanClientError,
+    probe_presence_many, send_chat_message, send_package_to_peer, LanClientAuth, LanClientError,
     PRESENCE_STALE_WINDOW_SECS,
 };
 pub use contract::{
     validate_lan_beacon, LanAskHttpBody, LanBeacon, LanChatMessage, LanHealthResponse, LanPeerInfo,
     LanPeerPresence, LanPresenceState, LanProtocolError, LanServeStatus, DEFAULT_HTTP_PORT,
-    DEFAULT_UDP_PORT, LAN_CHAT_PROTOCOL, LAN_PROTOCOL, MAX_CHAT_TEXT_BYTES,
+    DEFAULT_LAN_HOST, DEFAULT_UDP_PORT, LAN_CHAT_PROTOCOL, LAN_PROTOCOL, MAX_CHAT_TEXT_BYTES,
 };
 pub use last_peers::{read_last_peers, remember_discovered_peers, write_last_peers};
+pub use pairing::{
+    FileLanRegistry, LanAskBudget, LanAuditLog, LanAuthError, LanCapability, LanPairIssued,
+    LanPeerPublic, LanRegistry, MemoryLanRegistry,
+};
 pub use peer::{merge_peer, peer_table_snapshot, PeerTable};
 pub use serve::{
     current_lan_serve_status, lan_serve_status_for_project, start_lan_serve, stop_lan_serve,
-    LanServeError, LanServeHandle,
+    LanServeError, LanServeHandle, LanServeOptions,
 };
-pub use server::{bind_http_listener, spawn_http_server, LanServerError};
+pub use server::{bind_http_listener, spawn_http_server, LanHttpIdentity, LanServerError};

@@ -5,7 +5,9 @@
 use clap::{Args, Subcommand};
 use openmesh_core::lan::{
     ask_peer, lan_serve_status_for_project, listen_beacons, parse_host_port, send_package_to_peer,
-    start_lan_serve, stop_lan_serve, PeerTable, DEFAULT_HTTP_PORT, DEFAULT_UDP_PORT, LAN_PROTOCOL,
+    start_lan_serve, stop_lan_serve, FileLanRegistry, LanCapability, LanClientAuth,
+    LanServeOptions, PeerTable, DEFAULT_HTTP_PORT, DEFAULT_LAN_HOST, DEFAULT_UDP_PORT,
+    LAN_PROTOCOL,
 };
 use openmesh_core::relay::{is_package_approved, read_approved_package, RelayTransportError};
 use openmesh_core::storage::{read_project, Project};
@@ -32,12 +34,25 @@ pub enum LanCommand {
     Ask(LanAskArgs),
     /// Show local LAN serve status.
     Status(LanStatusArgs),
+    /// Issue, list, or revoke LAN pairing credentials.
+    #[command(subcommand)]
+    Pair(LanPairCommand),
+}
+
+#[derive(Subcommand, Debug)]
+pub enum LanPairCommand {
+    /// Issue a bearer token (shown once). Stored as a hash outside project JSON.
+    Create(LanPairCreateArgs),
+    /// List paired peers (no tokens).
+    List(LanPairListArgs),
+    /// Revoke a peer id.
+    Revoke(LanPairRevokeArgs),
 }
 
 #[derive(Args, Debug, Clone)]
 pub struct LanServeArgs {
-    /// HTTP bind host (default 0.0.0.0).
-    #[arg(long, default_value = "0.0.0.0")]
+    /// HTTP bind host (default 127.0.0.1). Wildcard requires --expose-lan.
+    #[arg(long, default_value = DEFAULT_LAN_HOST)]
     pub host: String,
 
     /// Preferred HTTP port (falls back to ephemeral if busy).
@@ -55,6 +70,10 @@ pub struct LanServeArgs {
     /// Auto-stop after N seconds (for tests / dogfood scripts).
     #[arg(long)]
     pub seconds: Option<u64>,
+
+    /// Bind a LAN/wildcard interface and advertise a UDP beacon.
+    #[arg(long)]
+    pub expose_lan: bool,
 
     #[arg(long)]
     pub project: Option<String>,
@@ -88,6 +107,10 @@ pub struct LanSendArgs {
     #[arg(long = "to")]
     pub to: String,
 
+    /// Bearer token from `lan pair create` (or OPENMESH_LAN_TOKEN).
+    #[arg(long, env = "OPENMESH_LAN_TOKEN")]
+    pub token: Option<String>,
+
     #[arg(long)]
     pub project: Option<String>,
 
@@ -106,6 +129,48 @@ pub struct LanAskArgs {
 
     #[arg(long)]
     pub tier: Option<String>,
+
+    /// Bearer token from `lan pair create` (or OPENMESH_LAN_TOKEN).
+    #[arg(long, env = "OPENMESH_LAN_TOKEN")]
+    pub token: Option<String>,
+
+    #[arg(long)]
+    pub project: Option<String>,
+
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct LanPairCreateArgs {
+    #[arg(long)]
+    pub label: String,
+
+    /// Comma-separated: live-ask,chat,relay
+    #[arg(long, default_value = "live-ask,chat,relay")]
+    pub capabilities: String,
+
+    /// Ignored; pairing is user-global, not project JSON.
+    #[arg(long)]
+    pub project: Option<String>,
+
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct LanPairListArgs {
+    #[arg(long)]
+    pub project: Option<String>,
+
+    #[arg(long)]
+    pub json: bool,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct LanPairRevokeArgs {
+    #[arg(long = "peer-id")]
+    pub peer_id: String,
 
     #[arg(long)]
     pub project: Option<String>,
@@ -130,6 +195,9 @@ pub fn run_lan(command: LanCommand, cwd: &Path) -> i32 {
         LanCommand::Send(a) => run_send(&a, cwd),
         LanCommand::Ask(a) => run_ask(&a, cwd),
         LanCommand::Status(a) => run_status(&a, cwd),
+        LanCommand::Pair(LanPairCommand::Create(a)) => run_pair_create(&a),
+        LanCommand::Pair(LanPairCommand::List(a)) => run_pair_list(&a),
+        LanCommand::Pair(LanPairCommand::Revoke(a)) => run_pair_revoke(&a),
     }
 }
 
@@ -145,10 +213,13 @@ fn run_serve(args: &LanServeArgs, cwd: &Path) -> i32 {
 
     let handle = match start_lan_serve(
         &project_path,
-        &args.host,
-        args.http_port,
-        args.udp_port,
-        args.owner.as_deref(),
+        LanServeOptions {
+            http_host: args.host.clone(),
+            http_port: args.http_port,
+            udp_port: args.udp_port,
+            owner_label: args.owner.clone(),
+            expose_lan: args.expose_lan,
+        },
     ) {
         Ok(h) => h,
         Err(e) => return err_json(args.json, 3, "serve", &e.to_string()),
@@ -274,7 +345,8 @@ fn run_send(args: &LanSendArgs, cwd: &Path) -> i32 {
             &RelayTransportError::NotApproved.to_string(),
         );
     }
-    match send_package_to_peer(&host, port, &pkg) {
+    let auth = args.token.as_ref().map(LanClientAuth::bearer);
+    match send_package_to_peer(&host, port, &pkg, auth.as_ref()) {
         Ok(v) => {
             if args.json {
                 println!("{v}");
@@ -296,7 +368,14 @@ fn run_ask(args: &LanAskArgs, cwd: &Path) -> i32 {
         Ok(v) => v,
         Err(e) => return err_json(args.json, 2, "address", &e.to_string()),
     };
-    match ask_peer(&host, port, &args.question, args.tier.as_deref()) {
+    let auth = args.token.as_ref().map(LanClientAuth::bearer);
+    match ask_peer(
+        &host,
+        port,
+        &args.question,
+        args.tier.as_deref(),
+        auth.as_ref(),
+    ) {
         Ok(answer) => {
             if args.json {
                 println!("{}", serde_json::to_value(&answer).unwrap_or(json!({})));
@@ -333,7 +412,7 @@ fn run_status(args: &LanStatusArgs, cwd: &Path) -> i32 {
         if let Some(p) = &status.http_port {
             println!(
                 "http={}:{}",
-                status.http_host.as_deref().unwrap_or("0.0.0.0"),
+                status.http_host.as_deref().unwrap_or(DEFAULT_LAN_HOST),
                 p
             );
         }
@@ -348,6 +427,71 @@ fn run_status(args: &LanStatusArgs, cwd: &Path) -> i32 {
         }
     }
     0
+}
+
+fn run_pair_create(args: &LanPairCreateArgs) -> i32 {
+    let caps = match LanCapability::parse_list(&args.capabilities) {
+        Ok(c) => c,
+        Err(e) => return err_json(args.json, 2, "capability", &e.to_string()),
+    };
+    match FileLanRegistry::user_default().issue(&args.label, caps) {
+        Ok(issued) => {
+            if args.json {
+                println!(
+                    "{}",
+                    json!({
+                        "peerId": issued.peer.peer_id,
+                        "label": issued.peer.label,
+                        "capabilities": issued.peer.capabilities,
+                        "token": issued.token,
+                        "note": "token is shown once; store it securely"
+                    })
+                );
+            } else {
+                println!("status=ok");
+                println!("peer_id={}", issued.peer.peer_id);
+                println!("label={}", issued.peer.label);
+                println!("token={}", issued.token);
+                println!("note=token is shown once; store it securely");
+            }
+            0
+        }
+        Err(e) => err_json(args.json, 3, "pair", &e.to_string()),
+    }
+}
+
+fn run_pair_list(args: &LanPairListArgs) -> i32 {
+    match FileLanRegistry::user_default().list() {
+        Ok(peers) => {
+            if args.json {
+                println!("{}", serde_json::to_value(&peers).unwrap_or(json!([])));
+            } else {
+                println!("status=ok");
+                println!("peers={}", peers.len());
+                for p in peers {
+                    println!("peer\t{}\t{}\trevoked={}", p.peer_id, p.label, p.revoked);
+                }
+            }
+            0
+        }
+        Err(e) => err_json(args.json, 3, "pair", &e.to_string()),
+    }
+}
+
+fn run_pair_revoke(args: &LanPairRevokeArgs) -> i32 {
+    match FileLanRegistry::user_default().revoke(&args.peer_id) {
+        Ok(peer) => {
+            if args.json {
+                println!("{}", serde_json::to_value(&peer).unwrap_or(json!({})));
+            } else {
+                println!("status=ok");
+                println!("peer_id={}", peer.peer_id);
+                println!("revoked={}", peer.revoked);
+            }
+            0
+        }
+        Err(e) => err_json(args.json, 3, "pair", &e.to_string()),
+    }
 }
 
 fn err_json(json_mode: bool, code: i32, kind: &str, msg: &str) -> i32 {

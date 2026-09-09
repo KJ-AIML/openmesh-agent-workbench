@@ -386,8 +386,9 @@ use openmesh_core::lan::{
     append_chat_message, ask_peer, lan_serve_status_for_project, list_chat_messages,
     listen_beacons, new_outbound_message, parse_host_port, probe_presence, probe_presence_many,
     read_last_peers, remember_discovered_peers, send_chat_message, send_package_to_peer,
-    start_lan_serve, stop_lan_serve, LanChatDirection, LanPeerInfo, LanPeerPresence,
-    LanServeStatus, PeerTable, StoredLanChatMessage, DEFAULT_HTTP_PORT, DEFAULT_UDP_PORT,
+    start_lan_serve, stop_lan_serve, FileLanRegistry, LanCapability, LanChatDirection,
+    LanClientAuth, LanPeerInfo, LanPeerPresence, LanServeOptions, LanServeStatus, PeerTable,
+    StoredLanChatMessage, DEFAULT_HTTP_PORT, DEFAULT_UDP_PORT,
 };
 use openmesh_core::relay::{is_package_approved, list_approved_package_ids, read_approved_package};
 
@@ -398,6 +399,8 @@ pub struct LanServeStartRequest {
     pub http_port: Option<u16>,
     pub udp_port: Option<u16>,
     pub owner_label: Option<String>,
+    #[serde(default)]
+    pub expose_lan: bool,
 }
 
 #[tauri::command]
@@ -410,16 +413,22 @@ pub fn lan_serve_start(
         http_port: None,
         udp_port: None,
         owner_label: None,
+        expose_lan: false,
     });
-    let host = req.host.unwrap_or_else(|| "0.0.0.0".into());
+    let host = req
+        .host
+        .unwrap_or_else(|| openmesh_core::lan::DEFAULT_LAN_HOST.into());
     let http_port = req.http_port.unwrap_or(DEFAULT_HTTP_PORT);
     let udp_port = req.udp_port.unwrap_or(DEFAULT_UDP_PORT);
     start_lan_serve(
         &project_path,
-        &host,
-        http_port,
-        udp_port,
-        req.owner_label.as_deref(),
+        LanServeOptions {
+            http_host: host,
+            http_port,
+            udp_port,
+            owner_label: req.owner_label,
+            expose_lan: req.expose_lan,
+        },
     )
     .map(|h| h.status)
     .map_err(|e| e.to_string())
@@ -481,6 +490,7 @@ pub fn lan_list_approved_packages(project_path: String) -> Result<Vec<String>, S
 pub struct LanSendRequest {
     pub package_id: String,
     pub to: String,
+    pub token: Option<String>,
 }
 
 #[tauri::command]
@@ -494,7 +504,8 @@ pub fn lan_send_package(
     if !is_package_approved(&pkg) {
         return Err("package not approved for egress".into());
     }
-    send_package_to_peer(&host, port, &pkg).map_err(|e| e.to_string())
+    let auth = request.token.as_ref().map(LanClientAuth::bearer);
+    send_package_to_peer(&host, port, &pkg, auth.as_ref()).map_err(|e| e.to_string())
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -503,11 +514,20 @@ pub struct LanAskUiRequest {
     pub to: String,
     pub question: String,
     pub tier: Option<String>,
+    pub token: Option<String>,
 }
 
 fn lan_ask_peer_blocking(request: LanAskUiRequest) -> Result<MeshRemoteQueryAnswer, String> {
     let (host, port) = parse_host_port(&request.to).map_err(|e| e.to_string())?;
-    ask_peer(&host, port, &request.question, request.tier.as_deref()).map_err(|e| {
+    let auth = request.token.as_ref().map(LanClientAuth::bearer);
+    ask_peer(
+        &host,
+        port,
+        &request.question,
+        request.tier.as_deref(),
+        auth.as_ref(),
+    )
+    .map_err(|e| {
         // Prefer structured peer error bodies (code + message) when present.
         e.to_string()
     })
@@ -858,6 +878,7 @@ pub struct LanChatSendRequest {
     pub to: String,
     pub text: String,
     pub from_label: Option<String>,
+    pub token: Option<String>,
 }
 
 fn lan_chat_send_blocking(
@@ -873,7 +894,8 @@ fn lan_chat_send_blocking(
         .or(status.owner_label.clone())
         .unwrap_or_else(|| "local-operator".into());
     let msg = new_outbound_message(&from_peer_id, &from_label, request.text.trim(), None);
-    send_chat_message(&host, port, &msg).map_err(|e| e.to_string())?;
+    let auth = request.token.as_ref().map(LanClientAuth::bearer);
+    send_chat_message(&host, port, &msg, auth.as_ref()).map_err(|e| e.to_string())?;
     append_chat_message(
         &project_path,
         &msg,
@@ -901,6 +923,43 @@ pub fn lan_chat_list(
     limit: Option<usize>,
 ) -> Result<Vec<StoredLanChatMessage>, String> {
     list_chat_messages(&project_path, peer_key.as_deref(), limit).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn lan_pair_create(
+    label: String,
+    capabilities: Option<String>,
+) -> Result<serde_json::Value, String> {
+    let caps = LanCapability::parse_list(
+        capabilities
+            .as_deref()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or("live-ask,chat,relay"),
+    )
+    .map_err(|e| e.to_string())?;
+    let issued = FileLanRegistry::user_default()
+        .issue(&label, caps)
+        .map_err(|e| e.to_string())?;
+    Ok(serde_json::json!({
+        "peerId": issued.peer.peer_id,
+        "label": issued.peer.label,
+        "capabilities": issued.peer.capabilities,
+        "token": issued.token,
+    }))
+}
+
+#[tauri::command]
+pub fn lan_pair_list() -> Result<Vec<openmesh_core::lan::LanPeerPublic>, String> {
+    FileLanRegistry::user_default()
+        .list()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn lan_pair_revoke(peer_id: String) -> Result<openmesh_core::lan::LanPeerPublic, String> {
+    FileLanRegistry::user_default()
+        .revoke(&peer_id)
+        .map_err(|e| e.to_string())
 }
 
 /// Convenience: probe a single manual host:port (no discovery row required).

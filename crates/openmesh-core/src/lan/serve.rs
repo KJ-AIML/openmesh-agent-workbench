@@ -1,7 +1,9 @@
 //! Combined LAN serve: beacon advertiser + HTTP server lifecycle.
 
 use crate::lan::beacon::spawn_beacon_advertiser;
-use crate::lan::contract::{LanBeacon, LanServeStatus, DEFAULT_UDP_PORT, LAN_PROTOCOL};
+use crate::lan::contract::{
+    LanBeacon, LanServeStatus, DEFAULT_HTTP_PORT, DEFAULT_LAN_HOST, DEFAULT_UDP_PORT, LAN_PROTOCOL,
+};
 use crate::lan::server::{bind_http_listener, spawn_http_server, LanHttpIdentity};
 use crate::profile::read_work_proxy_profile;
 use crate::storage::{get_project_dir, read_project, Project};
@@ -28,8 +30,37 @@ pub enum LanServeError {
     NotRunning,
     #[error("bind failed: {0}")]
     Bind(String),
+    #[error("lan exposure requires --expose-lan (refusing wildcard bind {0})")]
+    LanExposureRequired(String),
     #[error("io: {0}")]
     Io(String),
+}
+
+/// Options for starting the LAN HTTP(+optional UDP) listener.
+#[derive(Debug, Clone)]
+pub struct LanServeOptions {
+    pub http_host: String,
+    pub http_port: u16,
+    pub udp_port: u16,
+    pub owner_label: Option<String>,
+    /// When false (default), bind loopback only and do not advertise a UDP beacon.
+    pub expose_lan: bool,
+}
+
+impl Default for LanServeOptions {
+    fn default() -> Self {
+        Self {
+            http_host: DEFAULT_LAN_HOST.into(),
+            http_port: DEFAULT_HTTP_PORT,
+            udp_port: DEFAULT_UDP_PORT,
+            owner_label: None,
+            expose_lan: false,
+        }
+    }
+}
+
+fn is_wildcard_host(host: &str) -> bool {
+    matches!(host.trim(), "0.0.0.0" | "::" | "[::]" | "*")
 }
 
 struct ActiveServe {
@@ -53,11 +84,26 @@ pub struct LanServeHandle {
 
 pub fn start_lan_serve(
     project_path: &str,
-    http_host: &str,
-    preferred_http_port: u16,
-    udp_port: u16,
-    owner_label_override: Option<&str>,
+    options: LanServeOptions,
 ) -> Result<LanServeHandle, LanServeError> {
+    let http_host = options.http_host.trim();
+    if !options.expose_lan && is_wildcard_host(http_host) {
+        return Err(LanServeError::LanExposureRequired(http_host.to_string()));
+    }
+    let http_host = if options.expose_lan {
+        if http_host.is_empty() {
+            "0.0.0.0"
+        } else {
+            http_host
+        }
+    } else {
+        DEFAULT_LAN_HOST
+    };
+    let preferred_http_port = options.http_port;
+    let udp_port = options.udp_port;
+    let owner_label_override = options.owner_label.as_deref();
+    let expose_lan = options.expose_lan;
+
     let project: Project =
         read_project(project_path, "project.json").ok_or(LanServeError::ProjectNotInitialized)?;
 
@@ -97,10 +143,7 @@ pub fn start_lan_serve(
     };
 
     let stop = Arc::new(AtomicBool::new(false));
-    let identity = LanHttpIdentity {
-        project_path: project_path.to_string(),
-        beacon: beacon.clone(),
-    };
+    let identity = LanHttpIdentity::production(project_path.to_string(), beacon.clone());
     let http_join = spawn_http_server(listener, identity, stop.clone())
         .map_err(|e| LanServeError::Io(e.to_string()))?;
 
@@ -109,8 +152,14 @@ pub fn start_lan_serve(
     } else {
         udp_port
     };
-    let beacon_join = spawn_beacon_advertiser(beacon, udp, stop.clone())
-        .map_err(|e| LanServeError::Io(e.to_string()))?;
+    let beacon_join = if expose_lan {
+        Some(
+            spawn_beacon_advertiser(beacon, udp, stop.clone())
+                .map_err(|e| LanServeError::Io(e.to_string()))?,
+        )
+    } else {
+        None
+    };
 
     let status = LanServeStatus {
         running: true,
@@ -121,11 +170,14 @@ pub fn start_lan_serve(
         project_id: Some(project.id),
         http_host: Some(http_host.to_string()),
         http_port: Some(http_port),
-        udp_port: Some(udp),
+        udp_port: if expose_lan { Some(udp) } else { None },
         started_at: Some(started_at),
-        note: Some(
-            "Trusted-LAN alpha. macOS may prompt for firewall on first bind. UDP broadcast may fail on some VPN interfaces — use --to host:port.".into(),
-        ),
+        expose_lan,
+        note: Some(if expose_lan {
+            "LAN exposure enabled. Protected endpoints require a paired bearer token. UDP broadcast may fail on some VPN interfaces.".into()
+        } else {
+            "Local-only LAN HTTP (127.0.0.1). Protected endpoints require a paired bearer token. Pass --expose-lan to bind a LAN interface.".into()
+        }),
     };
 
     persist_status(project_path, &status)?;
@@ -136,7 +188,7 @@ pub fn start_lan_serve(
     *guard = Some(ActiveServe {
         stop,
         http_join: Some(http_join),
-        beacon_join: Some(beacon_join),
+        beacon_join,
         status: status.clone(),
     });
 
@@ -304,6 +356,7 @@ fn idle_status() -> LanServeStatus {
         udp_port: None,
         started_at: None,
         note: Some("LAN serve is not running".into()),
+        expose_lan: false,
     }
 }
 
@@ -350,6 +403,7 @@ mod tests {
             udp_port: Some(41777),
             started_at: Some("2026-08-03T00:00:00Z".into()),
             note: Some("crashed mid-serve".into()),
+            expose_lan: false,
         };
         persist_status(&path, &stale).expect("persist");
 
@@ -367,6 +421,36 @@ mod tests {
 
         let disk = read_persisted_status(&path).expect("disk");
         assert!(!disk.running, "disk must be rewritten stopped");
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn default_serve_is_loopback_and_wildcard_requires_expose_lan() {
+        let dir = temp_project();
+        let path = dir.to_string_lossy().to_string();
+        let err = start_lan_serve(
+            &path,
+            LanServeOptions {
+                http_host: "0.0.0.0".into(),
+                expose_lan: false,
+                ..Default::default()
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(err, LanServeError::LanExposureRequired(_)));
+
+        let handle = start_lan_serve(
+            &path,
+            LanServeOptions {
+                http_port: 0,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(handle.status.http_host.as_deref(), Some(DEFAULT_LAN_HOST));
+        assert!(!handle.status.expose_lan);
+        assert!(handle.status.udp_port.is_none());
+        let _ = stop_lan_serve();
         let _ = fs::remove_dir_all(&dir);
     }
 }

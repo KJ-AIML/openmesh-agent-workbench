@@ -21,6 +21,24 @@ pub enum LanClientError {
     Decode(String),
 }
 
+/// Bearer token issued by `lan pair create`. Never log this value.
+#[derive(Debug, Clone)]
+pub struct LanClientAuth {
+    pub token: String,
+}
+
+impl LanClientAuth {
+    pub fn bearer(token: impl Into<String>) -> Self {
+        Self {
+            token: token.into(),
+        }
+    }
+
+    fn header_value(&self) -> String {
+        format!("Bearer {}", self.token.trim())
+    }
+}
+
 pub fn parse_host_port(to: &str) -> Result<(String, u16), LanClientError> {
     let t = to.trim();
     if let Some((host, port_s)) = t.rsplit_once(':') {
@@ -175,13 +193,18 @@ pub fn send_chat_message(
     host: &str,
     port: u16,
     message: &LanChatMessage,
+    auth: Option<&LanClientAuth>,
 ) -> Result<serde_json::Value, LanClientError> {
     let url = format!("http://{host}:{port}/v1/chat/message");
     let client = blocking_client()?;
-    let resp = client
+    let mut req = client
         .post(&url)
         .header("content-type", "application/json")
-        .json(message)
+        .json(message);
+    if let Some(auth) = auth {
+        req = req.header("Authorization", auth.header_value());
+    }
+    let resp = req
         .send()
         .map_err(|e| LanClientError::Http(e.to_string()))?;
     let status = resp.status().as_u16();
@@ -198,13 +221,18 @@ pub fn send_package_to_peer(
     host: &str,
     port: u16,
     package: &RelayPackage,
+    auth: Option<&LanClientAuth>,
 ) -> Result<serde_json::Value, LanClientError> {
     let url = format!("http://{host}:{port}/v1/relay/package");
     let client = blocking_client()?;
-    let resp = client
+    let mut req = client
         .post(&url)
         .header("content-type", "application/json")
-        .json(package)
+        .json(package);
+    if let Some(auth) = auth {
+        req = req.header("Authorization", auth.header_value());
+    }
+    let resp = req
         .send()
         .map_err(|e| LanClientError::Http(e.to_string()))?;
     let status = resp.status().as_u16();
@@ -222,6 +250,7 @@ pub fn ask_peer(
     port: u16,
     question: &str,
     tier: Option<&str>,
+    auth: Option<&LanClientAuth>,
 ) -> Result<MeshRemoteQueryAnswer, LanClientError> {
     let url = format!("http://{host}:{port}/v1/mesh/ask");
     let body = LanAskHttpBody {
@@ -229,10 +258,14 @@ pub fn ask_peer(
         tier: tier.map(|s| s.to_string()),
     };
     let client = blocking_client()?;
-    let resp = client
+    let mut req = client
         .post(&url)
         .header("content-type", "application/json")
-        .json(&body)
+        .json(&body);
+    if let Some(auth) = auth {
+        req = req.header("Authorization", auth.header_value());
+    }
+    let resp = req
         .send()
         .map_err(|e| LanClientError::Http(e.to_string()))?;
     let status = resp.status().as_u16();
@@ -288,10 +321,7 @@ mod tests {
             http_port: port,
             started_at: Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
         };
-        let identity = LanHttpIdentity {
-            project_path: project,
-            beacon,
-        };
+        let identity = LanHttpIdentity::unauthenticated_loopback(project, beacon);
         let handle = spawn_http_server(listener, identity, stop.clone()).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(80));
 

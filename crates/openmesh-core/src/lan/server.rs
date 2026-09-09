@@ -6,6 +6,9 @@ use crate::lan::chat::{append_chat_message, LanChatDirection};
 use crate::lan::contract::{
     LanAskHttpBody, LanBeacon, LanChatMessage, LanHealthResponse, LAN_PROTOCOL,
 };
+use crate::lan::pairing::{
+    AuthenticatedLanPeer, LanAskBudget, LanAuditLog, LanAuthError, LanCapability, LanRegistry,
+};
 use crate::relay::contract::RelayPackage;
 use crate::relay::transport::receive_package_payload;
 use chrono::Utc;
@@ -29,6 +32,40 @@ pub enum LanServerError {
 pub struct LanHttpIdentity {
     pub project_path: String,
     pub beacon: LanBeacon,
+    pub registry: LanRegistry,
+    pub budget: Arc<LanAskBudget>,
+    pub audit: LanAuditLog,
+}
+
+impl LanHttpIdentity {
+    pub fn new(project_path: impl Into<String>, beacon: LanBeacon, registry: LanRegistry) -> Self {
+        Self {
+            project_path: project_path.into(),
+            beacon,
+            registry,
+            budget: Arc::new(LanAskBudget::standard()),
+            audit: LanAuditLog::memory(),
+        }
+    }
+
+    pub fn production(project_path: impl Into<String>, beacon: LanBeacon) -> Self {
+        Self {
+            project_path: project_path.into(),
+            beacon,
+            registry: LanRegistry::user_default(),
+            budget: Arc::new(LanAskBudget::standard()),
+            audit: LanAuditLog::user_default(),
+        }
+    }
+
+    /// Empty registry: health works, protected routes fail closed.
+    pub fn unauthenticated_loopback(project_path: impl Into<String>, beacon: LanBeacon) -> Self {
+        Self::new(
+            project_path,
+            beacon,
+            LanRegistry::memory(crate::lan::pairing::MemoryLanRegistry::new()),
+        )
+    }
 }
 
 /// Bind HTTP listener on `preferred_port`, falling back to ephemeral if busy.
@@ -114,8 +151,8 @@ fn handle_connection(
                     }
                 }
                 if let Some(header_end) = find_header_end(&buf[..total]) {
-                    let (method, path, content_length) =
-                        parse_request_line_and_length(&buf[..header_end])?;
+                    let (method, path, content_length, authorization) =
+                        parse_request_line_and_headers(&buf[..header_end])?;
                     let body_start = header_end;
                     while total < body_start + content_length {
                         if total >= buf.len() {
@@ -137,7 +174,7 @@ fn handle_connection(
                         &[][..]
                     };
                     let (status, resp_body, content_type) =
-                        route_request(&method, &path, body, identity);
+                        route_request(&method, &path, body, authorization.as_deref(), identity);
                     return write_response(&mut stream, status, content_type, &resp_body);
                 }
                 if total > 64 * 1024 && find_header_end(&buf[..total]).is_none() {
@@ -154,7 +191,9 @@ fn find_header_end(buf: &[u8]) -> Option<usize> {
     buf.windows(4).position(|w| w == b"\r\n\r\n").map(|i| i + 4)
 }
 
-fn parse_request_line_and_length(header_bytes: &[u8]) -> Result<(String, String, usize), String> {
+fn parse_request_line_and_headers(
+    header_bytes: &[u8],
+) -> Result<(String, String, usize, Option<String>), String> {
     let text = std::str::from_utf8(header_bytes).map_err(|e| e.to_string())?;
     let mut lines = text.split("\r\n");
     let request_line = lines.next().unwrap_or("");
@@ -162,19 +201,49 @@ fn parse_request_line_and_length(header_bytes: &[u8]) -> Result<(String, String,
     let method = parts.next().unwrap_or("").to_string();
     let path = parts.next().unwrap_or("").to_string();
     let mut content_length = 0usize;
+    let mut authorization = None;
     for line in lines {
         let lower = line.to_ascii_lowercase();
         if let Some(rest) = lower.strip_prefix("content-length:") {
             content_length = rest.trim().parse().unwrap_or(0);
         }
+        if lower.starts_with("authorization:") {
+            authorization = line.split_once(':').map(|(_, v)| v.trim().to_string());
+        }
     }
-    Ok((method, path, content_length))
+    Ok((method, path, content_length, authorization))
+}
+
+fn auth_reject(
+    err: LanAuthError,
+    identity: &LanHttpIdentity,
+    operation: &str,
+) -> (u16, Vec<u8>, &'static str) {
+    identity.audit.record(None, operation, false, err.code());
+    (
+        err.http_status(),
+        err.to_json_body().into_bytes(),
+        "application/json",
+    )
+}
+
+fn require_capability(
+    authorization: Option<&str>,
+    identity: &LanHttpIdentity,
+    needed: LanCapability,
+    operation: &str,
+) -> Result<AuthenticatedLanPeer, (u16, Vec<u8>, &'static str)> {
+    match identity.registry.authenticate(authorization, needed) {
+        Ok(peer) => Ok(peer),
+        Err(err) => Err(auth_reject(err, identity, operation)),
+    }
 }
 
 fn route_request(
     method: &str,
     path: &str,
     body: &[u8],
+    authorization: Option<&str>,
     identity: &LanHttpIdentity,
 ) -> (u16, Vec<u8>, &'static str) {
     match (method, path) {
@@ -189,9 +258,9 @@ fn route_request(
             };
             json_ok(&resp)
         }
-        ("POST", "/v1/relay/package") => handle_relay_package(body, identity),
-        ("POST", "/v1/mesh/ask") => handle_mesh_ask(body, identity),
-        ("POST", "/v1/chat/message") => handle_chat_message(body, identity),
+        ("POST", "/v1/relay/package") => handle_relay_package(body, authorization, identity),
+        ("POST", "/v1/mesh/ask") => handle_mesh_ask(body, authorization, identity),
+        ("POST", "/v1/chat/message") => handle_chat_message(body, authorization, identity),
         _ => (
             404,
             b"{\"error\":\"not found\"}".to_vec(),
@@ -200,7 +269,15 @@ fn route_request(
     }
 }
 
-fn handle_chat_message(body: &[u8], identity: &LanHttpIdentity) -> (u16, Vec<u8>, &'static str) {
+fn handle_chat_message(
+    body: &[u8],
+    authorization: Option<&str>,
+    identity: &LanHttpIdentity,
+) -> (u16, Vec<u8>, &'static str) {
+    let peer = match require_capability(authorization, identity, LanCapability::Chat, "chat") {
+        Ok(p) => p,
+        Err(resp) => return resp,
+    };
     let msg: LanChatMessage = match serde_json::from_slice(body) {
         Ok(m) => m,
         Err(e) => {
@@ -211,17 +288,20 @@ fn handle_chat_message(body: &[u8], identity: &LanHttpIdentity) -> (u16, Vec<u8>
             );
         }
     };
-    let peer_key = msg.from_peer_id.clone();
+    identity
+        .audit
+        .record(Some(&peer.peer_id), "chat", true, "ok");
     match append_chat_message(
         &identity.project_path,
         &msg,
         LanChatDirection::Inbound,
-        &peer_key,
+        &peer.peer_id,
     ) {
         Ok(stored) => json_ok(&serde_json::json!({
             "ok": true,
             "messageId": stored.message.message_id,
             "storedAt": stored.stored_at,
+            "peerId": peer.peer_id,
         })),
         Err(e) => (
             400,
@@ -231,7 +311,15 @@ fn handle_chat_message(body: &[u8], identity: &LanHttpIdentity) -> (u16, Vec<u8>
     }
 }
 
-fn handle_relay_package(body: &[u8], identity: &LanHttpIdentity) -> (u16, Vec<u8>, &'static str) {
+fn handle_relay_package(
+    body: &[u8],
+    authorization: Option<&str>,
+    identity: &LanHttpIdentity,
+) -> (u16, Vec<u8>, &'static str) {
+    let peer = match require_capability(authorization, identity, LanCapability::Relay, "relay") {
+        Ok(p) => p,
+        Err(resp) => return resp,
+    };
     let pkg: RelayPackage = match serde_json::from_slice(body) {
         Ok(p) => p,
         Err(e) => {
@@ -247,17 +335,23 @@ fn handle_relay_package(body: &[u8], identity: &LanHttpIdentity) -> (u16, Vec<u8
         &identity.project_path,
         &pkg,
         &now,
-        Some("lan-peer"),
+        Some(&peer.peer_id),
         &format!(
-            "received via LAN HTTP from peer {}",
-            identity.beacon.peer_id
+            "received via LAN HTTP from authenticated peer {}",
+            peer.peer_id
         ),
     ) {
-        Ok(stored) => json_ok(&serde_json::json!({
-            "ok": true,
-            "packageId": stored.package_id,
-            "quarantine": "relay/received",
-        })),
+        Ok(stored) => {
+            identity
+                .audit
+                .record(Some(&peer.peer_id), "relay", true, "ok");
+            json_ok(&serde_json::json!({
+                "ok": true,
+                "packageId": stored.package_id,
+                "quarantine": "relay/received",
+                "peerId": peer.peer_id,
+            }))
+        }
         Err(e) => {
             let code = if e.to_string().contains("already present") {
                 409
@@ -273,7 +367,27 @@ fn handle_relay_package(body: &[u8], identity: &LanHttpIdentity) -> (u16, Vec<u8
     }
 }
 
-fn handle_mesh_ask(body: &[u8], identity: &LanHttpIdentity) -> (u16, Vec<u8>, &'static str) {
+fn handle_mesh_ask(
+    body: &[u8],
+    authorization: Option<&str>,
+    identity: &LanHttpIdentity,
+) -> (u16, Vec<u8>, &'static str) {
+    let peer = match require_capability(authorization, identity, LanCapability::LiveAsk, "live-ask")
+    {
+        Ok(p) => p,
+        Err(resp) => return resp,
+    };
+    let now_unix = Utc::now().timestamp().max(0) as u64;
+    if let Err(err) = identity.budget.allow(&peer.peer_id, now_unix) {
+        identity
+            .audit
+            .record(Some(&peer.peer_id), "live-ask", false, err.code());
+        return (
+            err.http_status(),
+            err.to_json_body().into_bytes(),
+            "application/json",
+        );
+    }
     let req_body: LanAskHttpBody = match serde_json::from_slice(body) {
         Ok(b) => b,
         Err(e) => {
@@ -304,12 +418,22 @@ fn handle_mesh_ask(body: &[u8], identity: &LanHttpIdentity) -> (u16, Vec<u8>, &'
         query_id,
     };
     match answer_live_ask(&identity.project_path, &req) {
-        Ok(answer) => json_ok(&answer),
-        Err(e) => (
-            e.http_status(),
-            e.to_json_body().into_bytes(),
-            "application/json",
-        ),
+        Ok(answer) => {
+            identity
+                .audit
+                .record(Some(&peer.peer_id), "live-ask", true, "ok");
+            json_ok(&answer)
+        }
+        Err(e) => {
+            identity
+                .audit
+                .record(Some(&peer.peer_id), "live-ask", false, e.code());
+            (
+                e.http_status(),
+                e.to_json_body().into_bytes(),
+                "application/json",
+            )
+        }
     }
 }
 
@@ -333,8 +457,11 @@ fn write_response(
     let reason = match status {
         200 => "OK",
         400 => "Bad Request",
+        401 => "Unauthorized",
+        403 => "Forbidden",
         404 => "Not Found",
         409 => "Conflict",
+        429 => "Too Many Requests",
         502 => "Bad Gateway",
         503 => "Service Unavailable",
         _ => "Error",
@@ -354,8 +481,9 @@ fn write_response(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lan::client::{ask_peer, health_check, send_package_to_peer};
+    use crate::lan::client::{ask_peer, health_check, send_package_to_peer, LanClientAuth};
     use crate::lan::contract::DEFAULT_HTTP_PORT;
+    use crate::lan::pairing::{LanCapability, LanRegistry, MemoryLanRegistry};
     use crate::mesh::{
         MeshEnvelope, MeshEvidenceItem, MeshEvidenceSourceKind, MeshPeerRef, MeshSensitivityMax,
     };
@@ -396,12 +524,21 @@ mod tests {
             http_port: port,
             started_at: Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
         };
-        let identity = LanHttpIdentity {
-            project_path: project.clone(),
-            beacon,
-        };
+        let registry = MemoryLanRegistry::new();
+        let issued = registry
+            .issue(
+                "alice",
+                vec![
+                    LanCapability::Chat,
+                    LanCapability::LiveAsk,
+                    LanCapability::Relay,
+                ],
+            )
+            .unwrap();
+        let identity = LanHttpIdentity::new(project.clone(), beacon, LanRegistry::memory(registry));
         let handle = spawn_http_server(listener, identity, stop.clone()).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(80));
+        let auth = LanClientAuth::bearer(issued.token);
 
         let msg = LanChatMessage {
             protocol: LAN_CHAT_PROTOCOL.into(),
@@ -412,10 +549,10 @@ mod tests {
             sent_at: "2026-08-06T02:00:00Z".into(),
             thread_id: None,
         };
-        let resp = send_chat_message("127.0.0.1", port, &msg).unwrap();
+        let resp = send_chat_message("127.0.0.1", port, &msg, Some(&auth)).unwrap();
         assert_eq!(resp["ok"], true);
 
-        let stored = list_chat_messages(&project, Some("lan-alice"), None).unwrap();
+        let stored = list_chat_messages(&project, Some(&issued.peer.peer_id), None).unwrap();
         assert_eq!(stored.len(), 1);
         assert_eq!(stored[0].message.text, "hello over lan");
 
@@ -436,11 +573,24 @@ mod tests {
             http_port: port,
             started_at: "2026-08-03T00:00:00Z".into(),
         };
-        let identity = LanHttpIdentity {
-            project_path: project.clone(),
-            beacon: beacon.clone(),
-        };
+        let registry = MemoryLanRegistry::new();
+        let issued = registry
+            .issue(
+                "tester",
+                vec![
+                    LanCapability::LiveAsk,
+                    LanCapability::Chat,
+                    LanCapability::Relay,
+                ],
+            )
+            .unwrap();
+        let identity = LanHttpIdentity::new(
+            project.clone(),
+            beacon.clone(),
+            LanRegistry::memory(registry),
+        );
         let handle = spawn_http_server(listener, identity, stop.clone()).unwrap();
+        let auth = LanClientAuth::bearer(issued.token);
         // give accept loop a tick
         thread::sleep(Duration::from_millis(80));
 
@@ -488,17 +638,33 @@ mod tests {
             approved_at: Some("2026-08-03T00:01:00Z".into()),
             approved_by: Some("tester".into()),
         };
-        send_package_to_peer("127.0.0.1", port, &pkg).unwrap();
+        send_package_to_peer("127.0.0.1", port, &pkg, Some(&auth)).unwrap();
         assert!(std::path::Path::new(&project)
             .join(".openmesh/relay/received/pkg-lan-1.json")
             .exists());
 
         // Without a configured peer API key, live ask must fail closed (not LocalScaffold).
+        let unauth = ask_peer(
+            "127.0.0.1",
+            port,
+            "What is in progress?",
+            Some("low-impact"),
+            None,
+        );
+        match unauth {
+            Err(crate::lan::client::LanClientError::Peer { status, body }) => {
+                assert_eq!(status, 401);
+                assert!(body.contains("missing_credential"), "body={body}");
+            }
+            other => panic!("expected unauthenticated 401, got {other:?}"),
+        }
+
         let ask_err = ask_peer(
             "127.0.0.1",
             port,
             "What is in progress?",
             Some("low-impact"),
+            Some(&auth),
         );
         match ask_err {
             Err(crate::lan::client::LanClientError::Peer { status, body }) => {

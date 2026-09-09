@@ -35,6 +35,9 @@ fn cli() -> Command {
 
 fn run(args: &[&str], project: &Path) -> std::process::Output {
     let mut cmd = cli();
+    let home = lan_home(project);
+    std::fs::create_dir_all(&home).unwrap();
+    cmd.env("OPENMESH_LAN_HOME", home);
     for a in args {
         cmd.arg(a);
     }
@@ -76,8 +79,15 @@ fn seed_profile(project: &Path, owner: &str) {
     .unwrap();
 }
 
+fn lan_home(project: &Path) -> PathBuf {
+    project.join("_lan_home")
+}
+
 fn spawn_serve(project: &Path, seconds: u64) -> Child {
+    let home = lan_home(project);
+    std::fs::create_dir_all(&home).unwrap();
     cli()
+        .env("OPENMESH_LAN_HOME", &home)
         .args([
             "lan",
             "serve",
@@ -118,7 +128,7 @@ fn lan_serve_send_ask_status_loopback() {
     seed_profile(&server, "ServerOwner");
     seed_profile(&client, "ClientOwner");
 
-    let mut child = spawn_serve(&server, 25);
+    let mut child = spawn_serve(&server, 40);
     let port = wait_for_serve_port(&mut child);
     let addr = format!("127.0.0.1:{port}");
 
@@ -183,6 +193,27 @@ fn lan_serve_send_ask_status_loopback() {
         String::from_utf8_lossy(&approve.stderr)
     );
 
+    let pair = run(
+        &[
+            "lan",
+            "pair",
+            "create",
+            "--label",
+            "cli-tester",
+            "--capabilities",
+            "live-ask,chat,relay",
+            "--json",
+        ],
+        &server,
+    );
+    assert!(
+        pair.status.success(),
+        "pair failed {}",
+        String::from_utf8_lossy(&pair.stderr)
+    );
+    let pair_v: Value = serde_json::from_slice(&pair.stdout).unwrap();
+    let token = pair_v["token"].as_str().expect("token").to_string();
+
     let send = run(
         &[
             "lan",
@@ -191,6 +222,8 @@ fn lan_serve_send_ask_status_loopback() {
             "pkg-lan-cli-1",
             "--to",
             &addr,
+            "--token",
+            &token,
             "--json",
         ],
         &client,
@@ -215,6 +248,8 @@ fn lan_serve_send_ask_status_loopback() {
             "What is in progress?",
             "--tier",
             "low-impact",
+            "--token",
+            &token,
             "--json",
         ],
         &client,

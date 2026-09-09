@@ -1401,6 +1401,9 @@ pub fn run() {
             continuity_desktop::lan_probe_address,
             continuity_desktop::lan_chat_send,
             continuity_desktop::lan_chat_list,
+            continuity_desktop::lan_pair_create,
+            continuity_desktop::lan_pair_list,
+            continuity_desktop::lan_pair_revoke,
             // Agent Engine + Tool Loop (0.1.23)
             agent_engine_desktop::agent_secret_status,
             agent_engine_desktop::agent_secret_set,

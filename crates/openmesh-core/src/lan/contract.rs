@@ -7,6 +7,8 @@ use thiserror::Error;
 pub const LAN_PROTOCOL: &str = "openmesh-lan/0.1";
 pub const DEFAULT_UDP_PORT: u16 = 41777;
 pub const DEFAULT_HTTP_PORT: u16 = 41778;
+/// Default HTTP bind. Wildcard/LAN bind requires explicit `--expose-lan`.
+pub const DEFAULT_LAN_HOST: &str = "127.0.0.1";
 
 const MAX_LABEL_BYTES: usize = 128;
 const MAX_PEER_ID_BYTES: usize = 128;
@@ -147,6 +149,9 @@ pub struct LanServeStatus {
     pub udp_port: Option<u16>,
     pub started_at: Option<String>,
     pub note: Option<String>,
+    /// True only when the operator explicitly enabled LAN interface bind.
+    #[serde(default)]
+    pub expose_lan: bool,
 }
 
 pub fn validate_lan_beacon(b: &LanBeacon) -> Result<(), LanProtocolError> {

@@ -439,6 +439,7 @@ export interface LanServeStatus {
   udpPort?: number;
   startedAt?: string;
   note?: string;
+  exposeLan?: boolean;
 }
 
 export interface LanPeerInfo {
@@ -460,6 +461,7 @@ export async function lanServeStart(
     httpPort?: number;
     udpPort?: number;
     ownerLabel?: string;
+    exposeLan?: boolean;
   },
 ): Promise<LanServeStatus> {
   return invoke<LanServeStatus>("lan_serve_start", {
@@ -469,6 +471,7 @@ export async function lanServeStart(
       httpPort: opts?.httpPort,
       udpPort: opts?.udpPort,
       ownerLabel: opts?.ownerLabel,
+      exposeLan: opts?.exposeLan ?? false,
     },
   });
 }
@@ -512,23 +515,25 @@ export async function lanSendPackage(
   projectPath: string,
   packageId: string,
   to: string,
+  token?: string,
 ): Promise<unknown> {
   return invoke("lan_send_package", {
     projectPath,
-    request: { packageId, to },
+    request: { packageId, to, token },
   });
 }
 
 export async function lanAskPeer(
   to: string,
   question: string,
-  opts?: { tier?: string },
+  opts?: { tier?: string; token?: string },
 ): Promise<MeshRemoteQueryAnswer> {
   return invoke<MeshRemoteQueryAnswer>("lan_ask_peer", {
     request: {
       to,
       question,
       tier: opts?.tier,
+      token: opts?.token,
     },
   });
 }
