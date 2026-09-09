@@ -4,7 +4,10 @@ use super::types::{
     AgentDefinition, AgentEngineError, AgentProviderKind, ChatMessage, ChatRole, ToolCallRequest,
     ToolSpec,
 };
-use crate::llm_runtime::{LlmCompletion, LlmRuntime, LlmRuntimeError, LlmUsage};
+use crate::llm_runtime::{
+    complete_openai_chat_blocking, LlmCompletion, LlmRuntime, LlmRuntimeError, LlmUsage,
+    ProviderRuntimeSpec,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
@@ -88,9 +91,17 @@ impl OpenAiCompatibleProvider {
         Ok(Self { config, client })
     }
 
+    pub fn from_runtime_spec(spec: ProviderRuntimeSpec) -> Result<Self, AgentEngineError> {
+        Self::new(ProviderConfig {
+            api_key: spec.api_key,
+            model: spec.model,
+            base_url: spec.base_url,
+        })
+    }
+
     /// Minimal chat/completions probe (no tools) for Settings → Test connection.
     pub fn probe_connection(&self) -> Result<ProviderProbeResult, AgentEngineError> {
-        if is_dashscope_coding_plan_base(&self.config.base_url) {
+        if crate::llm_runtime::is_dashscope_coding_plan_base(&self.config.base_url) {
             return Ok(ProviderProbeResult {
                 ok: false,
                 model: self.config.model.clone(),
@@ -220,59 +231,14 @@ impl LlmRuntime for OpenAiCompatibleProvider {
         messages: &[ChatMessage],
         tools: &[ToolSpec],
     ) -> Result<LlmCompletion, LlmRuntimeError> {
-        if is_dashscope_coding_plan_base(&self.config.base_url) {
-            return Err(LlmRuntimeError::Upstream(
-                "DashScope Coding Plan (coding-intl.dashscope.aliyuncs.com) only allows Coding Agents — not OpenMesh Agent Engine chat/tools. \
-Use a normal OpenAI-compatible endpoint: openai, deepseek, xai (https://api.x.ai/v1), or DashScope compatible-mode (not Coding Plan). \
-Slash tools still work without the LLM."
-                    .into(),
-            ));
-        }
-
-        let url = format!("{}/chat/completions", self.config.base_url);
+        let spec = self.config.to_runtime_spec("agent");
         let mut body = build_request_body(&self.config.model, messages, tools);
-        // Harmless for most providers; required by some Qwen-compatible hosts.
         if let Some(obj) = body.as_object_mut() {
             obj.entry("enable_thinking").or_insert(Value::Bool(false));
         }
-
-        let resp = self
-            .client
-            .post(&url)
-            .bearer_auth(&self.config.api_key)
-            .header("Content-Type", "application/json")
-            .header("User-Agent", "OpenMesh-AgentEngine/0.1.23")
-            .json(&body)
-            .send()
-            .map_err(|_e| LlmRuntimeError::ProviderUnavailable)?;
-
-        let status = resp.status();
-        let text = resp
-            .text()
-            .map_err(|_| LlmRuntimeError::ProviderUnavailable)?;
-        if !status.is_success() {
-            if text.to_lowercase().contains("coding plan")
-                || text.to_lowercase().contains("coding agents")
-            {
-                return Err(LlmRuntimeError::Upstream(
-                    "This API key/endpoint is a Coding Plan product — it rejects OpenMesh Agent Engine. \
-Switch Settings → Provider to openai / deepseek / xai (or clear Coding Plan base URL). Slash tools still work."
-                        .into(),
-                ));
-            }
-            return Err(LlmRuntimeError::from_http_status(
-                status.as_u16(),
-                &sanitize_err(truncate(&text, 400)),
-            ));
-        }
+        let text = complete_openai_chat_blocking(&self.client, &spec, body)?;
         parse_chat_completion(&text)
     }
-}
-
-fn is_dashscope_coding_plan_base(base_url: &str) -> bool {
-    let lower = base_url.to_ascii_lowercase();
-    lower.contains("coding-intl.dashscope.aliyuncs.com")
-        || lower.contains("coding.dashscope.aliyuncs.com")
 }
 
 fn sanitize_err(s: String) -> String {

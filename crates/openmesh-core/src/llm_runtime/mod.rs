@@ -4,6 +4,15 @@
 //! the provider-transport contract: messages in, completion (optional tools and
 //! usage) out. It is not an authority layer.
 
+pub mod http;
+pub mod spec;
+
+pub use http::{
+    classify_chat_http, complete_openai_chat_async, complete_openai_chat_blocking,
+    is_dashscope_coding_plan_base,
+};
+pub use spec::ProviderRuntimeSpec;
+
 use crate::agent_engine::types::{AgentEngineError, ChatMessage, ToolCallRequest, ToolSpec};
 use serde::{Deserialize, Serialize};
 

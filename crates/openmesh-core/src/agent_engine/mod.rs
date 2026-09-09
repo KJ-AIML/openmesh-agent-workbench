@@ -19,7 +19,9 @@ pub mod turn_cancel;
 pub mod types;
 pub mod workspace_tools;
 
-pub use crate::llm_runtime::{LlmCompletion, LlmRuntime, LlmRuntimeError, LlmUsage};
+pub use crate::llm_runtime::{
+    LlmCompletion, LlmRuntime, LlmRuntimeError, LlmUsage, ProviderRuntimeSpec,
+};
 pub use chat_store::{
     load_chat_sessions, save_chat_sessions, ChatImportProvenance, StoredChatMessage,
     StoredChatSession,
