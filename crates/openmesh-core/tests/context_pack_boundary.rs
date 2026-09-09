@@ -18,6 +18,9 @@ use serde_json::{json, Value};
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static TEMP_PROJECT_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 const FIXTURE: &str = include_str!("fixtures/context/proxy-context-pack-valid.json");
 const WINDOW_SINCE: &str = "2026-07-15T00:00:00Z";
@@ -129,8 +132,9 @@ fn read_sources(paths: &[PathBuf]) -> String {
 }
 
 fn temp_project(label: &str) -> (PathBuf, String) {
+    let counter = TEMP_PROJECT_COUNTER.fetch_add(1, Ordering::Relaxed);
     let dir = std::env::temp_dir().join(format!(
-        "openmesh-context-pack-boundary-{label}-{}-{}",
+        "openmesh-context-pack-boundary-{label}-{}-{counter}-{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -432,4 +436,24 @@ fn cannot_answer_authority_remains_declarative_metadata() {
         .authority_summary
         .execution_boundary
         .contains("metadata"));
+}
+
+#[test]
+fn concurrent_authority_pack_builds_do_not_collide() {
+    let handles: Vec<_> = (0..8)
+        .map(|i| {
+            std::thread::spawn(move || {
+                let level = if i % 2 == 0 {
+                    ProxyAuthorityLevel::CanDraft
+                } else {
+                    ProxyAuthorityLevel::MustAskHuman
+                };
+                let pack = built_pack_with_authority(level);
+                assert_eq!(pack.protocol_version, PROXY_CONTEXT_PACK_PROTOCOL_VERSION);
+            })
+        })
+        .collect();
+    for handle in handles {
+        handle.join().expect("thread join");
+    }
 }
