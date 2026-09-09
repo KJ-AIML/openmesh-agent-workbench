@@ -17,6 +17,7 @@ Start here if the app feels big. These docs map **what exists in code today**, n
 | Current LLM/provider execution paths (A5.0) | [architecture/LLM_RUNTIME_INVENTORY.md](./architecture/LLM_RUNTIME_INVENTORY.md) |
 | Chat ↔ Continuity integration (A6.0) | [architecture/CHAT_CONTINUITY_INTEGRATION.md](./architecture/CHAT_CONTINUITY_INTEGRATION.md) |
 | Chat command routing (A7) | [architecture/CHAT_ROUTING.md](./architecture/CHAT_ROUTING.md) |
+| Desktop IPC contract (A8) | [architecture/IPC_CONTRACT.md](./architecture/IPC_CONTRACT.md) |
 | AXGA role after unified runtime (ADR-0002) | [architecture/ADR-0002-axga-runtime-role.md](./architecture/ADR-0002-axga-runtime-role.md) |
 | What the app can do (user bible) | [PRODUCT_GUIDE.md](./PRODUCT_GUIDE.md) |
 | Fillable dogfood pass/fail (v0.1.40) | [DOGFOOD_v0.1.40.md](./DOGFOOD_v0.1.40.md) |
