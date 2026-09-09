@@ -205,7 +205,7 @@ fn signals_module_does_not_append_work_events() {
 
 #[test]
 fn evidence_ref_variants_include_git_state_without_heli_variant() {
-    let domain_rs = include_str!("../src/domain.rs");
+    let domain_rs = include_str!("../src/domain/events.rs");
     let enum_body = domain_rs
         .split("pub enum EvidenceRef")
         .nth(1)
@@ -392,7 +392,7 @@ fn boundary_blocks_git_heli_producers() {
             "Git/Heli producer module must remain absent: {forbidden}"
         );
     }
-    let domain_rs = include_str!("../src/domain.rs");
+    let domain_rs = include_str!("../src/domain/events.rs");
     let enum_body = domain_rs
         .split("pub enum EvidenceRef")
         .nth(1)

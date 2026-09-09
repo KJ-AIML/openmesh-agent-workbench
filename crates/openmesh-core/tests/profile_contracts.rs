@@ -384,7 +384,20 @@ fn profile_contracts_do_not_start_ask_my_proxy_or_answer_runtime() {
     }
 
     // 0.1.5 domain contracts may define ProxyContextPack without profile runtime coupling.
-    let domain = fs::read_to_string(root.join("src/domain.rs")).expect("read domain");
+    let domain_mod = root.join("src/domain/mod.rs");
+    let domain = if domain_mod.exists() {
+        let mut text = fs::read_to_string(&domain_mod).expect("read domain mod");
+        if let Ok(entries) = fs::read_dir(root.join("src/domain")) {
+            for entry in entries.flatten() {
+                if let Ok(c) = fs::read_to_string(entry.path()) {
+                    text.push_str(&c);
+                }
+            }
+        }
+        text
+    } else {
+        fs::read_to_string(root.join("src/domain.rs")).expect("read domain")
+    };
     assert!(domain.contains("ProxyContextPack"));
     assert!(!domain.contains("fn generate_answer"));
 }

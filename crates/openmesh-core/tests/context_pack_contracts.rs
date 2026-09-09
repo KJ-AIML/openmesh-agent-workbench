@@ -701,7 +701,20 @@ fn checkpoint_a_context_storage_and_cli_exist_after_checkpoint_e() {
 #[test]
 fn checkpoint_a_does_not_start_ask_my_proxy() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let domain = fs::read_to_string(root.join("src/domain.rs")).expect("read domain");
+    let domain_mod = root.join("src/domain/mod.rs");
+    let domain = if domain_mod.exists() {
+        let mut text = fs::read_to_string(&domain_mod).expect("read domain mod");
+        if let Ok(entries) = fs::read_dir(root.join("src/domain")) {
+            for entry in entries.flatten() {
+                if let Ok(c) = fs::read_to_string(entry.path()) {
+                    text.push_str(&c);
+                }
+            }
+        }
+        text
+    } else {
+        fs::read_to_string(root.join("src/domain.rs")).expect("read domain")
+    };
     let lowered = domain.to_ascii_lowercase();
     for forbidden in [
         "askmyproxy",

@@ -763,10 +763,27 @@ fn validators_perform_no_io() {
     let _ = is_supported_proxy_prompt_bundle_protocol(PROXY_PROMPT_BUNDLE_PROTOCOL_VERSION);
 }
 
+fn read_domain_source(root: &std::path::Path) -> String {
+    let domain_mod = root.join("src/domain/mod.rs");
+    if domain_mod.exists() {
+        let mut text = fs::read_to_string(&domain_mod).expect("read domain mod");
+        if let Ok(entries) = fs::read_dir(root.join("src/domain")) {
+            for entry in entries.flatten() {
+                if let Ok(c) = fs::read_to_string(entry.path()) {
+                    text.push_str(&c);
+                }
+            }
+        }
+        text
+    } else {
+        fs::read_to_string(root.join("src/domain.rs")).expect("read domain")
+    }
+}
+
 #[test]
 fn checkpoint_a_adds_no_prompt_composition() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let domain = fs::read_to_string(root.join("src/domain.rs")).expect("read domain");
+    let domain = read_domain_source(&root);
     let lowered = domain.to_ascii_lowercase();
     for forbidden in [
         "proxypromptcontext",
@@ -786,7 +803,7 @@ fn checkpoint_a_adds_no_prompt_composition() {
 #[test]
 fn checkpoint_a_adds_no_runtime_behavior() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let domain = fs::read_to_string(root.join("src/domain.rs")).expect("read domain");
+    let domain = read_domain_source(&root);
     for forbidden in [
         "trait ProxyDraftRuntime",
         "UnconfiguredProxyDraftRuntime",
@@ -833,7 +850,7 @@ fn checkpoint_a_adds_no_cli_behavior() {
 #[test]
 fn checkpoint_a_does_not_start_0_1_7() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let domain = fs::read_to_string(root.join("src/domain.rs")).expect("read domain");
+    let domain = read_domain_source(&root);
     for marker in [
         "pub struct ProxyClaim",
         "pub struct ProxyCitation",
