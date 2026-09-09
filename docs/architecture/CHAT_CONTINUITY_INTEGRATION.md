@@ -1,15 +1,15 @@
 # Chat ↔ Continuity integration (A6)
 
-**Status:** inventory + proposed mapping (v0.2 A6)
+**Status:** implemented (v0.2 A6)
 **Applies to:** `feat/v0.2.0-unified-workbench`
 **Does not:** revive Continuity as a parallel product, add Continuity UI, or change WorkSignal / WorkEvent domain semantics
 
 This document distinguishes:
 
 1. **Existing behavior** (source of truth as of A5 freeze `3363a5c`)
-2. **Proposed A6 mapping** (application bridge only)
+2. **A6 mapping** (application bridge; implemented)
 
-A6.0 does not modify domain types, promotion rules, inbox layout, or ledger protocol.
+A6 does not modify domain types, promotion rules, inbox layout, or ledger protocol.
 
 ---
 
@@ -242,7 +242,22 @@ Origins (`AgentOrigin`): `LocalChat`, `LocalDelegate`, `LocalCLI`, `LanPeer`, `C
 
 ---
 
-## 3. Proposed A6 mapping (no domain change)
+## 3. A6 mapping (implemented, no domain change)
+
+Module: `crates/openmesh-core/src/workbench_continuity.rs`.
+
+Wired seams:
+
+| Boundary | Call site |
+|----------|-----------|
+| Patch proposed | `WorkspaceToolExecutor::propose_patch` (origin-gated) |
+| Patch applied / rejected | `apply_patch` / `reject_patch` (host IPC) |
+| Verify recipe | `run_recipe_with_patch` |
+| Delegate brief | `write_delegate_brief` |
+| Handoff draft | `create_handoff_draft` |
+| Session import / link | `save_chat_sessions` (`importedFrom`) and `link_session` |
+
+Read-back: `record_boundary` rebuilds Current State so existing Pending Questions / Continuity projections show `native` workbench signals. No new dashboard.
 
 ### 3.1 One bridge
 
@@ -408,7 +423,7 @@ No new Continuity tab, no navigation redesign.
 | Import would pretend OpenMesh authorship | **No** — `AgentSwitch` + source in summary; Suppress unless grouped |
 | Freeze regression outside A6 | n/a until implementation |
 
-Proceed with A6.1+ on this mapping.
+A6.1–A6.5 implemented against this mapping. Domain contracts unchanged.
 
 ---
 

@@ -105,6 +105,7 @@ Repo helper: [`scripts/macos-unquarantine.sh`](../scripts/macos-unquarantine.sh)
 - DashScope **Coding Plan** keys ≠ Agent Engine chat/tools
 - Max tool-loop iterations bounded; long turns can still be heavy (mitigated with spawn_blocking + debounced persist)
 - Delegate / verify / patch depth is MVP — expect rough edges
+- Chat Continuity integration is boundary-based (patches, verify, handoff, import), not a transcript ledger
 - Voice is optional and environment-dependent (mic permissions, TTS)
 
 ---
@@ -117,6 +118,8 @@ Repo helper: [`scripts/macos-unquarantine.sh`](../scripts/macos-unquarantine.sh)
 - Pack/approve relay is CLI-first
 - Online Proxy mode labels may still say LocalScaffold while answers are live LLM
 - Team cloud sync does **not** upload
+- Agent Chat writes **WorkSignals** for semantic work boundaries (patch proposal/apply/reject, verify recipes, explicit handoff, import/continue). Assistant prose is not canonical. Promotion still does not run automatically; WorkEvents require the existing promotion/ledger path. See [CHAT_CONTINUITY_INTEGRATION.md](./architecture/CHAT_CONTINUITY_INTEGRATION.md).
+- Remote live ask (`LanPeer` / `ContinuityQuery`) cannot persist project Continuity through Agent Engine.
 
 ---
 

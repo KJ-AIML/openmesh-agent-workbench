@@ -110,6 +110,7 @@ Domain crate. Important areas:
 | Module area | Responsibility |
 |-------------|----------------|
 | `agent_engine/` | Tool loop, registry/modes, secrets, chat store, patches, recipes, extensions, live ask |
+| `workbench_continuity` | Chat → WorkSignal bridge (semantic boundaries only; no WorkEvent append) |
 | `session_readers/` | Scan Codex/Claude/OpenCode/Cursor/Gemini/Grok |
 | `lan/` | UDP beacon, HTTP server/client, chat, presence health |
 | `mesh/`, `relay/` | Peers, envelopes, pack/approve/quarantine |
