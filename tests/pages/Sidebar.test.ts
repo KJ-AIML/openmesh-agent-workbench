@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
 import { createMemoryHistory, createRouter } from "vue-router";
 import Sidebar from "@/components/Sidebar.vue";
+import { PROJECT_LANDING_ROUTE, sidebarLinkHrefs } from "@/lib/navigation";
 
 const { projectPaths, currentProjectPath, currentProject, selectProject, deleteProject, addRecentItem, getProject } = vi.hoisted(() => {
   // Keep mocked refs inside the hoisted factory so Vitest can initialize module mocks safely.
@@ -52,6 +53,7 @@ const routes = [
   "/oauth",
   "/proxy-runtime",
   "/proxy-providers",
+  "/usage",
   "/settings",
   "/projects/new",
 ].map((path) => ({
@@ -86,65 +88,50 @@ describe("Sidebar navigation information architecture", () => {
     getProject.mockReset();
   });
 
-  it("keeps every existing surface under a named topic", async () => {
+  it("keeps every existing surface under the v0.2 workbench topics", async () => {
     const { wrapper } = await mountSidebar();
 
     expect(wrapper.find("nav[aria-label='Workspace navigation']").exists()).toBe(true);
     expect(wrapper.findAll("[data-topic]").map((node) => node.attributes("data-topic"))).toEqual([
       "projects",
-      "overview",
-      "build",
+      "workspace",
       "agents",
-      "network",
+      "runtime",
       "settings",
     ]);
 
     const links = wrapper.findAll("a").map((link) => link.attributes("href"));
-    expect(links).toEqual([
-      "/agent-chat",
-      "/",
-      "/context",
-      "/sprint",
-      "/docs",
-      "/notes",
-      "/canvas",
-      "/agent-sessions",
-      "/continuity",
-      "/oauth",
-      "/proxy-runtime",
-      "/proxy-providers",
-      "/usage",
-      "/settings",
-    ]);
+    expect(links).toEqual(sidebarLinkHrefs());
   });
 
-  it("toggles topic sub-navigation without changing route links", async () => {
+  it("toggles collapsed Runtime without changing route links", async () => {
     const { wrapper } = await mountSidebar();
-    const buildToggle = wrapper.find("[data-topic-toggle='build']");
-    const buildPanel = wrapper.find("#sidebar-topic-build");
+    const runtimeToggle = wrapper.find("[data-topic-toggle='runtime']");
+    const runtimePanel = wrapper.find("#sidebar-topic-runtime");
 
-    expect(buildToggle.attributes("aria-expanded")).toBe("false");
-    expect(buildPanel.attributes("style")).toContain("display: none");
+    expect(runtimeToggle.attributes("aria-expanded")).toBe("false");
+    expect(runtimePanel.attributes("style")).toContain("display: none");
 
-    await buildToggle.trigger("click");
-    expect(buildToggle.attributes("aria-expanded")).toBe("true");
-    expect(buildPanel.attributes("style") || "").not.toContain("display: none");
-    expect(buildPanel.find("a[href='/docs']").exists()).toBe(true);
+    await runtimeToggle.trigger("click");
+    expect(runtimeToggle.attributes("aria-expanded")).toBe("true");
+    expect(runtimePanel.attributes("style") || "").not.toContain("display: none");
+    expect(runtimePanel.find("a[href='/proxy-runtime']").exists()).toBe(true);
+    expect(runtimePanel.find("a[href='/continuity']").text()).toContain("Pending & LAN");
 
-    await buildToggle.trigger("click");
-    expect(buildToggle.attributes("aria-expanded")).toBe("false");
-    expect(buildPanel.attributes("style")).toContain("display: none");
+    await runtimeToggle.trigger("click");
+    expect(runtimeToggle.attributes("aria-expanded")).toBe("false");
+    expect(runtimePanel.attributes("style")).toContain("display: none");
   });
 
-  it("auto-expands the topic containing the active deep link", async () => {
+  it("auto-expands Runtime for a deep-linked HTTP proxy URL", async () => {
     const { wrapper } = await mountSidebar("/proxy-runtime");
-    const networkToggle = wrapper.find("[data-topic-toggle='network']");
-    const networkPanel = wrapper.find("#sidebar-topic-network");
+    const runtimeToggle = wrapper.find("[data-topic-toggle='runtime']");
+    const runtimePanel = wrapper.find("#sidebar-topic-runtime");
 
-    expect(networkToggle.attributes("aria-expanded")).toBe("true");
-    expect(networkToggle.classes()).toContain("is-active");
-    expect(networkPanel.attributes("style") || "").not.toContain("display: none");
-    expect(networkPanel.find("a[href='/proxy-runtime']").classes()).toContain("active");
+    expect(runtimeToggle.attributes("aria-expanded")).toBe("true");
+    expect(runtimeToggle.classes()).toContain("is-active");
+    expect(runtimePanel.attributes("style") || "").not.toContain("display: none");
+    expect(runtimePanel.find("a[href='/proxy-runtime']").classes()).toContain("active");
   });
 
   it("keeps the project switcher and Chat ahead of grouped work navigation", async () => {
@@ -160,17 +147,39 @@ describe("Sidebar navigation information architecture", () => {
     const { wrapper, router } = await mountSidebar();
     const nav = wrapper.find("nav");
     const chat = nav.find("a[href='/agent-chat']");
-    const overview = nav.find("[data-topic-toggle='overview']");
+    const workspace = nav.find("[data-topic-toggle='workspace']");
 
     const projectsTopic = nav.find("[data-topic='projects']");
     expect(projectsTopic.text()).toContain("Projects");
     expect(projectsTopic.text()).toContain("Add Project");
     expect(chat.exists()).toBe(true);
-    expect(chat.element.compareDocumentPosition(overview.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(chat.element.compareDocumentPosition(workspace.element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(wrapper.find("[data-navigation-topic='chat']").exists()).toBe(true);
 
     await chat.trigger("click");
     await flushPromises();
     expect(router.currentRoute.value.path).toBe("/agent-chat");
+  });
+
+  it("opens Chat after selecting a project", async () => {
+    const project = {
+      id: "project-1",
+      name: "Workbench",
+      folderPath: "/tmp/workbench",
+    };
+    projectPaths.value = [project.folderPath];
+    currentProject.value = project;
+    getProject.mockResolvedValue(project);
+    selectProject.mockImplementation(async () => {
+      currentProjectPath.value = project.folderPath;
+    });
+
+    const { wrapper, router } = await mountSidebar();
+    await wrapper.find("[data-topic='projects'] button.nav-item").trigger("click");
+    await flushPromises();
+
+    expect(selectProject).toHaveBeenCalledWith(project.folderPath);
+    expect(router.currentRoute.value.path).toBe(PROJECT_LANDING_ROUTE);
   });
 
   it("keeps Settings accessible as a collapsible footer topic", async () => {
@@ -181,5 +190,16 @@ describe("Sidebar navigation information architecture", () => {
     expect(settingsToggle.attributes("aria-expanded")).toBe("true");
     expect(settingsToggle.classes()).toContain("is-active");
     expect(settingsLink.attributes("aria-current")).toBe("page");
+    expect(settingsLink.text()).toContain("Settings");
+  });
+
+  it("expands Workspace by default so project artifacts stay visible", async () => {
+    const { wrapper } = await mountSidebar();
+    expect(wrapper.find("[data-topic-toggle='workspace']").attributes("aria-expanded")).toBe("true");
+    expect(wrapper.find("[data-topic-toggle='agents']").attributes("aria-expanded")).toBe("true");
+    expect(wrapper.find("[data-topic-toggle='runtime']").attributes("aria-expanded")).toBe("false");
+    expect(wrapper.find("[data-topic-toggle='settings']").attributes("aria-expanded")).toBe("false");
+    expect(wrapper.find("a[href='/docs']").exists()).toBe(true);
+    expect(wrapper.find("a[href='/agent-sessions']").exists()).toBe(true);
   });
 });

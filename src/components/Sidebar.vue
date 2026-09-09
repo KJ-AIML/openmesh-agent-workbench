@@ -1,28 +1,27 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch, type Component } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import {
-  BarChart3,
-  Bot,
   ChevronDown,
   ChevronRight,
-  FileEdit,
-  FileText,
   Folder,
-  Home,
-  KeyRound,
-  ListTodo,
   MessageSquare,
-  Network,
   Plus,
   Search,
-  Server,
-  Settings,
   Trash2,
 } from "lucide-vue-next";
 import { useRoute, useRouter } from "vue-router";
 import { useStore } from "../lib/useStore";
 import { isMacOS, resolveIsMacOS } from "../lib/adapters/environment";
 import { startWindowDrag } from "../lib/adapters/windowAdapter";
+import {
+  PRIMARY_CHAT,
+  PROJECT_LANDING_ROUTE,
+  defaultExpandedTopics,
+  groupsWithPlacement,
+  itemsForGroup,
+  topicForRoute,
+  type NavGroupId,
+} from "../lib/navigation";
 import AccountSwitcher from "./AccountSwitcher.vue";
 
 const route = useRoute();
@@ -41,83 +40,23 @@ const emit = defineEmits<{
   openPalette: [];
 }>();
 
-type NavigationTopicId = "overview" | "build" | "agents" | "network" | "settings";
-type NavigationItem = {
-  label: string;
-  icon: Component;
-  route: string;
+const mainTopics = groupsWithPlacement("main").map((group) => ({
+  ...group,
+  items: itemsForGroup(group.id),
+}));
+const settingsTopic = {
+  ...groupsWithPlacement("footer")[0],
+  items: itemsForGroup("settings"),
 };
-type NavigationTopic = {
-  id: NavigationTopicId;
-  label: string;
-  items: NavigationItem[];
-};
-
-const navigationTopics: NavigationTopic[] = [
-  {
-    id: "overview",
-    label: "Overview",
-    items: [
-      { label: "Home", icon: Home, route: "/" },
-      { label: "Context", icon: Search, route: "/context" },
-    ],
-  },
-  {
-    id: "build",
-    label: "Build",
-    items: [
-      { label: "Sprint", icon: ListTodo, route: "/sprint" },
-      { label: "Docs", icon: FileText, route: "/docs" },
-      { label: "Notes", icon: FileEdit, route: "/notes" },
-      { label: "Canvas", icon: Network, route: "/canvas" },
-    ],
-  },
-  {
-    id: "agents",
-    label: "Agents",
-    items: [{ label: "Sessions", icon: Bot, route: "/agent-sessions" }],
-  },
-  {
-    id: "network",
-    label: "Network",
-    items: [
-      { label: "Continuity", icon: Network, route: "/continuity" },
-      { label: "OAuth Connections", icon: KeyRound, route: "/oauth" },
-      { label: "Proxy Runtime", icon: Server, route: "/proxy-runtime" },
-      { label: "Provider Configuration", icon: KeyRound, route: "/proxy-providers" },
-      { label: "Usage", icon: BarChart3, route: "/usage" },
-    ],
-  },
-  {
-    id: "settings",
-    label: "Settings",
-    items: [{ label: "Settings", icon: Settings, route: "/settings" }],
-  },
-];
-
-const mainTopics = navigationTopics.filter((topic) => topic.id !== "settings");
-const settingsTopic = navigationTopics.find((topic) => topic.id === "settings")!;
 const projectsExpanded = ref(true);
-const expandedTopics = ref<Record<NavigationTopicId, boolean>>({
-  overview: true,
-  build: false,
-  agents: true,
-  network: false,
-  settings: true,
-});
+const expandedTopics = ref<Record<NavGroupId, boolean>>(defaultExpandedTopics());
 const projectNames = ref<Record<string, string>>({});
 const macOS = ref(
   (window as unknown as { __OPENMESH_IS_MACOS__?: boolean }).__OPENMESH_IS_MACOS__ ??
     isMacOS(),
 );
 
-const activeTopicId = computed<NavigationTopicId | null>(() => {
-  if (route.path === "/agent-chat") return "agents";
-  const topic = navigationTopics.find((candidate) =>
-    candidate.items.some((item) => isActive(item.route)),
-  );
-  return topic?.id ?? null;
-});
+const activeTopicId = computed<NavGroupId | null>(() => topicForRoute(route.path));
 
 watch(
   activeTopicId,
@@ -167,11 +106,11 @@ function isActive(path: string) {
   return route.path === path;
 }
 
-function isTopicExpanded(topicId: NavigationTopicId) {
+function isTopicExpanded(topicId: NavGroupId) {
   return expandedTopics.value[topicId];
 }
 
-function toggleTopic(topicId: NavigationTopicId) {
+function toggleTopic(topicId: NavGroupId) {
   expandedTopics.value[topicId] = !expandedTopics.value[topicId];
 }
 
@@ -185,7 +124,7 @@ async function handleProjectClick(projectPath: string) {
       sourceId: currentProject.value.id,
     });
   }
-  router.push("/agent-chat");
+  router.push(PROJECT_LANDING_ROUTE);
 }
 
 function goToAddProject() {
@@ -332,16 +271,16 @@ async function handleDeleteProject(projectPath: string) {
       </section>
 
       <!-- Primary Chat -->
-      <div class="sidebar-chat" data-navigation-topic="agents">
+      <div class="sidebar-chat" data-navigation-topic="chat">
         <router-link
-          to="/agent-chat"
+          :to="PRIMARY_CHAT.route"
           class="chat-primary no-underline"
-          :class="{ 'is-active': isActive('/agent-chat') }"
+          :class="{ 'is-active': isActive(PRIMARY_CHAT.route) }"
           aria-label="Chat"
         >
           <MessageSquare class="h-4 w-4 flex-shrink-0" />
-          <span class="chat-primary__label">Chat</span>
-          <span class="chat-primary__hint">workspace</span>
+          <span class="chat-primary__label">{{ PRIMARY_CHAT.label }}</span>
+          <span class="chat-primary__hint">{{ PRIMARY_CHAT.hint }}</span>
         </router-link>
       </div>
 

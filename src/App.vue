@@ -45,6 +45,7 @@ import {
   applyAppearance,
   bindSystemThemeListener,
 } from "./lib/appearance";
+import { CANONICAL_PAGE_LABELS } from "./lib/navigation";
 
 const route = useRoute();
 const router = useRouter();
@@ -425,22 +426,7 @@ async function handleCommandExecuted(cmd: Command) {
 }
 
 // ─── Breadcrumb ───────────────────────────────────────────────────────
-const pageLabels: Record<string, string> = {
-  "/": "Home",
-  "/docs": "Docs",
-  "/notes": "Notes",
-  "/sprint": "Sprint",
-  "/agent-chat": "Chat",
-  "/agent-sessions": "Agent Sessions",
-  "/oauth": "OAuth Connections",
-  "/proxy-runtime": "Proxy Runtime",
-  "/proxy-providers": "Provider Configuration",
-  "/usage": "Usage Analytics",
-  "/continuity": "Continuity",
-  "/context": "Context",
-  "/settings": "Settings",
-  "/projects/new": "Add Project",
-};
+const pageLabels: Record<string, string> = { ...CANONICAL_PAGE_LABELS };
 
 const breadcrumb = computed(() => {
   const page = pageLabels[route.path] ?? "Page";
