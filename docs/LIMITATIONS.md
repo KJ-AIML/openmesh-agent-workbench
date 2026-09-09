@@ -27,8 +27,8 @@ OpenMesh Desktop is **early preview (`0.x`)**: local dogfood, evolving APIs, uns
 | Want / easy to assume | Reality today |
 |----------------------|---------------|
 | Cloud sync of projects | **No** — local `~/.openmesh/` + `<project>/.openmesh/` only |
-| WAN / internet mesh | **No** — trusted-LAN alpha only; no NAT traversal |
-| E2E encrypted mesh product | **No** — LAN trust = network reachability; no finished E2E crypto claim |
+| WAN / internet mesh | **No** — LAN only; no NAT traversal |
+| E2E encrypted mesh product | **No** — LAN uses local pairing bearers, not E2E crypto or an IdP |
 | WhatsApp-like DMs | **No** — Continuity Chat is LAN HTTP text only |
 | Multi-tenant team cloud admin | **No** — local team registry; cloud sync is dry-run scaffold |
 | Silent agent file writes | **No** — patches human-gated; Ask mode read-only tools |
@@ -42,10 +42,16 @@ OpenMesh Desktop is **early preview (`0.x`)**: local dogfood, evolving APIs, uns
 
 ## Security posture
 
-- **Trusted-LAN alpha:** anyone who can reach your LAN HTTP port can hit health/ask/relay/chat endpoints — treat like an open local service
+Implemented v0.2 trust matrix: [architecture/TRUST_MODEL.md](./architecture/TRUST_MODEL.md).
+
+- **LAN:** default bind `127.0.0.1`. Wildcard exposure needs explicit `--expose-lan` / `exposeLan`. Protected Agent Engine routes require a paired Bearer token + capability before the engine runs. `/v1/health` is still unauthenticated. Live-ask is budgeted (8 / 60s per peer). This is **not** E2E encryption or cloud identity.
+- **Webview:** production CSP is set; `withGlobalTauri` is false; `plugin-fs` is not shipped. `style-src 'unsafe-inline'` remains for Vue/Excalidraw. Dev CSP separately allows Vite HMR (`unsafe-eval` only there).
+- **OAuth:** system browser, not the webview. Provider origins are not in CSP.
 - **Relay:** approve required; received packages quarantine; secret class denied on wire policy for alpha
-- **API keys:** user config file (mode `0600` on Unix) or env — not in project JSON; FS capability denies `.ssh` and agent key paths for tools
-- **Path confinement:** workspace tools use `safe_child_path` + sensitive-path deny
+- **API keys:** user config file (mode `0600` on Unix) or env — not in project JSON. Pairing tokens hashed at rest outside project JSON.
+- **Path confinement:** mutating IPC and engine tools resolve a registered project root, then `safe_child_path` / `path_safety`. **Not all 181 commands** are on that guard; remaining reads and some canvas/continuity commands still take a caller path.
+- **Process:** PTY/terminal launchers use program + argv + registered cwd. A spawned PTY is a real shell. Recipes run argv under the project cwd with no program allowlist.
+- **Patch apply:** host-gated IPC (`agent_patch_apply`), never a model tool, never LAN.
 - **Unsigned installers:** verify you trust the release channel; OS will warn
 - **No SECURITY.md** in-repo as of this writing — report issues via GitHub
 
@@ -106,6 +112,7 @@ Repo helper: [`scripts/macos-unquarantine.sh`](../scripts/macos-unquarantine.sh)
 ## Continuity / mesh
 
 - UDP discovery flaky on VPN/loopback/cross-subnet
+- Continuity UI `lanServeStart` without `exposeLan` is loopback-only (intentional)
 - LAN Chat has no CLI surface
 - Pack/approve relay is CLI-first
 - Online Proxy mode labels may still say LocalScaffold while answers are live LLM
@@ -118,6 +125,7 @@ Repo helper: [`scripts/macos-unquarantine.sh`](../scripts/macos-unquarantine.sh)
 - Continue-in-Chat quality varies by provider parser
 - Resume-in-terminal: Codex / Claude / OpenCode only
 - Embedded PTY ≠ Session resume target
+- Embedded PTY cwd must be a registered project (no HOME fallback)
 - Pure `npm run dev` (browser) cannot use PTY
 
 ---
@@ -133,5 +141,7 @@ These were true once; **ignore them as current product truth**:
 | Windows-first only / macOS untested | Old README | Multi-OS CI; still alpha |
 | Human chat UI non-goal | `docs/development/openmesh-0.1.22-…` | Continuity → Chat exists |
 | Live ask = Work Proxy only | Early LAN docs | Agent Engine live ask |
+| LAN trust = reachability | Older LIMITATIONS / Continuity docs | Pairing + bind default `127.0.0.1` |
+| `csp: null` / home-recursive plugin-fs | `v0.1.40` Tauri config | Production CSP set; plugin-fs removed |
 
 Historical files under `docs/development/` and old `release-notes-v0.*` remain for archaeology — see [docs/README.md](./README.md).

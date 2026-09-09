@@ -17,7 +17,7 @@ Those identities shared one Tauri window and one crate. Consequences observed on
 - Multiple ask/runtime paths (Work Proxy + AXGA vs Agent Engine vs LAN/Continuity live ask) with **asymmetric authority**.
 - Continuity UI exposing every historical track while Chat did not write WorkSignals.
 - PR CI that only guarded `release.yml` secret mappings.
-- Desktop preview security (null CSP, home-recursive FS plugin, LAN bind `0.0.0.0`).
+- Desktop preview security (null CSP, home-recursive FS plugin, LAN bind `0.0.0.0`) — closed in v0.2 A4; see [TRUST_MODEL.md](./TRUST_MODEL.md).
 - Chat keyword short-circuit that could skip the model.
 - Frontend `invoke()` names that were not registered (`usage_quota_status` and related).
 
