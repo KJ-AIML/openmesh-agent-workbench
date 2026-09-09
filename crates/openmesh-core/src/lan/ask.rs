@@ -236,6 +236,7 @@ mod tests {
         let provider = ScriptedProvider::new(vec![AssistantTurn {
             content: "Peer says: sprint is on track.".into(),
             tool_calls: vec![],
+            usage: None,
         }]);
         let executor = StubToolExecutor {
             responses: BTreeMap::new(),

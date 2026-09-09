@@ -5,13 +5,12 @@
 
 use super::engine_loop::run_agent_turn;
 use super::policy::{authorize_agent_turn, AgentOrigin, AgentRequestContext};
-use super::provider::{
-    resolve_provider_kind, ChatProvider, OpenAiCompatibleProvider, ProviderConfig,
-};
+use super::provider::{resolve_provider_kind, OpenAiCompatibleProvider, ProviderConfig};
 use super::registry::ToolExecutor;
 use super::secrets::{AgentSecretStore, CascadingSecretStore};
 use super::types::{AgentDefinition, AgentEngineError, AgentSession, EngineTurnResult};
 use super::workspace_tools::WorkspaceToolExecutor;
+use crate::llm_runtime::LlmRuntime;
 use crate::storage::{default_settings, read_global, Settings};
 use thiserror::Error;
 
@@ -140,7 +139,7 @@ pub fn run_live_ask_with_provider(
     project_path: &str,
     def: &AgentDefinition,
     request: &LiveAskRequest,
-    provider: &dyn ChatProvider,
+    provider: &dyn LlmRuntime,
     executor: &dyn ToolExecutor,
 ) -> Result<EngineTurnResult, LiveAskError> {
     if request.question.trim().is_empty() {
@@ -210,6 +209,7 @@ mod tests {
         let provider = ScriptedProvider::new(vec![AssistantTurn {
             content: "Ship LAN ask via Agent Engine.".into(),
             tool_calls: vec![],
+            usage: None,
         }]);
         let executor = StubToolExecutor {
             responses: BTreeMap::new(),
@@ -258,6 +258,7 @@ mod tests {
         let provider = ScriptedProvider::new(vec![AssistantTurn {
             content: "should not run".into(),
             tool_calls: vec![],
+            usage: None,
         }]);
         let executor = StubToolExecutor {
             responses: BTreeMap::new(),

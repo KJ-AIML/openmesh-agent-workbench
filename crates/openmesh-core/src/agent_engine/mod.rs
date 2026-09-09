@@ -19,6 +19,7 @@ pub mod turn_cancel;
 pub mod types;
 pub mod workspace_tools;
 
+pub use crate::llm_runtime::{LlmCompletion, LlmRuntime, LlmRuntimeError, LlmUsage};
 pub use chat_store::{
     load_chat_sessions, save_chat_sessions, ChatImportProvenance, StoredChatMessage,
     StoredChatSession,
@@ -93,6 +94,20 @@ mod provider_parse_tests {
         let turn = parse_chat_completion(body).unwrap();
         assert_eq!(turn.tool_calls.len(), 1);
         assert_eq!(turn.tool_calls[0].name, "list_docs");
+        assert!(turn.usage.is_none());
+    }
+
+    #[test]
+    fn parse_chat_completion_reads_usage_when_present() {
+        let body = r#"{
+          "choices": [{ "message": { "content": "ok" } }],
+          "usage": { "prompt_tokens": 11, "completion_tokens": 2, "total_tokens": 13 }
+        }"#;
+        let turn = parse_chat_completion(body).unwrap();
+        let usage = turn.usage.expect("usage");
+        assert_eq!(usage.input_tokens, Some(11));
+        assert_eq!(usage.output_tokens, Some(2));
+        assert_eq!(usage.total_tokens, Some(13));
     }
 
     #[test]
@@ -146,6 +161,13 @@ mod provider_parse_tests {
             .contains("Coding Plan"));
         assert_eq!(result.latency_ms, 0);
         assert!(result.reply_preview.is_none());
+    }
+
+    #[test]
+    fn missing_api_key_is_fail_closed_before_transport() {
+        let def = AgentDefinition::default_workspace_agent("gpt-4o-mini");
+        let err = ProviderConfig::from_definition(&def, "  ").unwrap_err();
+        assert!(matches!(err, AgentEngineError::MissingApiKey));
     }
 
     #[test]

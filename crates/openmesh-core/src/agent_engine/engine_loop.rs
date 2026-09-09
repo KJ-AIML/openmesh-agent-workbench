@@ -1,13 +1,13 @@
 //! Agent tool loop — OpenMesh Agent Engine (0.1.23).
 
 use super::policy::AuthorizedAgentTurn;
-use super::provider::ChatProvider;
 use super::registry::{filter_tools, ToolExecutor};
 use super::turn_cancel;
 use super::types::{
     AgentDefinition, AgentEngineError, AgentSession, ChatMessage, ChatRole, EngineTurnResult,
     ToolStep, DEFAULT_MAX_TOOLS_PER_ITERATION, DEFAULT_TOOL_RESULT_MAX_CHARS,
 };
+use crate::llm_runtime::LlmRuntime;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
@@ -33,7 +33,7 @@ pub fn run_agent_turn(
     def: &AgentDefinition,
     session: &mut AgentSession,
     user_text: &str,
-    provider: &dyn ChatProvider,
+    provider: &dyn LlmRuntime,
     executor: &dyn ToolExecutor,
 ) -> Result<EngineTurnResult, AgentEngineError> {
     run_agent_turn_cancellable(auth, def, session, user_text, provider, executor, None)
@@ -44,7 +44,7 @@ pub fn run_agent_turn_cancellable(
     def: &AgentDefinition,
     session: &mut AgentSession,
     user_text: &str,
-    provider: &dyn ChatProvider,
+    provider: &dyn LlmRuntime,
     executor: &dyn ToolExecutor,
     cancel: Option<Arc<AtomicBool>>,
 ) -> Result<EngineTurnResult, AgentEngineError> {
@@ -58,7 +58,7 @@ pub fn run_agent_turn_with_progress(
     def: &AgentDefinition,
     session: &mut AgentSession,
     user_text: &str,
-    provider: &dyn ChatProvider,
+    provider: &dyn LlmRuntime,
     executor: &dyn ToolExecutor,
     cancel: Option<Arc<AtomicBool>>,
     on_progress: Option<TurnProgressCallback>,
@@ -315,10 +315,12 @@ mod tests {
                     name: "project_info".into(),
                     arguments: "{}".into(),
                 }],
+                usage: None,
             },
             AssistantTurn {
                 content: "Project is ready.".into(),
                 tool_calls: vec![],
+                usage: None,
             },
         ]);
         let mut responses = BTreeMap::new();
@@ -352,10 +354,12 @@ mod tests {
                     name: "project_info".into(),
                     arguments: "{}".into(),
                 }],
+                usage: None,
             },
             AssistantTurn {
                 content: "ok".into(),
                 tool_calls: vec![],
+                usage: None,
             },
         ]);
         let mut responses = BTreeMap::new();
@@ -398,6 +402,7 @@ mod tests {
         let provider = ScriptedProvider::new(vec![AssistantTurn {
             content: "Hello.".into(),
             tool_calls: vec![],
+            usage: None,
         }]);
         let executor = StubToolExecutor {
             responses: BTreeMap::new(),
@@ -422,6 +427,7 @@ mod tests {
         let provider = ScriptedProvider::new(vec![AssistantTurn {
             content: "should not run".into(),
             tool_calls: vec![],
+            usage: None,
         }]);
         let executor = StubToolExecutor {
             responses: BTreeMap::new(),
@@ -456,10 +462,12 @@ mod tests {
             AssistantTurn {
                 content: String::new(),
                 tool_calls: many,
+                usage: None,
             },
             AssistantTurn {
                 content: "Done with budget.".into(),
                 tool_calls: vec![],
+                usage: None,
             },
         ]);
         let mut responses = BTreeMap::new();
@@ -500,10 +508,12 @@ mod tests {
                     name: "propose_patch".into(),
                     arguments: "{}".into(),
                 }],
+                usage: None,
             },
             AssistantTurn {
                 content: "refused".into(),
                 tool_calls: vec![],
+                usage: None,
             },
         ]);
         let executor = StubToolExecutor {

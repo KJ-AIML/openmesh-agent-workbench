@@ -162,6 +162,7 @@ pub mod canvas;
 pub mod connectors;
 pub mod handoff;
 pub mod lan;
+pub mod llm_runtime;
 pub mod mesh;
 pub mod oauth;
 pub mod online_proxy;

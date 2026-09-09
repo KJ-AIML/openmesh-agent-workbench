@@ -4,8 +4,12 @@ use super::types::{
     AgentDefinition, AgentEngineError, AgentProviderKind, ChatMessage, ChatRole, ToolCallRequest,
     ToolSpec,
 };
+use crate::llm_runtime::{LlmCompletion, LlmRuntime, LlmRuntimeError, LlmUsage};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+
+/// Historical name for a single model round-trip.
+pub type AssistantTurn = LlmCompletion;
 
 #[derive(Debug, Clone)]
 pub struct ProviderConfig {
@@ -53,19 +57,8 @@ impl ProviderConfig {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct AssistantTurn {
-    pub content: String,
-    pub tool_calls: Vec<ToolCallRequest>,
-}
-
-pub trait ChatProvider: Send + Sync {
-    fn complete(
-        &self,
-        messages: &[ChatMessage],
-        tools: &[ToolSpec],
-    ) -> Result<AssistantTurn, AgentEngineError>;
-}
+/// Compatibility alias: Agent Engine talks to [`LlmRuntime`].
+pub use crate::llm_runtime::LlmRuntime as ChatProvider;
 
 /// Live HTTP OpenAI-compatible provider.
 pub struct OpenAiCompatibleProvider {
@@ -156,7 +149,7 @@ impl OpenAiCompatibleProvider {
             });
         }
 
-        let turn = parse_chat_completion(&text)?;
+        let turn = parse_chat_completion(&text).map_err(AgentEngineError::from)?;
         let preview = turn.content.trim();
         Ok(ProviderProbeResult {
             ok: true,
@@ -221,14 +214,14 @@ pub fn probe_provider(
     client.probe_connection()
 }
 
-impl ChatProvider for OpenAiCompatibleProvider {
+impl LlmRuntime for OpenAiCompatibleProvider {
     fn complete(
         &self,
         messages: &[ChatMessage],
         tools: &[ToolSpec],
-    ) -> Result<AssistantTurn, AgentEngineError> {
+    ) -> Result<LlmCompletion, LlmRuntimeError> {
         if is_dashscope_coding_plan_base(&self.config.base_url) {
-            return Err(AgentEngineError::Provider(
+            return Err(LlmRuntimeError::Upstream(
                 "DashScope Coding Plan (coding-intl.dashscope.aliyuncs.com) only allows Coding Agents — not OpenMesh Agent Engine chat/tools. \
 Use a normal OpenAI-compatible endpoint: openai, deepseek, xai (https://api.x.ai/v1), or DashScope compatible-mode (not Coding Plan). \
 Slash tools still work without the LLM."
@@ -251,26 +244,26 @@ Slash tools still work without the LLM."
             .header("User-Agent", "OpenMesh-AgentEngine/0.1.23")
             .json(&body)
             .send()
-            .map_err(|e| AgentEngineError::Provider(sanitize_err(e.to_string())))?;
+            .map_err(|_e| LlmRuntimeError::ProviderUnavailable)?;
 
         let status = resp.status();
         let text = resp
             .text()
-            .map_err(|e| AgentEngineError::Provider(sanitize_err(e.to_string())))?;
+            .map_err(|_| LlmRuntimeError::ProviderUnavailable)?;
         if !status.is_success() {
             if text.to_lowercase().contains("coding plan")
                 || text.to_lowercase().contains("coding agents")
             {
-                return Err(AgentEngineError::Provider(
+                return Err(LlmRuntimeError::Upstream(
                     "This API key/endpoint is a Coding Plan product — it rejects OpenMesh Agent Engine. \
 Switch Settings → Provider to openai / deepseek / xai (or clear Coding Plan base URL). Slash tools still work."
                         .into(),
                 ));
             }
-            return Err(AgentEngineError::Provider(format!(
-                "HTTP {status}: {}",
-                sanitize_err(truncate(&text, 400))
-            )));
+            return Err(LlmRuntimeError::from_http_status(
+                status.as_u16(),
+                &sanitize_err(truncate(&text, 400)),
+            ));
         }
         parse_chat_completion(&text)
     }
@@ -378,6 +371,22 @@ fn message_to_json(m: &ChatMessage) -> Value {
 #[derive(Debug, Deserialize)]
 struct ChatCompletionResponse {
     choices: Vec<Choice>,
+    #[serde(default)]
+    usage: Option<RawUsage>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RawUsage {
+    #[serde(default)]
+    prompt_tokens: Option<u64>,
+    #[serde(default)]
+    completion_tokens: Option<u64>,
+    #[serde(default)]
+    total_tokens: Option<u64>,
+    #[serde(default)]
+    input_tokens: Option<u64>,
+    #[serde(default)]
+    output_tokens: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -405,14 +414,14 @@ struct RawFunction {
     arguments: String,
 }
 
-pub fn parse_chat_completion(body: &str) -> Result<AssistantTurn, AgentEngineError> {
+pub fn parse_chat_completion(body: &str) -> Result<LlmCompletion, LlmRuntimeError> {
     let parsed: ChatCompletionResponse =
-        serde_json::from_str(body).map_err(|e| AgentEngineError::InvalidResponse(e.to_string()))?;
+        serde_json::from_str(body).map_err(|e| LlmRuntimeError::InvalidResponse(e.to_string()))?;
     let msg = parsed
         .choices
         .first()
         .map(|c| &c.message)
-        .ok_or_else(|| AgentEngineError::InvalidResponse("no choices".into()))?;
+        .ok_or_else(|| LlmRuntimeError::InvalidResponse("no choices".into()))?;
     let tool_calls = msg
         .tool_calls
         .clone()
@@ -424,9 +433,27 @@ pub fn parse_chat_completion(body: &str) -> Result<AssistantTurn, AgentEngineErr
             arguments: tc.function.arguments,
         })
         .collect();
-    Ok(AssistantTurn {
+    let usage = parsed.usage.and_then(|u| {
+        let input = u.prompt_tokens.or(u.input_tokens);
+        let output = u.completion_tokens.or(u.output_tokens);
+        let total = u.total_tokens.or_else(|| match (input, output) {
+            (Some(a), Some(b)) => Some(a.saturating_add(b)),
+            _ => None,
+        });
+        if input.is_none() && output.is_none() && total.is_none() {
+            None
+        } else {
+            Some(LlmUsage {
+                input_tokens: input,
+                output_tokens: output,
+                total_tokens: total,
+            })
+        }
+    });
+    Ok(LlmCompletion {
         content: msg.content.clone().unwrap_or_default(),
         tool_calls,
+        usage,
     })
 }
 
@@ -443,18 +470,18 @@ impl ScriptedProvider {
     }
 }
 
-impl ChatProvider for ScriptedProvider {
+impl LlmRuntime for ScriptedProvider {
     fn complete(
         &self,
         _messages: &[ChatMessage],
         _tools: &[ToolSpec],
-    ) -> Result<AssistantTurn, AgentEngineError> {
+    ) -> Result<LlmCompletion, LlmRuntimeError> {
         let mut guard = self
             .turns
             .lock()
-            .map_err(|e| AgentEngineError::Provider(e.to_string()))?;
+            .map_err(|_| LlmRuntimeError::ProviderUnavailable)?;
         if guard.is_empty() {
-            return Err(AgentEngineError::Provider("no scripted turns left".into()));
+            return Err(LlmRuntimeError::Upstream("no scripted turns left".into()));
         }
         Ok(guard.remove(0))
     }
