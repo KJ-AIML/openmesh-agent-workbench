@@ -2,7 +2,8 @@
 //! and existing promotion rules (no WorkEvent bypass).
 
 use openmesh_core::agent_engine::{
-    create_handoff_draft, write_delegate_brief, AgentOrigin, ToolExecutor, WorkspaceToolExecutor,
+    apply_patch, create_handoff_draft, reject_patch, run_recipe, write_delegate_brief, AgentOrigin,
+    Recipe, ToolExecutor, WorkspaceToolExecutor,
 };
 use openmesh_core::continuity::list_pending_signals;
 use openmesh_core::domain::{ActorRef, ProducerRef, WorkSignal, WorkSignalKind};
@@ -11,6 +12,7 @@ use openmesh_core::promotion::{
     evaluate_promotion_case, PromotionCase, PromotionOutcome, SignalRef,
 };
 use openmesh_core::signals::write_signal;
+use openmesh_core::storage::{atomic_write, get_project_dir};
 use openmesh_core::storage::{init_project, read_project, Project};
 use openmesh_core::workbench_continuity::{
     compose_work_signal, record_boundary, BoundarySource, RecordOutcome, SkipReason, WorkBoundary,
@@ -542,6 +544,109 @@ fn delegate_brief_and_handoff_draft_emit_signals() {
             .iter()
             .any(|s| s.kind == WorkSignalKind::Handoff && s.signal_id.starts_with("wb-handoff-")),
         "missing handoff signal: {signals:?}"
+    );
+    cleanup(&project);
+}
+
+#[test]
+fn host_apply_and_reject_are_distinct_from_proposal() {
+    let project = temp_project();
+    fs::write(PathBuf::from(&project).join("f.txt"), "v1\n").unwrap();
+    let exec = WorkspaceToolExecutor::new(project.clone(), AgentOrigin::LocalChat);
+    let out = exec
+        .execute(
+            "propose_patch",
+            r#"{"summary":"x","files":[{"path":"f.txt","newContent":"v2\n"}]}"#,
+        )
+        .unwrap();
+    let id = serde_json::from_str::<serde_json::Value>(&out).unwrap()["patchId"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    apply_patch(&project, &id).unwrap();
+    let kinds: Vec<_> = pending_signals(&project)
+        .into_iter()
+        .map(|s| s.kind)
+        .collect();
+    assert!(kinds.contains(&WorkSignalKind::ReviewRequired));
+    assert!(kinds.contains(&WorkSignalKind::Progress));
+
+    let project2 = temp_project();
+    fs::write(PathBuf::from(&project2).join("g.txt"), "v1\n").unwrap();
+    let exec2 = WorkspaceToolExecutor::new(project2.clone(), AgentOrigin::LocalChat);
+    let out2 = exec2
+        .execute(
+            "propose_patch",
+            r#"{"summary":"y","files":[{"path":"g.txt","newContent":"v2\n"}]}"#,
+        )
+        .unwrap();
+    let id2 = serde_json::from_str::<serde_json::Value>(&out2).unwrap()["patchId"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    reject_patch(&project2, &id2).unwrap();
+    let signals = pending_signals(&project2);
+    assert!(signals
+        .iter()
+        .any(|s| s.kind == WorkSignalKind::ReviewRequired));
+    assert!(signals.iter().any(|s| s.kind == WorkSignalKind::Decision));
+    assert!(!signals.iter().any(|s| s.signal_id.contains("applied")));
+    cleanup(&project);
+    cleanup(&project2);
+}
+
+fn write_recipe(project: &str, id: &str, argv: Vec<String>) {
+    let dir = get_project_dir(project).join("agent").join("recipes");
+    fs::create_dir_all(&dir).unwrap();
+    let recipe = Recipe {
+        id: id.into(),
+        title: id.into(),
+        argv,
+        cwd_rel: String::new(),
+        timeout_ms: 5_000,
+    };
+    atomic_write(
+        &dir.join(format!("{id}.json")),
+        &serde_json::to_string_pretty(&recipe).unwrap(),
+    )
+    .unwrap();
+}
+
+#[test]
+fn recipe_success_and_failure_record_distinct_kinds() {
+    let project = temp_project();
+    write_recipe(
+        &project,
+        "echo-hi",
+        vec!["echo".into(), "hello-openmesh".into()],
+    );
+    let ok = run_recipe(&project, "echo-hi", "test-run-ok", None).unwrap();
+    assert!(ok.ok, "{ok:?}");
+    write_recipe(&project, "fail-now", vec!["false".into()]);
+    let failed = run_recipe(&project, "fail-now", "test-run-fail", None).unwrap();
+    assert!(!failed.ok, "{failed:?}");
+
+    let signals = pending_signals(&project);
+    let success = signals
+        .iter()
+        .find(|s| s.signal_id == format!("wb-verify-{}", ok.run_id))
+        .unwrap();
+    let failure = signals
+        .iter()
+        .find(|s| s.signal_id == format!("wb-verify-{}", failed.run_id))
+        .unwrap();
+    assert_eq!(success.kind, WorkSignalKind::Milestone);
+    assert_eq!(failure.kind, WorkSignalKind::Blocker);
+    let raw = fs::read_dir(PathBuf::from(&project).join(".openmesh/signals/pending"))
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("json"))
+        .map(|e| fs::read_to_string(e.path()).unwrap())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        !raw.contains("hello-openmesh"),
+        "raw recipe stdout must not enter Continuity records"
     );
     cleanup(&project);
 }

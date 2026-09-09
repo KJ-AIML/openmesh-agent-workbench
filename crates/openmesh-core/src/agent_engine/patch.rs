@@ -328,6 +328,18 @@ pub fn apply_patch(project_path: &str, patch_id: &str) -> Result<PatchRecord, St
         "applied",
         json!({ "patchId": patch_id, "files": patch.files.iter().map(|f| &f.path).collect::<Vec<_>>() }),
     );
+    if let Some(applied_at) = patch.applied_at.clone() {
+        let _ = crate::workbench_continuity::record_boundary(
+            project_path,
+            crate::workbench_continuity::BoundarySource::HostAuthorized,
+            &crate::workbench_continuity::WorkBoundary::PatchApplied {
+                patch_id: patch.id.clone(),
+                summary: patch.summary.clone(),
+                applied_at,
+                file_count: patch.files.len(),
+            },
+        );
+    }
     Ok(patch)
 }
 
@@ -348,6 +360,17 @@ pub fn reject_patch(project_path: &str, patch_id: &str) -> Result<PatchRecord, S
         "rejected",
         json!({ "patchId": patch_id }),
     );
+    if let Some(rejected_at) = patch.rejected_at.clone() {
+        let _ = crate::workbench_continuity::record_boundary(
+            project_path,
+            crate::workbench_continuity::BoundarySource::HostAuthorized,
+            &crate::workbench_continuity::WorkBoundary::PatchRejected {
+                patch_id: patch.id.clone(),
+                summary: patch.summary.clone(),
+                rejected_at,
+            },
+        );
+    }
     Ok(patch)
 }
 

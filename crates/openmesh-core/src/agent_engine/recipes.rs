@@ -1,7 +1,7 @@
 //! Approved verify recipes (Phase 3) — no shell expansion.
 
 use super::patch::append_run;
-use crate::storage::{atomic_write, get_project_dir, now_iso};
+use crate::storage::{atomic_write, get_project_dir};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::collections::HashMap;
@@ -354,8 +354,20 @@ pub fn run_recipe_with_patch(
         detail,
     )?;
 
-    // Clip stored logs in ledger detail already small; full text returned to caller.
-    let _ = now_iso();
+    let _ = crate::workbench_continuity::record_boundary(
+        project_path,
+        crate::workbench_continuity::BoundarySource::HostAuthorized,
+        &crate::workbench_continuity::WorkBoundary::VerifyCompleted {
+            run_id: run.id.clone(),
+            recipe_id: recipe_id.to_string(),
+            ok,
+            exit_code,
+            timed_out,
+            cancelled,
+            created_at: run.created_at.clone(),
+            patch_id: patch_id.map(|s| s.to_string()),
+        },
+    );
 
     Ok(RecipeRunResult {
         recipe_id: recipe_id.into(),
