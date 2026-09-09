@@ -14,11 +14,10 @@ describe("shellTabs", () => {
     expect(resolveTerminalCwd("  /tmp/proj  ")).toBe("/tmp/proj");
   });
 
-  it("falls back to HOME when no project", () => {
-    const home = process.env.HOME || process.env.USERPROFILE;
-    if (!home) return;
-    expect(resolveTerminalCwd(null)).toBe(home);
-    expect(resolveTerminalCwd("")).toBe(home);
+  it("does not treat HOME as implicit PTY cwd", () => {
+    expect(resolveTerminalCwd(null)).toBe("");
+    expect(resolveTerminalCwd("")).toBe("");
+    expect(resolveTerminalCwd("   ")).toBe("");
   });
 
   it("creates and upserts tabs", () => {

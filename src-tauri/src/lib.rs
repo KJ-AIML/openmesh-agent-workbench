@@ -1,5 +1,6 @@
 mod agent_engine_desktop;
 mod canvas_desktop;
+mod command_guard;
 mod continuity_desktop;
 mod extensions_desktop;
 mod oauth_desktop;
@@ -258,25 +259,16 @@ struct TerminalLaunchResult {
 
 #[tauri::command]
 fn open_terminal(cwd: String) -> TerminalLaunchResult {
-    let cwd_path = PathBuf::from(&cwd);
-
-    // Validate cwd exists and is a directory
-    match std::fs::metadata(&cwd_path) {
-        Ok(metadata) => {
-            if !metadata.is_dir() {
-                return TerminalLaunchResult {
-                    success: false,
-                    error: Some("Path is not a directory".to_string()),
-                };
-            }
-        }
+    let cwd_path = match command_guard::require_registered_project_path(&cwd) {
+        Ok(p) => p,
         Err(e) => {
             return TerminalLaunchResult {
                 success: false,
-                error: Some(format!("Path does not exist: {}", e)),
+                error: Some(e),
             };
         }
-    }
+    };
+    let cwd = command_guard::host_path_string(&cwd_path);
 
     // Platform-specific terminal launching
     #[cfg(target_os = "windows")]
@@ -399,25 +391,16 @@ fn open_agent_cli(
     extra_args: Option<Vec<String>>,
     brief_path: Option<String>,
 ) -> AgentCliLaunchResult {
-    let cwd_path = PathBuf::from(&cwd);
-
-    // Validate cwd exists and is a directory
-    match std::fs::metadata(&cwd_path) {
-        Ok(metadata) => {
-            if !metadata.is_dir() {
-                return AgentCliLaunchResult {
-                    success: false,
-                    error: Some("Path is not a directory".to_string()),
-                };
-            }
-        }
+    let cwd_path = match command_guard::require_registered_project_path(&cwd) {
+        Ok(p) => p,
         Err(e) => {
             return AgentCliLaunchResult {
                 success: false,
-                error: Some(format!("Path does not exist: {}", e)),
+                error: Some(e),
             };
         }
-    }
+    };
+    let cwd = command_guard::host_path_string(&cwd_path);
 
     // Validate tool is in allowlist (accepts both "claude" and "claude-code")
     let canonical_tool = match normalize_tool(&tool) {
@@ -794,25 +777,16 @@ struct RunCommandPresetResult {
 
 #[tauri::command]
 fn run_command_preset(command: String, args: Vec<String>, cwd: String) -> RunCommandPresetResult {
-    let cwd_path = PathBuf::from(&cwd);
-
-    // Validate cwd exists and is a directory
-    match std::fs::metadata(&cwd_path) {
-        Ok(metadata) => {
-            if !metadata.is_dir() {
-                return RunCommandPresetResult {
-                    success: false,
-                    error: Some("Working directory is not a directory".to_string()),
-                };
-            }
-        }
+    let cwd_path = match command_guard::require_registered_project_path(&cwd) {
+        Ok(p) => p,
         Err(e) => {
             return RunCommandPresetResult {
                 success: false,
-                error: Some(format!("Working directory does not exist: {}", e)),
+                error: Some(e),
             };
         }
-    }
+    };
+    let cwd = command_guard::host_path_string(&cwd_path);
 
     // Block dangerous commands
     let dangerous_patterns = [
@@ -940,7 +914,7 @@ fn save_settings(settings: Settings) -> Result<(), String> {
 
 #[tauri::command]
 fn get_projects_list() -> Vec<String> {
-    read_global::<Vec<String>>("projects.json").unwrap_or_default()
+    command_guard::registered_projects()
 }
 
 #[tauri::command]
@@ -1218,6 +1192,17 @@ struct WriteSnapshotResult {
 
 #[tauri::command]
 fn write_snapshot(project_path: String, filename: String, content: String) -> WriteSnapshotResult {
+    let project_path = match command_guard::require_registered_project_path(&project_path) {
+        Ok(p) => command_guard::host_path_string(&p),
+        Err(e) => {
+            return WriteSnapshotResult {
+                success: false,
+                filename: None,
+                error: Some(e),
+            };
+        }
+    };
+
     // Sanitize filename to prevent path traversal
     let safe_filename = filename.replace("..", "").replace(['/', '\\'], "");
 
@@ -1280,7 +1265,6 @@ fn write_snapshot(project_path: String, filename: String, content: String) -> Wr
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_fs::init())
         .manage(std::sync::Arc::new(pty_desktop::PtyManager::default()))
         .manage(std::sync::Arc::new(
             proxy_runtime_desktop::BuiltInProxyManager::default(),

@@ -408,6 +408,9 @@ pub fn lan_serve_start(
     project_path: String,
     request: Option<LanServeStartRequest>,
 ) -> Result<LanServeStatus, String> {
+    let project_path = crate::command_guard::host_path_string(
+        &crate::command_guard::require_registered_project_path(&project_path)?,
+    );
     let req = request.unwrap_or(LanServeStartRequest {
         host: None,
         http_port: None,

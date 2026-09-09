@@ -229,7 +229,11 @@ pub fn pty_create(
     if id.is_empty() || id.len() > 128 {
         return Err("Invalid PTY session id".to_string());
     }
-    let cwd_path = resolve_cwd(&cwd)?;
+    if cwd.trim().is_empty() {
+        return Err(crate::command_guard::ERR_INVALID_PROJECT_PATH.into());
+    }
+    let cwd_path = crate::command_guard::require_registered_project_path(&cwd)?;
+    let cwd_path = resolve_cwd(&crate::command_guard::host_path_string(&cwd_path))?;
     let cols = cols.unwrap_or(80);
     let rows = rows.unwrap_or(24);
     let manager = Arc::clone(&state);

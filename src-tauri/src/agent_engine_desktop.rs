@@ -162,6 +162,9 @@ fn agent_engine_turn_blocking(
     project_path: String,
     request: AgentEngineTurnRequest,
 ) -> Result<EngineTurnResult, String> {
+    let project_path = crate::command_guard::host_path_string(
+        &crate::command_guard::require_registered_project_path(&project_path)?,
+    );
     let settings = read_global::<Settings>("settings.json").unwrap_or_else(default_settings);
     let model = request
         .model
@@ -436,9 +439,15 @@ pub async fn agent_patch_apply(
     project_path: String,
     patch_id: String,
 ) -> Result<PatchRecord, String> {
-    tauri::async_runtime::spawn_blocking(move || apply_patch(&project_path, &patch_id))
-        .await
-        .map_err(|e| format!("patch apply failed to join: {e}"))?
+    tauri::async_runtime::spawn_blocking(move || {
+        let project_path = crate::command_guard::require_registered_project_path(&project_path)?;
+        apply_patch(
+            &crate::command_guard::host_path_string(&project_path),
+            &patch_id,
+        )
+    })
+    .await
+    .map_err(|e| format!("patch apply failed to join: {e}"))?
 }
 
 #[tauri::command]
@@ -456,9 +465,15 @@ pub async fn agent_patch_rollback(
     project_path: String,
     patch_id: String,
 ) -> Result<PatchRecord, String> {
-    tauri::async_runtime::spawn_blocking(move || rollback_patch(&project_path, &patch_id))
-        .await
-        .map_err(|e| format!("patch rollback failed to join: {e}"))?
+    tauri::async_runtime::spawn_blocking(move || {
+        let project_path = crate::command_guard::require_registered_project_path(&project_path)?;
+        rollback_patch(
+            &crate::command_guard::host_path_string(&project_path),
+            &patch_id,
+        )
+    })
+    .await
+    .map_err(|e| format!("patch rollback failed to join: {e}"))?
 }
 
 #[tauri::command]

@@ -117,8 +117,11 @@ export async function installMockTauri(
       const nextId = (prefix: string) => `${prefix}-${sequence++}`;
       const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 
-      target.__TAURI__ = {};
-      if (runtime === "web") delete target.__TAURI__;
+      target.__TAURI_INTERNALS__ = {};
+      if (runtime === "web") {
+        delete target.__TAURI__;
+        delete target.__TAURI_INTERNALS__;
+      }
       target.__TAURI_EVENT_PLUGIN_INTERNALS__ = {
         unregisterListener: (event: string, callbackId: number) => {
           const listeners = eventListeners.get(event);

@@ -262,7 +262,7 @@ const terminalCwd = computed(() =>
   resolveTerminalCwd(currentProjectPath.value),
 );
 const terminalCwdLabel = computed(() =>
-  shortCwdLabel(terminalCwd.value || currentProjectPath.value || "home"),
+  shortCwdLabel(terminalCwd.value || currentProjectPath.value || "no project"),
 );
 
 function mutateActiveRuns(mutator: (runs: SessionRun[]) => SessionRun[]) {
@@ -385,8 +385,8 @@ function closeTerminalPanel() {
 }
 
 function createEmbeddedShellTab() {
-  // Prefer project cwd; empty string lets the PTY backend fall back to HOME.
   const cwd = terminalCwd.value;
+  if (!cwd) return;
   const tab = createShellTab({ cwd, status: "launching" });
   shellTabs.value = [...shellTabs.value, tab];
   activeShellTabId.value = tab.id;

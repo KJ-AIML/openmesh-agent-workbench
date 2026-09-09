@@ -5,11 +5,19 @@ import { invoke } from "@tauri-apps/api/core";
 import type { RuntimeKind } from "./types";
 
 /**
- * Check if running in Tauri runtime
- * Tauri injects window.__TAURI__ object when running in desktop mode
+ * Check if running in Tauri runtime.
+ *
+ * `withGlobalTauri` is false, so `window.__TAURI__` is not injected.
+ * The IPC bridge still exposes `__TAURI_INTERNALS__`; recent Tauri also
+ * sets `window.isTauri`.
  */
 export function isTauriRuntime(): boolean {
-  return typeof window !== "undefined" && "__TAURI__" in window;
+  if (typeof window === "undefined") return false;
+  const w = window as Window & {
+    __TAURI_INTERNALS__?: unknown;
+    isTauri?: boolean;
+  };
+  return typeof w.__TAURI_INTERNALS__ !== "undefined" || w.isTauri === true;
 }
 
 /**

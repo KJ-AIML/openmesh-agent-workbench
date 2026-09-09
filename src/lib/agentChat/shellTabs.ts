@@ -38,20 +38,11 @@ export function defaultShellLabel(): string {
 }
 
 /**
- * Working directory for a new shell: project path, else HOME/USERPROFILE, else "".
+ * Working directory for a new embedded shell: registered project path only.
+ * HOME is not implicit authority for PTY spawn.
  */
 export function resolveTerminalCwd(projectPath?: string | null): string {
-  const p = projectPath?.trim();
-  if (p) return p;
-  try {
-    const env =
-      typeof process !== "undefined" && process.env ? process.env : undefined;
-    const home = env?.HOME?.trim() || env?.USERPROFILE?.trim();
-    if (home) return home;
-  } catch {
-    /* ignore */
-  }
-  return "";
+  return projectPath?.trim() ?? "";
 }
 
 export function createShellTab(opts: {
