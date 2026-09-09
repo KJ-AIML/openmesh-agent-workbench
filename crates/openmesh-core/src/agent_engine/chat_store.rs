@@ -68,7 +68,26 @@ pub fn save_chat_sessions(
     }
     let capped: Vec<_> = sessions.iter().take(50).cloned().collect();
     let json = serde_json::to_string_pretty(&capped).map_err(|e| e.to_string())?;
-    atomic_write(&path, &json)
+    atomic_write(&path, &json)?;
+    for session in &capped {
+        if let Some(imported) = &session.imported_from {
+            let created_at =
+                chrono::DateTime::<chrono::Utc>::from_timestamp_millis(session.created_at)
+                    .unwrap_or_else(chrono::Utc::now)
+                    .to_rfc3339();
+            let _ = crate::workbench_continuity::record_boundary(
+                project_path,
+                crate::workbench_continuity::BoundarySource::HostAuthorized,
+                &crate::workbench_continuity::WorkBoundary::SessionImported {
+                    source: imported.source.clone(),
+                    source_id: imported.id.clone(),
+                    chat_session_id: session.id.clone(),
+                    created_at,
+                },
+            );
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

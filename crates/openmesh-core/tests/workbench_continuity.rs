@@ -2,15 +2,19 @@
 //! and existing promotion rules (no WorkEvent bypass).
 
 use openmesh_core::agent_engine::{
-    apply_patch, create_handoff_draft, reject_patch, run_recipe, write_delegate_brief, AgentOrigin,
-    Recipe, ToolExecutor, WorkspaceToolExecutor,
+    apply_patch, create_handoff_draft, link_session, reject_patch, run_recipe, save_chat_sessions,
+    write_delegate_brief, AgentOrigin, ChatImportProvenance, Recipe, StoredChatMessage,
+    StoredChatSession, ToolExecutor, WorkspaceToolExecutor,
 };
-use openmesh_core::continuity::list_pending_signals;
+use openmesh_core::continuity::{
+    list_pending_signals, load_continuity_input_snapshot, read_current_state_projection,
+};
 use openmesh_core::domain::{ActorRef, ProducerRef, WorkSignal, WorkSignalKind};
 use openmesh_core::events::list_events;
 use openmesh_core::promotion::{
     evaluate_promotion_case, PromotionCase, PromotionOutcome, SignalRef,
 };
+use openmesh_core::return_digest::build_pending_questions_view;
 use openmesh_core::signals::write_signal;
 use openmesh_core::storage::{atomic_write, get_project_dir};
 use openmesh_core::storage::{init_project, read_project, Project};
@@ -647,6 +651,93 @@ fn recipe_success_and_failure_record_distinct_kinds() {
     assert!(
         !raw.contains("hello-openmesh"),
         "raw recipe stdout must not enter Continuity records"
+    );
+    cleanup(&project);
+}
+
+#[test]
+fn save_imported_session_records_source_without_backfill() {
+    let project = temp_project();
+    let sessions = vec![StoredChatSession {
+        id: "chat-imp".into(),
+        title: "Imported".into(),
+        title_is_default: false,
+        messages: vec![StoredChatMessage {
+            id: "m1".into(),
+            role: "assistant".into(),
+            text: "I fixed the issue in production".into(),
+            tool_calls: None,
+            at: 1,
+        }],
+        created_at: 1_725_000_000_000,
+        updated_at: 1_725_000_000_100,
+        imported_from: Some(ChatImportProvenance {
+            source: "cursor".into(),
+            id: "foreign-abc".into(),
+            path: Some("/tmp/cursor-session.jsonl".into()),
+        }),
+    }];
+    save_chat_sessions(&project, &sessions).unwrap();
+    save_chat_sessions(&project, &sessions).unwrap();
+    let signals = pending_signals(&project);
+    assert_eq!(signals.len(), 1);
+    assert_eq!(signals[0].kind, WorkSignalKind::AgentSwitch);
+    assert!(signals[0].summary.contains("cursor"));
+    assert!(signals[0].summary.contains("foreign-abc"));
+    assert!(list_events(&project).unwrap_or_default().is_empty());
+    let raw = fs::read_dir(PathBuf::from(&project).join(".openmesh/signals/pending"))
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("json"))
+        .map(|e| fs::read_to_string(e.path()).unwrap())
+        .collect::<String>();
+    assert!(
+        !raw.contains("I fixed the issue in production"),
+        "imported assistant prose must not enter Continuity"
+    );
+    cleanup(&project);
+}
+
+#[test]
+fn link_session_records_foreign_tool_provenance() {
+    let project = temp_project();
+    link_session(
+        &project,
+        r#"{"chatSessionId":"chat-1","foreignTool":"codex","foreignSessionId":"sess-9"}"#,
+    )
+    .unwrap();
+    let signals = pending_signals(&project);
+    assert_eq!(signals.len(), 1);
+    assert_eq!(signals[0].kind, WorkSignalKind::AgentSwitch);
+    assert!(signals[0].summary.contains("codex"));
+    assert!(signals[0].summary.contains("sess-9"));
+    cleanup(&project);
+}
+
+#[test]
+fn pending_view_sees_chat_proposal() {
+    let project = temp_project();
+    fs::write(PathBuf::from(&project).join("f.txt"), "v1\n").unwrap();
+    let exec = WorkspaceToolExecutor::new(project.clone(), AgentOrigin::LocalChat);
+    exec.execute(
+        "propose_patch",
+        r#"{"summary":"x","files":[{"path":"f.txt","newContent":"v2\n"}]}"#,
+    )
+    .unwrap();
+    let snapshot = load_continuity_input_snapshot(&project).unwrap();
+    let current = read_current_state_projection(&project).unwrap();
+    let view = build_pending_questions_view(&project, &snapshot, &current).unwrap();
+    assert!(
+        view.open_count >= 1,
+        "expected pending attention for ReviewRequired, got {view:?}"
+    );
+    assert!(
+        view.items.iter().any(|item| {
+            item.summary.to_lowercase().contains("proposed")
+                || item.reason.to_lowercase().contains("review")
+                || item.source_id.contains("wb-patch-proposed")
+        }),
+        "pending view missing chat proposal: {view:?}"
     );
     cleanup(&project);
 }

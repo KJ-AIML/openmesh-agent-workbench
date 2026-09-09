@@ -98,6 +98,16 @@ pub fn link_session(project_path: &str, arguments_json: &str) -> Result<String, 
         "ok",
         json!({ "chatSessionId": link.chat_session_id, "foreignSessionId": link.foreign_session_id }),
     );
+    let _ = crate::workbench_continuity::record_boundary(
+        project_path,
+        crate::workbench_continuity::BoundarySource::HostAuthorized,
+        &crate::workbench_continuity::WorkBoundary::SessionImported {
+            source: link.foreign_tool.clone(),
+            source_id: link.foreign_session_id.clone(),
+            chat_session_id: link.chat_session_id.clone(),
+            created_at: link.created_at.clone(),
+        },
+    );
     Ok(serde_json::to_string_pretty(&link).unwrap_or_else(|_| "{}".into()))
 }
 
