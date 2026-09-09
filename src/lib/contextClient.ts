@@ -1,7 +1,7 @@
 // OpenMesh Context Search Client — Dev Track 0.1.2.5
 // Thin wrapper around Tauri IPC commands for context search.
 
-import { invoke } from "@tauri-apps/api/core";
+import { legacyInvoke as invoke } from "./ipc";
 
 export interface SourceReceipt {
   source_kind: string;

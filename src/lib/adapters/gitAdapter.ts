@@ -4,7 +4,7 @@
 
 import type { GitStatus, AdapterResult } from "./types";
 import { getRuntimeKind } from "./environment";
-import { invoke } from "@tauri-apps/api/core";
+import { legacyInvoke as invoke } from "../ipc";
 
 interface GitStatusResult {
 	success: boolean;

@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { legacyInvoke as invoke } from "../ipc";
 
 export const AUTO_UI_SCHEMA = "openmesh.canvas/1" as const;
 

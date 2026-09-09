@@ -1,6 +1,6 @@
 import type { Settings } from "../types";
 import type { ScannedSession } from "./adapters/types";
-import { invoke } from "@tauri-apps/api/core";
+import { invokeTyped as invoke } from "./ipc";
 
 type SessionScanOverrides = {
 	codexDir?: string | null;

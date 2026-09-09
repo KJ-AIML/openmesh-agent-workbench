@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
-import { invoke } from "@tauri-apps/api/core";
+import { legacyInvoke as invoke } from "../../lib/ipc";
 import { useStore } from "../../lib/useStore";
 import { useVoiceStore } from "../../lib/voice/voiceStore";
 

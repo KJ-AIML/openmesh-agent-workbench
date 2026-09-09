@@ -4,7 +4,7 @@
 
 import type { AdapterResult, ScannedSession } from "./types";
 import type { ForeignTranscript } from "../agentChat/resumeIntoChat";
-import { invoke } from "@tauri-apps/api/core";
+import { invokeTyped as invoke } from "../ipc";
 
 interface ScanAgentSessionsResult {
 	success: boolean;

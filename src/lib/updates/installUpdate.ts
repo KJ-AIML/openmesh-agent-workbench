@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { legacyInvoke as invoke } from "../ipc";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { isTauriRuntime } from "../adapters/environment";
 import {

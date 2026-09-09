@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { legacyInvoke as invoke } from "./ipc";
 
 export type ExtensionSource = "builtin" | "user" | "project" | "plugin";
 

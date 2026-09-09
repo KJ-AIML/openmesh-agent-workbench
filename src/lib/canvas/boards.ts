@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { legacyInvoke as invoke } from "../ipc";
 
 export const BOARD_SCHEMA = "openmesh.board/1" as const;
 export const BOARD_ENGINE = "excalidraw" as const;

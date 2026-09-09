@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invokeTyped } from "./ipc";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 export type AgentSecretStatus = {
@@ -45,15 +45,15 @@ export type AgentUiMessage = {
 };
 
 export async function getAgentSecretStatus(): Promise<AgentSecretStatus> {
-  return invoke("agent_secret_status");
+  return invokeTyped("agent_secret_status");
 }
 
 export async function setAgentSecret(apiKey: string): Promise<AgentSecretStatus> {
-  return invoke("agent_secret_set", { apiKey });
+  return invokeTyped("agent_secret_set", { apiKey });
 }
 
 export async function clearAgentSecret(): Promise<AgentSecretStatus> {
-  return invoke("agent_secret_clear");
+  return invokeTyped("agent_secret_clear");
 }
 
 export type ProviderProbeResult = {
@@ -72,7 +72,7 @@ export async function testAgentProvider(opts: {
   /** Unsaved key from the input — not persisted by this call */
   apiKey?: string;
 }): Promise<ProviderProbeResult> {
-  return invoke("agent_provider_test", {
+  return invokeTyped("agent_provider_test", {
     request: {
       providerName: opts.providerName,
       model: opts.model,
@@ -112,7 +112,7 @@ export async function runAgentEngineTurn(
     turnId?: string;
   },
 ): Promise<EngineTurnResult> {
-  return invoke("agent_engine_turn", {
+  return invokeTyped("agent_engine_turn", {
     projectPath,
     request: {
       question,
@@ -127,7 +127,7 @@ export async function runAgentEngineTurn(
 }
 
 export async function cancelAgentEngineTurn(turnId: string): Promise<boolean> {
-  return invoke("agent_engine_cancel", { turnId });
+  return invokeTyped("agent_engine_cancel", { turnId });
 }
 
 export type StoredChatSession = {
@@ -153,14 +153,14 @@ export type StoredChatSession = {
 export async function loadDurableChats(
   projectPath: string,
 ): Promise<StoredChatSession[]> {
-  return invoke("agent_chat_load", { projectPath });
+  return invokeTyped("agent_chat_load", { projectPath });
 }
 
 export async function saveDurableChats(
   projectPath: string,
   sessions: StoredChatSession[],
 ): Promise<void> {
-  return invoke("agent_chat_save", { projectPath, sessions });
+  return invokeTyped("agent_chat_save", { projectPath, sessions });
 }
 
 /** Workspace tool for explicit slash commands (no LLM). */
@@ -173,7 +173,7 @@ export async function runAgentWorkspaceTool(
     typeof argumentsJson === "string"
       ? argumentsJson
       : JSON.stringify(argumentsJson ?? {});
-  return invoke("agent_workspace_tool", {
+  return invokeTyped("agent_workspace_tool", {
     projectPath,
     request: {
       toolName,
@@ -198,35 +198,35 @@ export async function getAgentPatch(
   projectPath: string,
   patchId: string,
 ): Promise<PatchRecord> {
-  return invoke("agent_patch_get", { projectPath, patchId });
+  return invokeTyped("agent_patch_get", { projectPath, patchId });
 }
 
 export async function applyAgentPatch(
   projectPath: string,
   patchId: string,
 ): Promise<PatchRecord> {
-  return invoke("agent_patch_apply", { projectPath, patchId });
+  return invokeTyped("agent_patch_apply", { projectPath, patchId });
 }
 
 export async function rejectAgentPatch(
   projectPath: string,
   patchId: string,
 ): Promise<PatchRecord> {
-  return invoke("agent_patch_reject", { projectPath, patchId });
+  return invokeTyped("agent_patch_reject", { projectPath, patchId });
 }
 
 export async function rollbackAgentPatch(
   projectPath: string,
   patchId: string,
 ): Promise<PatchRecord> {
-  return invoke("agent_patch_rollback", { projectPath, patchId });
+  return invokeTyped("agent_patch_rollback", { projectPath, patchId });
 }
 
 export async function summarizeAgentPatch(
   projectPath: string,
   patchId: string,
 ): Promise<string> {
-  return invoke("agent_patch_summary", { projectPath, patchId });
+  return invokeTyped("agent_patch_summary", { projectPath, patchId });
 }
 
 export type AgentRecipe = {
@@ -250,7 +250,7 @@ export type RecipeRunResult = {
 };
 
 export async function listAgentRecipes(projectPath: string): Promise<AgentRecipe[]> {
-  return invoke("agent_recipe_list", { projectPath });
+  return invokeTyped("agent_recipe_list", { projectPath });
 }
 
 export async function runAgentRecipe(
@@ -259,7 +259,7 @@ export async function runAgentRecipe(
   runKey?: string,
   patchId?: string,
 ): Promise<RecipeRunResult> {
-  return invoke("agent_recipe_run", {
+  return invokeTyped("agent_recipe_run", {
     projectPath,
     request: { recipeId, runKey, patchId: patchId ?? null },
   });
@@ -269,14 +269,14 @@ export async function suggestAgentRecipe(
   projectPath: string,
   changedPaths?: string[],
 ): Promise<string> {
-  return invoke("agent_recipe_suggest", {
+  return invokeTyped("agent_recipe_suggest", {
     projectPath,
     changedPaths: changedPaths ?? null,
   });
 }
 
 export async function cancelAgentRecipe(runKey: string): Promise<boolean> {
-  return invoke("agent_recipe_cancel", { runKey });
+  return invokeTyped("agent_recipe_cancel", { runKey });
 }
 
 export async function writeDelegateBrief(
@@ -284,7 +284,7 @@ export async function writeDelegateBrief(
   tool: string,
   summary: string,
 ): Promise<string> {
-  return invoke("agent_delegate_brief", {
+  return invokeTyped("agent_delegate_brief", {
     projectPath,
     request: { tool, summary },
   });
@@ -295,7 +295,7 @@ export async function recordDelegateLaunch(
   tool: string,
   opts?: { briefPath?: string; resumeSessionId?: string },
 ): Promise<string> {
-  return invoke("agent_delegate_record_launch", {
+  return invokeTyped("agent_delegate_record_launch", {
     projectPath,
     request: {
       tool,
@@ -309,7 +309,7 @@ export async function approveAgentHandoff(
   projectPath: string,
   handoffId: string,
 ): Promise<string> {
-  return invoke("agent_handoff_approve", { projectPath, handoffId });
+  return invokeTyped("agent_handoff_approve", { projectPath, handoffId });
 }
 
 /** Extract proposed patch id from tool summary / assistant text. */

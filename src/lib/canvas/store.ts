@@ -1,5 +1,5 @@
 import { computed, ref } from "vue";
-import { invoke } from "@tauri-apps/api/core";
+import { legacyInvoke as invoke } from "../ipc";
 
 export type CanvasNode = {
   id: string;

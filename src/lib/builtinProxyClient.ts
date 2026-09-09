@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invokeTyped as invoke } from "./ipc";
 
 export type BuiltInProxyStatus = {
   ownership: "built-in";

@@ -1,6 +1,6 @@
 // Openmesh file-based storage layer (Tauri only)
 // All data stored in ~/.openmesh/ (global) and <project>/.openmesh/ (per-project)
-import { invoke } from "@tauri-apps/api/core";
+import { invokeTyped, legacyInvoke } from "./ipc";
 import type {
 	Project,
 	Sprint,
@@ -35,141 +35,141 @@ export interface DocTreeNode {
 export const store = {
 	// Settings
 	async getSettings(): Promise<Settings> {
-		return invoke<Settings>("get_settings");
+		return invokeTyped<Settings>("get_settings");
 	},
 	async saveSettings(settings: Settings): Promise<void> {
-		return invoke("save_settings", { settings });
+		return invokeTyped("save_settings", { settings });
 	},
 
 	// Projects list
 	async getProjectsList(): Promise<string[]> {
-		return invoke<string[]>("get_projects_list");
+		return invokeTyped<string[]>("get_projects_list");
 	},
 	async addProjectToList(path: string): Promise<void> {
-		return invoke("add_project_to_list", { path });
+		return invokeTyped("add_project_to_list", { path });
 	},
 	async removeProjectFromList(path: string): Promise<void> {
-		return invoke("remove_project_from_list", { path });
+		return invokeTyped("remove_project_from_list", { path });
 	},
 
 	// App state
 	async getAppState(): Promise<AppState> {
-		return invoke<AppState>("get_app_state");
+		return invokeTyped<AppState>("get_app_state");
 	},
 	async saveAppState(state: AppState): Promise<void> {
-		return invoke("save_app_state", { state });
+		return invokeTyped("save_app_state", { state });
 	},
 
 	// Project init/read/delete
 	async initProject(projectPath: string): Promise<void> {
-		return invoke("init_project_cmd", { projectPath });
+		return invokeTyped("init_project_cmd", { projectPath });
 	},
 	async getProject(projectPath: string): Promise<Project | null> {
-		return invoke<Project | null>("get_project", { projectPath });
+		return invokeTyped<Project | null>("get_project", { projectPath });
 	},
 	async saveProject(projectPath: string, project: Project): Promise<void> {
-		return invoke("save_project", { projectPath, project });
+		return invokeTyped("save_project", { projectPath, project });
 	},
 	async deleteProjectData(projectPath: string): Promise<void> {
-		return invoke("delete_project_cmd", { projectPath });
+		return invokeTyped("delete_project_cmd", { projectPath });
 	},
 
 	// Project-scoped data
 	async getSessions(projectPath: string): Promise<AgentSession[]> {
-		return invoke<AgentSession[]>("get_sessions", { projectPath });
+		return legacyInvoke<AgentSession[]>("get_sessions", { projectPath });
 	},
 	async saveSessions(projectPath: string, sessions: AgentSession[]): Promise<void> {
-		return invoke("save_sessions", { projectPath, sessions });
+		return legacyInvoke("save_sessions", { projectPath, sessions });
 	},
 	async getSprint(projectPath: string): Promise<Sprint | null> {
-		return invoke<Sprint | null>("get_sprint", { projectPath });
+		return legacyInvoke<Sprint | null>("get_sprint", { projectPath });
 	},
 	async saveSprint(projectPath: string, sprint: Sprint): Promise<void> {
-		return invoke("save_sprint", { projectPath, sprint });
+		return legacyInvoke("save_sprint", { projectPath, sprint });
 	},
 	async getTasks(projectPath: string): Promise<Task[]> {
-		return invoke<Task[]>("get_tasks", { projectPath });
+		return legacyInvoke<Task[]>("get_tasks", { projectPath });
 	},
 	async saveTasks(projectPath: string, tasks: Task[]): Promise<void> {
-		return invoke("save_tasks", { projectPath, tasks });
+		return legacyInvoke("save_tasks", { projectPath, tasks });
 	},
 	async getPresets(projectPath: string): Promise<CommandPreset[]> {
-		return invoke<CommandPreset[]>("get_presets", { projectPath });
+		return legacyInvoke<CommandPreset[]>("get_presets", { projectPath });
 	},
 	async savePresets(projectPath: string, presets: CommandPreset[]): Promise<void> {
-		return invoke("save_presets", { projectPath, presets });
+		return legacyInvoke("save_presets", { projectPath, presets });
 	},
 	async getRecent(projectPath: string): Promise<RecentItem[]> {
-		return invoke<RecentItem[]>("get_recent", { projectPath });
+		return legacyInvoke<RecentItem[]>("get_recent", { projectPath });
 	},
 	async saveRecent(projectPath: string, items: RecentItem[]): Promise<void> {
-		return invoke("save_recent", { projectPath, items });
+		return legacyInvoke("save_recent", { projectPath, items });
 	},
 
 	// Docs (markdown files)
 	async listDocs(projectPath: string): Promise<FileEntry[]> {
-		return invoke<FileEntry[]>("list_docs", { projectPath });
+		return legacyInvoke<FileEntry[]>("list_docs", { projectPath });
 	},
 	async listDocsTree(projectPath: string): Promise<DocTreeNode[]> {
-		return invoke<DocTreeNode[]>("list_docs_tree", { projectPath });
+		return legacyInvoke<DocTreeNode[]>("list_docs_tree", { projectPath });
 	},
 	async readDoc(projectPath: string, filename: string): Promise<string> {
-		return invoke<string>("read_doc", { projectPath, filename });
+		return legacyInvoke<string>("read_doc", { projectPath, filename });
 	},
 	async writeDoc(projectPath: string, filename: string, content: string): Promise<void> {
-		return invoke("write_doc", { projectPath, filename, content });
+		return legacyInvoke("write_doc", { projectPath, filename, content });
 	},
 	async deleteDoc(projectPath: string, filename: string): Promise<void> {
-		return invoke("delete_doc", { projectPath, filename });
+		return legacyInvoke("delete_doc", { projectPath, filename });
 	},
 	async createDocFolder(projectPath: string, folderName: string): Promise<void> {
-		return invoke("create_doc_folder", { projectPath, folderName });
+		return legacyInvoke("create_doc_folder", { projectPath, folderName });
 	},
 	async renameDocFolder(projectPath: string, oldName: string, newName: string): Promise<void> {
-		return invoke("rename_doc_folder", { projectPath, oldName, newName });
+		return legacyInvoke("rename_doc_folder", { projectPath, oldName, newName });
 	},
 	async deleteDocFolder(projectPath: string, folderName: string): Promise<void> {
-		return invoke("delete_doc_folder", { projectPath, folderName });
+		return legacyInvoke("delete_doc_folder", { projectPath, folderName });
 	},
 	async moveDoc(projectPath: string, filename: string, targetFolder: string): Promise<void> {
-		return invoke("move_doc", { projectPath, filename, targetFolder });
+		return legacyInvoke("move_doc", { projectPath, filename, targetFolder });
 	},
 	async renameDoc(projectPath: string, oldFilename: string, newFilename: string): Promise<void> {
-		return invoke("rename_doc", { projectPath, oldFilename, newFilename });
+		return legacyInvoke("rename_doc", { projectPath, oldFilename, newFilename });
 	},
 
 	// Notes (markdown files)
 	async listNotes(projectPath: string): Promise<FileEntry[]> {
-		return invoke<FileEntry[]>("list_notes", { projectPath });
+		return legacyInvoke<FileEntry[]>("list_notes", { projectPath });
 	},
 	async readNote(projectPath: string, filename: string): Promise<string> {
-		return invoke<string>("read_note", { projectPath, filename });
+		return legacyInvoke<string>("read_note", { projectPath, filename });
 	},
 	async writeNote(projectPath: string, filename: string, content: string): Promise<void> {
-		return invoke("write_note", { projectPath, filename, content });
+		return legacyInvoke("write_note", { projectPath, filename, content });
 	},
 	async deleteNote(projectPath: string, filename: string): Promise<void> {
-		return invoke("delete_note", { projectPath, filename });
+		return legacyInvoke("delete_note", { projectPath, filename });
 	},
 	async renameNote(projectPath: string, oldFilename: string, newFilename: string): Promise<void> {
-		return invoke("rename_note", { projectPath, oldFilename, newFilename });
+		return legacyInvoke("rename_note", { projectPath, oldFilename, newFilename });
 	},
 	async importFile(projectPath: string, folder: string, filename: string, content: string): Promise<void> {
-		return invoke("import_file", { projectPath, folder, filename, content });
+		return legacyInvoke("import_file", { projectPath, folder, filename, content });
 	},
 
 	// Export
 	async exportProject(projectPath: string): Promise<string> {
-		return invoke<string>("export_project", { projectPath });
+		return legacyInvoke<string>("export_project", { projectPath });
 	},
 
 	// Reset all data
 	async resetAllData(): Promise<void> {
-		return invoke("reset_all_data_cmd");
+		return invokeTyped("reset_all_data_cmd");
 	},
 
 	// Work snapshot
 	async writeSnapshot(projectPath: string, filename: string, content: string): Promise<{ success: boolean; filename?: string; error?: string }> {
-		return invoke("write_snapshot", { projectPath, filename, content });
+		return legacyInvoke("write_snapshot", { projectPath, filename, content });
 	},
 };

@@ -4,7 +4,7 @@
 
 import type { PathValidation, FileEntry, AdapterResult } from "./types";
 import { getRuntimeKind } from "./environment";
-import { invoke } from "@tauri-apps/api/core";
+import { invokeTyped as invoke } from "../ipc";
 import { open } from "@tauri-apps/plugin-dialog";
 
 /**

@@ -1,7 +1,7 @@
 // OpenMesh Continuity Desktop Client — Dev Track 0.1.13
 // Thin wrappers around Tauri IPC for pending / digest / mesh / relay / online-proxy.
 
-import { invoke } from "@tauri-apps/api/core";
+import { invokeTyped, legacyInvoke } from "./ipc";
 
 export interface PendingQuestionItem {
   id: string;
@@ -141,20 +141,20 @@ export interface ContinuityHubSummary {
 export async function getContinuityHubSummary(
   projectPath: string,
 ): Promise<ContinuityHubSummary> {
-  return invoke<ContinuityHubSummary>("continuity_hub_summary", { projectPath });
+  return legacyInvoke<ContinuityHubSummary>("continuity_hub_summary", { projectPath });
 }
 
 export async function getPendingQuestions(
   projectPath: string,
 ): Promise<PendingQuestionsView> {
-  return invoke<PendingQuestionsView>("continuity_pending", { projectPath });
+  return legacyInvoke<PendingQuestionsView>("continuity_pending", { projectPath });
 }
 
 export async function getReturnDigest(
   projectPath: string,
   sinceHours?: number,
 ): Promise<ReturnDigest> {
-  return invoke<ReturnDigest>("continuity_digest", {
+  return legacyInvoke<ReturnDigest>("continuity_digest", {
     projectPath,
     sinceHours: sinceHours ?? null,
   });
@@ -163,14 +163,14 @@ export async function getReturnDigest(
 export async function listMeshPeers(
   projectPath: string,
 ): Promise<MeshPeerRecord[]> {
-  return invoke<MeshPeerRecord[]>("mesh_list_peers", { projectPath });
+  return legacyInvoke<MeshPeerRecord[]>("mesh_list_peers", { projectPath });
 }
 
 export async function listMeshEnvelopes(
   projectPath: string,
   mailbox?: "inbox" | "outbox" | "all",
 ): Promise<MeshEnvelopeSummary[]> {
-  return invoke<MeshEnvelopeSummary[]>("mesh_list_envelopes", {
+  return legacyInvoke<MeshEnvelopeSummary[]>("mesh_list_envelopes", {
     projectPath,
     mailbox: mailbox && mailbox !== "all" ? mailbox : null,
   });
@@ -207,7 +207,7 @@ export async function queryMeshPeer(
   question: string,
   opts?: { tier?: string; queryId?: string; includeRelayReceived?: boolean },
 ): Promise<MeshRemoteQueryAnswer> {
-  return invoke<MeshRemoteQueryAnswer>("mesh_query_peer", {
+  return legacyInvoke<MeshRemoteQueryAnswer>("mesh_query_peer", {
     projectPath,
     request: {
       peer,
@@ -222,13 +222,13 @@ export async function queryMeshPeer(
 export async function listRelayAudit(
   projectPath: string,
 ): Promise<RelayAuditEvent[]> {
-  return invoke<RelayAuditEvent[]>("relay_list_audit", { projectPath });
+  return legacyInvoke<RelayAuditEvent[]>("relay_list_audit", { projectPath });
 }
 
 export async function getOnlineProxyStatus(
   projectPath: string,
 ): Promise<OnlineProxyConfig | null> {
-  return invoke<OnlineProxyConfig | null>("online_proxy_status", {
+  return legacyInvoke<OnlineProxyConfig | null>("online_proxy_status", {
     projectPath,
   });
 }
@@ -241,7 +241,7 @@ export async function initOnlineProxy(
     useRelayReceived?: boolean;
   },
 ): Promise<OnlineProxyConfig> {
-  return invoke<OnlineProxyConfig>("online_proxy_init", {
+  return legacyInvoke<OnlineProxyConfig>("online_proxy_init", {
     projectPath,
     request: {
       ownerLabel: opts?.ownerLabel,
@@ -256,7 +256,7 @@ export async function askOnlineProxy(
   question: string,
   opts?: { tier?: string; answerId?: string },
 ): Promise<OnlineProxyAnswer> {
-  return invoke<OnlineProxyAnswer>("online_proxy_ask", {
+  return legacyInvoke<OnlineProxyAnswer>("online_proxy_ask", {
     projectPath,
     request: {
       question,
@@ -338,7 +338,7 @@ export interface OrgGraphView {
 export async function getTeamWorkspace(
   projectPath: string,
 ): Promise<TeamWorkspaceView | null> {
-  return invoke<TeamWorkspaceView | null>("team_workspace_status", {
+  return legacyInvoke<TeamWorkspaceView | null>("team_workspace_status", {
     projectPath,
   });
 }
@@ -346,7 +346,7 @@ export async function getTeamWorkspace(
 export async function getTeamTrustPolicy(
   projectPath: string,
 ): Promise<TeamTrustPolicyView | null> {
-  return invoke<TeamTrustPolicyView | null>("team_trust_policy_status", {
+  return legacyInvoke<TeamTrustPolicyView | null>("team_trust_policy_status", {
     projectPath,
   });
 }
@@ -354,13 +354,13 @@ export async function getTeamTrustPolicy(
 export async function listConnectors(
   projectPath: string,
 ): Promise<ConnectorDescriptorView[]> {
-  return invoke<ConnectorDescriptorView[]>("connector_list", { projectPath });
+  return legacyInvoke<ConnectorDescriptorView[]>("connector_list", { projectPath });
 }
 
 export async function getOrgGraph(
   projectPath: string,
 ): Promise<OrgGraphView | null> {
-  return invoke<OrgGraphView | null>("org_graph_show", { projectPath });
+  return legacyInvoke<OrgGraphView | null>("org_graph_show", { projectPath });
 }
 
 
@@ -385,7 +385,7 @@ export interface PilotPackView {
 }
 
 export async function getPilotStatus(projectPath: string): Promise<PilotPackView> {
-  return invoke<PilotPackView>("pilot_status", { projectPath });
+  return legacyInvoke<PilotPackView>("pilot_status", { projectPath });
 }
 
 
@@ -422,7 +422,7 @@ export interface RcPackView {
 }
 
 export async function getRcStatus(projectPath: string): Promise<RcPackView> {
-  return invoke<RcPackView>("rc_status", { projectPath });
+  return legacyInvoke<RcPackView>("rc_status", { projectPath });
 }
 
 // ── LAN Relay + Live Ask (0.1.22) ────────────────────────────────────
@@ -464,7 +464,7 @@ export async function lanServeStart(
     exposeLan?: boolean;
   },
 ): Promise<LanServeStatus> {
-  return invoke<LanServeStatus>("lan_serve_start", {
+  return invokeTyped<LanServeStatus>("lan_serve_start", {
     projectPath,
     request: {
       host: opts?.host,
@@ -477,20 +477,20 @@ export async function lanServeStart(
 }
 
 export async function lanServeStop(): Promise<LanServeStatus> {
-  return invoke<LanServeStatus>("lan_serve_stop");
+  return invokeTyped<LanServeStatus>("lan_serve_stop");
 }
 
 export async function lanServeStatus(
   projectPath: string,
 ): Promise<LanServeStatus> {
-  return invoke<LanServeStatus>("lan_serve_status", { projectPath });
+  return invokeTyped<LanServeStatus>("lan_serve_status", { projectPath });
 }
 
 export async function lanDiscover(
   projectPath: string,
   opts?: { seconds?: number; udpPort?: number },
 ): Promise<LanPeerInfo[]> {
-  return invoke<LanPeerInfo[]>("lan_discover", {
+  return invokeTyped<LanPeerInfo[]>("lan_discover", {
     projectPath,
     request: {
       seconds: opts?.seconds,
@@ -502,13 +502,13 @@ export async function lanDiscover(
 export async function lanListLastPeers(
   projectPath: string,
 ): Promise<LanPeerInfo[]> {
-  return invoke<LanPeerInfo[]>("lan_list_last_peers", { projectPath });
+  return invokeTyped<LanPeerInfo[]>("lan_list_last_peers", { projectPath });
 }
 
 export async function lanListApprovedPackages(
   projectPath: string,
 ): Promise<string[]> {
-  return invoke<string[]>("lan_list_approved_packages", { projectPath });
+  return invokeTyped<string[]>("lan_list_approved_packages", { projectPath });
 }
 
 export async function lanSendPackage(
@@ -517,7 +517,7 @@ export async function lanSendPackage(
   to: string,
   token?: string,
 ): Promise<unknown> {
-  return invoke("lan_send_package", {
+  return invokeTyped("lan_send_package", {
     projectPath,
     request: { packageId, to, token },
   });
@@ -528,7 +528,7 @@ export async function lanAskPeer(
   question: string,
   opts?: { tier?: string; token?: string },
 ): Promise<MeshRemoteQueryAnswer> {
-  return invoke<MeshRemoteQueryAnswer>("lan_ask_peer", {
+  return invokeTyped<MeshRemoteQueryAnswer>("lan_ask_peer", {
     request: {
       to,
       question,
@@ -562,7 +562,7 @@ export interface LanPeerPresence {
 export async function lanProbePresence(
   targets: Array<{ address: string; lastSeenAt?: string }>,
 ): Promise<LanPeerPresence[]> {
-  return invoke<LanPeerPresence[]>("lan_probe_presence", {
+  return invokeTyped<LanPeerPresence[]>("lan_probe_presence", {
     request: {
       targets: targets.map((t) => ({
         address: t.address,
@@ -573,7 +573,7 @@ export async function lanProbePresence(
 }
 
 export async function lanProbeAddress(address: string): Promise<LanPeerPresence> {
-  return invoke<LanPeerPresence>("lan_probe_address", { address });
+  return invokeTyped<LanPeerPresence>("lan_probe_address", { address });
 }
 
 export async function addMeshPeer(
@@ -587,7 +587,7 @@ export async function addMeshPeer(
     lanAddress?: string;
   },
 ): Promise<MeshPeerRecord> {
-  return invoke<MeshPeerRecord>("mesh_add_peer", {
+  return legacyInvoke<MeshPeerRecord>("mesh_add_peer", {
     projectPath,
     request: {
       label: opts.label,
@@ -604,7 +604,7 @@ export async function initTeamWorkspace(
   projectPath: string,
   opts: { name: string; ownerLabel?: string; teamId?: string },
 ): Promise<TeamWorkspaceView> {
-  return invoke<TeamWorkspaceView>("team_init", {
+  return legacyInvoke<TeamWorkspaceView>("team_init", {
     projectPath,
     request: {
       name: opts.name,
@@ -625,7 +625,7 @@ export async function addTeamMember(
     remoteWorkspaceId?: string;
   },
 ): Promise<TeamWorkspaceView> {
-  return invoke<TeamWorkspaceView>("team_add_member", {
+  return legacyInvoke<TeamWorkspaceView>("team_add_member", {
     projectPath,
     request: {
       label: opts.label,
@@ -642,7 +642,7 @@ export async function removeTeamMember(
   projectPath: string,
   memberId: string,
 ): Promise<TeamWorkspaceView> {
-  return invoke<TeamWorkspaceView>("team_remove_member", {
+  return legacyInvoke<TeamWorkspaceView>("team_remove_member", {
     projectPath,
     request: { memberId },
   });
@@ -651,14 +651,14 @@ export async function removeTeamMember(
 export async function initTeamTrustPolicy(
   projectPath: string,
 ): Promise<TeamTrustPolicyView> {
-  return invoke<TeamTrustPolicyView>("team_trust_init", { projectPath });
+  return legacyInvoke<TeamTrustPolicyView>("team_trust_init", { projectPath });
 }
 
 export async function setTeamTrustRemoteQuery(
   projectPath: string,
   enabled: boolean,
 ): Promise<TeamTrustPolicyView> {
-  return invoke<TeamTrustPolicyView>("team_trust_set_remote_query", {
+  return legacyInvoke<TeamTrustPolicyView>("team_trust_set_remote_query", {
     projectPath,
     request: { enabled },
   });
@@ -668,7 +668,7 @@ export async function setTeamTrustQueryMode(
   projectPath: string,
   mode: "allow-all" | "allowlist-only" | "deny-all" | string,
 ): Promise<TeamTrustPolicyView> {
-  return invoke<TeamTrustPolicyView>("team_trust_set_query_mode", {
+  return legacyInvoke<TeamTrustPolicyView>("team_trust_set_query_mode", {
     projectPath,
     request: { mode },
   });
@@ -678,7 +678,7 @@ export async function addTeamTrustAllowlist(
   projectPath: string,
   opts: { memberId?: string; meshPeerId?: string; note?: string },
 ): Promise<TeamTrustPolicyView> {
-  return invoke<TeamTrustPolicyView>("team_trust_allowlist_add", {
+  return legacyInvoke<TeamTrustPolicyView>("team_trust_allowlist_add", {
     projectPath,
     request: {
       memberId: opts.memberId,
@@ -692,7 +692,7 @@ export async function removeTeamTrustAllowlist(
   projectPath: string,
   opts: { memberId?: string; meshPeerId?: string },
 ): Promise<TeamTrustPolicyView> {
-  return invoke<TeamTrustPolicyView>("team_trust_allowlist_remove", {
+  return legacyInvoke<TeamTrustPolicyView>("team_trust_allowlist_remove", {
     projectPath,
     request: {
       memberId: opts.memberId,
@@ -714,7 +714,7 @@ export async function listTeamTrustAudit(
     at: string;
   }>
 > {
-  return invoke("team_trust_audit_list", {
+  return legacyInvoke("team_trust_audit_list", {
     projectPath,
     limit: limit ?? 30,
   });
@@ -741,7 +741,7 @@ export async function lanChatSend(
   text: string,
   opts?: { fromLabel?: string },
 ): Promise<LanChatMessageView> {
-  return invoke<LanChatMessageView>("lan_chat_send", {
+  return invokeTyped<LanChatMessageView>("lan_chat_send", {
     projectPath,
     request: {
       to,
@@ -756,9 +756,27 @@ export async function lanChatList(
   peerKey?: string,
   limit?: number,
 ): Promise<LanChatMessageView[]> {
-  return invoke<LanChatMessageView[]>("lan_chat_list", {
+  return invokeTyped<LanChatMessageView[]>("lan_chat_list", {
     projectPath,
     peerKey: peerKey ?? null,
     limit: limit ?? null,
   });
+}
+
+export async function lanPairCreate(
+  label: string,
+  capabilities?: string,
+): Promise<unknown> {
+  return invokeTyped("lan_pair_create", {
+    label,
+    capabilities: capabilities ?? null,
+  });
+}
+
+export async function lanPairList(): Promise<unknown> {
+  return invokeTyped("lan_pair_list");
+}
+
+export async function lanPairRevoke(peerId: string): Promise<unknown> {
+  return invokeTyped("lan_pair_revoke", { peerId });
 }

@@ -1,7 +1,7 @@
 // Environment detection for Openmesh
 // Determines whether running in web browser or Tauri desktop environment
 
-import { invoke } from "@tauri-apps/api/core";
+import { invokeTyped as invoke } from "../ipc";
 import type { RuntimeKind } from "./types";
 
 /**

@@ -1,5 +1,5 @@
 import type { Router } from "vue-router";
-import { invoke } from "@tauri-apps/api/core";
+import { legacyInvoke as invoke } from "../ipc";
 import { cancelAgentEngineTurn } from "../agentEngineClient";
 import { setAppContext } from "../appActions/context";
 import { runVoiceBridgeTurn } from "../agentChat/voiceBridge";

@@ -3,7 +3,7 @@
  * Tauri: portable-pty sessions. Web: mocked failure (desktop-only).
  */
 
-import { invoke } from "@tauri-apps/api/core";
+import { invokeTyped } from "../ipc";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getRuntimeKind } from "./environment";
 
@@ -32,7 +32,7 @@ export async function createPty(opts: {
   if (runtime !== "tauri") {
     throw new Error("Embedded terminal requires the desktop app.");
   }
-  return invoke<PtyCreateResult>("pty_create", {
+  return invokeTyped<PtyCreateResult>("pty_create", {
     id: opts.id,
     cwd: opts.cwd,
     cols: opts.cols ?? null,
@@ -42,7 +42,7 @@ export async function createPty(opts: {
 
 export async function writePty(id: string, data: string): Promise<void> {
   if (getRuntimeKind() !== "tauri") return;
-  await invoke("pty_write", { id, data });
+  await invokeTyped("pty_write", { id, data });
 }
 
 export async function resizePty(
@@ -51,17 +51,17 @@ export async function resizePty(
   rows: number,
 ): Promise<void> {
   if (getRuntimeKind() !== "tauri") return;
-  await invoke("pty_resize", { id, cols, rows });
+  await invokeTyped("pty_resize", { id, cols, rows });
 }
 
 export async function killPty(id: string): Promise<void> {
   if (getRuntimeKind() !== "tauri") return;
-  await invoke("pty_kill", { id });
+  await invokeTyped("pty_kill", { id });
 }
 
 export async function killAllPtys(): Promise<void> {
   if (getRuntimeKind() !== "tauri") return;
-  await invoke("pty_kill_all");
+  await invokeTyped("pty_kill_all");
 }
 
 export async function listenPtyData(

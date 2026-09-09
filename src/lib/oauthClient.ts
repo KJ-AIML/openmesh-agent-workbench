@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invokeTyped as invoke } from "./ipc";
 
 /**
  * OpenMesh-owned OAuth client contracts. The legacy command names remain so

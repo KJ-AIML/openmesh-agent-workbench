@@ -4,7 +4,7 @@
 
 import type { TerminalOptions, AdapterResult } from "./types";
 import { getRuntimeKind } from "./environment";
-import { invoke } from "@tauri-apps/api/core";
+import { invokeTyped } from "../ipc";
 
 interface TerminalLaunchResult {
 	success: boolean;
@@ -27,7 +27,7 @@ export async function openTerminal(
 
 	if (runtime === "tauri") {
 		try {
-			const result = await invoke<TerminalLaunchResult>("open_terminal", {
+			const result = await invokeTyped<TerminalLaunchResult>("open_terminal", {
 				cwd: options.workingDir,
 			});
 
@@ -79,7 +79,7 @@ export async function openAgentCli(
 
 	if (runtime === "tauri") {
 		try {
-			const result = await invoke<AgentCliLaunchResult>("open_agent_cli", {
+			const result = await invokeTyped<AgentCliLaunchResult>("open_agent_cli", {
 				tool,
 				cwd,
 				cliPath: cliPath || null,
@@ -150,7 +150,7 @@ export async function runCommandPreset(
 
 	if (runtime === "tauri") {
 		try {
-			const result = await invoke<{ success: boolean; error?: string }>(
+			const result = await invokeTyped<{ success: boolean; error?: string }>(
 				"run_command_preset",
 				{
 					command,
