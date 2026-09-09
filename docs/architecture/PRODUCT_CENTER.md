@@ -69,4 +69,4 @@ Infrastructure and continuity exist to serve the workbench. They are not indepen
 Any future feature must answer: **does this improve the agent workbench?**
 If the only answer is that it expands the proxy, network, or continuity *product*, it does not belong in core v0.2 scope.
 
-See [ADR-0001](./ADR-0001-agent-workbench-center.md) and the implemented [trust model](./TRUST_MODEL.md).
+See [ADR-0001](./ADR-0001-agent-workbench-center.md), the implemented [trust model](./TRUST_MODEL.md), and the v0.2 [information architecture](./V0.2_INFORMATION_ARCHITECTURE.md).
