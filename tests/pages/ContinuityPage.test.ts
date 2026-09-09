@@ -142,13 +142,10 @@ describe("ContinuityPage", () => {
     const wrapper = mount(ContinuityPage);
     await nextTick();
     await nextTick();
-    expect(wrapper.text()).toContain("Continuity");
-    // Grouped nav (You / Team / Mesh / Gate) — not the old flat tab strip.
-    expect(wrapper.text()).toContain("You");
-    expect(wrapper.text()).toContain("Team");
-    expect(wrapper.text()).toContain("Mesh");
-    expect(wrapper.text()).toContain("Gate");
-    // Default group "You" shows Pending + Digest.
+    expect(wrapper.text()).toContain("Pending & LAN");
+    expect(wrapper.text()).toContain("Attention");
+    expect(wrapper.text()).toContain("Share");
+    expect(wrapper.text()).toContain("Advanced");
     expect(wrapper.text()).toContain("Pending");
     expect(wrapper.text()).toContain("Digest");
   });
@@ -172,23 +169,33 @@ describe("ContinuityPage", () => {
     expect(wrapper.text()).toContain("1 open");
   });
 
-  it("Mesh group exposes Peers, LAN, Chat, Relay, and Proxy tabs", async () => {
+  it("Share and Advanced expose LAN, handoff, and diagnostic tabs", async () => {
     const wrapper = mount(ContinuityPage);
     await flushPromises();
 
-    const meshGroup = wrapper
+    const shareGroup = wrapper
       .findAll('[role="tab"]')
-      .find((b) => b.text().trim() === "Mesh");
-    expect(meshGroup).toBeTruthy();
-    await meshGroup!.trigger("click");
+      .find((b) => b.text().trim() === "Share");
+    expect(shareGroup).toBeTruthy();
+    await shareGroup!.trigger("click");
     await nextTick();
 
-    const text = wrapper.text();
-    expect(text).toContain("Peers");
-    expect(text).toContain("Relay");
-    expect(text).toContain("Proxy");
+    let text = wrapper.text();
     expect(text).toContain("LAN");
+    expect(text).toContain("Relay");
     expect(text).toContain("Chat");
+
+    const advancedGroup = wrapper
+      .findAll('[role="tab"]')
+      .find((b) => b.text().trim() === "Advanced");
+    expect(advancedGroup).toBeTruthy();
+    await advancedGroup!.trigger("click");
+    await nextTick();
+
+    text = wrapper.text();
+    expect(text).toContain("Peers");
+    expect(text).toContain("Team");
+    expect(text).toContain("Proxy");
   });
 
   it("LAN tab shows listener controls and presence probe UI", async () => {
@@ -219,12 +226,12 @@ describe("ContinuityPage", () => {
 
     await wrapper
       .findAll('[role="tab"]')
-      .find((b) => b.text().trim() === "Mesh")!
+      .find((b) => b.text().trim() === "Share")!
       .trigger("click");
     await nextTick();
     await wrapper
       .findAll('[role="tab"]')
-      .find((b) => b.text().includes("LAN"))!
+      .find((b) => b.text().trim() === "LAN")!
       .trigger("click");
     await flushPromises();
     await nextTick();
@@ -246,12 +253,12 @@ describe("ContinuityPage", () => {
 
     await wrapper
       .findAll('[role="tab"]')
-      .find((b) => b.text().trim() === "Mesh")!
+      .find((b) => b.text().trim() === "Advanced")!
       .trigger("click");
     await nextTick();
     await wrapper
       .findAll('[role="tab"]')
-      .find((b) => b.text().includes("Proxy"))!
+      .find((b) => b.text().trim() === "Proxy")!
       .trigger("click");
     await flushPromises();
     await nextTick();
@@ -266,7 +273,7 @@ describe("ContinuityPage", () => {
 
     await wrapper
       .findAll('[role="tab"]')
-      .find((b) => b.text().trim() === "Mesh")!
+      .find((b) => b.text().trim() === "Advanced")!
       .trigger("click");
     await nextTick();
     await flushPromises();
@@ -287,10 +294,14 @@ describe("ContinuityPage", () => {
 
     await wrapper
       .findAll('[role="tab"]')
+      .find((b) => b.text().trim() === "Advanced")!
+      .trigger("click");
+    await nextTick();
+    await wrapper
+      .findAll('[role="tab"]')
       .find((b) => b.text().trim() === "Team")!
       .trigger("click");
     await nextTick();
-    // Group Team → first tab is Team (workspace)
     await flushPromises();
 
     expect(getTeamWorkspace).toHaveBeenCalledWith("/tmp/test");
@@ -302,6 +313,11 @@ describe("ContinuityPage", () => {
     const wrapper = mount(ContinuityPage);
     await flushPromises();
 
+    await wrapper
+      .findAll('[role="tab"]')
+      .find((b) => b.text().trim() === "Advanced")!
+      .trigger("click");
+    await nextTick();
     await wrapper
       .findAll('[role="tab"]')
       .find((b) => b.text().trim() === "Team")!
@@ -372,6 +388,11 @@ describe("ContinuityPage", () => {
     const wrapper = mount(ContinuityPage);
     await flushPromises();
 
+    await wrapper
+      .findAll('[role="tab"]')
+      .find((b) => b.text().trim() === "Advanced")!
+      .trigger("click");
+    await nextTick();
     await wrapper
       .findAll('[role="tab"]')
       .find((b) => b.text().trim() === "Team")!

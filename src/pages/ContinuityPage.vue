@@ -95,12 +95,12 @@ type TabId =
   | "org"
   | "pilot"
   | "rc";
-type GroupId = "you" | "team" | "mesh" | "gate";
+type GroupId = "attention" | "share" | "advanced";
 
 const { currentProject, currentProjectPath } = useStore();
 
 const tab = ref<TabId>("pending");
-const group = ref<GroupId>("you");
+const group = ref<GroupId>("attention");
 const loading = ref(false);
 const error = ref<string | null>(null);
 const summary = ref<ContinuityHubSummary | null>(null);
@@ -169,10 +169,22 @@ const chatMessages = ref<LanChatMessageView[]>([]);
 const hasProject = computed(() => !!currentProjectPath.value);
 
 const groups: { id: GroupId; label: string; tabs: TabId[] }[] = [
-  { id: "you", label: "You", tabs: ["pending", "digest"] },
-  { id: "team", label: "Team", tabs: ["team", "trust", "connectors", "org"] },
-  { id: "mesh", label: "Mesh", tabs: ["mesh", "lan", "chat", "relay", "online-proxy"] },
-  { id: "gate", label: "Gate", tabs: ["pilot", "rc"] },
+  { id: "attention", label: "Attention", tabs: ["pending", "digest"] },
+  { id: "share", label: "Share", tabs: ["lan", "relay", "chat"] },
+  {
+    id: "advanced",
+    label: "Advanced",
+    tabs: [
+      "mesh",
+      "team",
+      "trust",
+      "connectors",
+      "org",
+      "online-proxy",
+      "pilot",
+      "rc",
+    ],
+  },
 ];
 
 const tabMeta: Record<TabId, { label: string; icon: typeof Inbox }> = {
@@ -915,9 +927,10 @@ onUnmounted(() => {
   <div class="cont animate-fade-in">
     <header class="cont__head">
       <div class="cont__head-main">
-        <h1 class="cont__title">Continuity</h1>
+        <p class="text-caption uppercase tracking-[0.18em] text-muted">Runtime</p>
+        <h1 class="cont__title">Pending &amp; LAN</h1>
         <p v-if="hasProject && statusLine" class="cont__meta">{{ statusLine }}</p>
-        <p v-else-if="!hasProject" class="cont__meta">Select a project to load surfaces</p>
+        <p v-else-if="!hasProject" class="cont__meta">Open a project to see pending work and local peers.</p>
       </div>
       <button
         type="button"
@@ -934,11 +947,11 @@ onUnmounted(() => {
       v-if="!hasProject"
       class="workbench-card p-8 text-center text-[13px] text-muted"
     >
-      No project selected. Choose a project in the sidebar to view continuity.
+      No project selected. Choose a project in the sidebar to see pending work and LAN peers.
     </div>
 
     <template v-else>
-      <nav class="om-nav" aria-label="Continuity sections">
+      <nav class="om-nav" aria-label="Pending and LAN sections">
         <div class="om-seg" role="tablist" aria-label="Section groups">
           <button
             v-for="g in groups"
@@ -1026,14 +1039,9 @@ onUnmounted(() => {
             v-if="pending.items.length === 0"
             class="cont__empty"
           >
-            <p class="cont__empty-title">You're clear</p>
+            <p class="cont__empty-title">Nothing needs attention</p>
             <p class="cont__empty-body">
-              No pending questions
-              <span class="text-muted">
-                · proxy {{ pending.sourceCounts.proxyPending }}
-                · attention {{ pending.sourceCounts.continuityAttention }}
-                · signal {{ pending.sourceCounts.unresolvedSignal }}
-              </span>
+              When Chat records a verify or a pending question, it shows up here.
             </p>
           </div>
           <div
