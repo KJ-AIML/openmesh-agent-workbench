@@ -1,17 +1,20 @@
 # OpenMesh Handoff — Post v0.1.21 (1.0 RC Program)
 
-**Date:** 2026-08-03  
-**Repo:** `openmesh-agent-workbench` (`main`)  
-**Latest release:** [v0.1.21](https://github.com/KJ-AIML/openmesh-agent-workbench/releases/tag/v0.1.21)  
-**Audience:** Next human or agent session continuing OpenMesh shipping / dogfood / 1.0.0  
-**Status:** Sequential matrix **0.1.15 → 0.1.21 RELEASED**. Open PRs: **none**. Next track: **1.0.0 gate only**.  
+> **Historical / Superseded.** This handoff document reflects the pre-v0.2 1.0.0 RC planning program.
+> The active program is **v0.2.0 unified agent workbench** — see [`docs/architecture/PRODUCT_CENTER.md`](../architecture/PRODUCT_CENTER.md) and [`docs/release/V0.2_PRODUCT_TRUTH_AUDIT.md`](../release/V0.2_PRODUCT_TRUTH_AUDIT.md).
+
+**Date:** 2026-08-03
+**Repo:** `openmesh-agent-workbench` (`main`)
+**Latest release:** [v0.1.21](https://github.com/KJ-AIML/openmesh-agent-workbench/releases/tag/v0.1.21)
+**Audience:** Next human or agent session continuing OpenMesh shipping / dogfood / 1.0.0
+**Status:** HISTORICAL — superseded by v0.2.0 program.
 **Dogfood (2026-08-03):** CLI pilot+rc **PASS** on temp lab; `cargo test --workspace` **PASS** (1895/0/1); GUI + real-team dogfood **not performed**.
 
 ---
 
 ## 1. TL;DR for the next agent
 
-1. Work only in **target repo**:  
+1. Work only in **target repo**:
    `repos/openmesh-agent-workbench` (Heli parent: `openmesh-ws`).
 2. **Do not invent features** under RC freeze unless fixing P0/P1 or amending Product Bible.
 3. Recommended first action: **dogfood** `pilot check` + `rc check` on a real project.
@@ -34,8 +37,8 @@
 | v0.1.20 | Enterprise Pilot Readiness | #12 |
 | **v0.1.21** | **1.0 RC Program** | **#13** |
 
-Unlock matrix: `docs/development/unlock-matrix-all.md`  
-Ledger: `docs/development/execution-ledger.md`  
+Unlock matrix: `docs/development/unlock-matrix-all.md`
+Ledger: `docs/development/execution-ledger.md`
 Changelog: `CHANGELOG.md`
 
 ### Global invariants (never waive)
@@ -63,12 +66,12 @@ Changelog: `CHANGELOG.md`
 | Mesh / proxy / relay | `mesh`, `online_proxy`, `relay`, … | existing mesh/online-proxy/relay | Continuity tabs |
 | Sprint / chrome | Vue only | — | Titlebar, Sidebar, Sprint, Home |
 
-**Storage root per project:** `<project>/.openmesh/`  
+**Storage root per project:** `<project>/.openmesh/`
 Notable new dirs: `team/`, `team-cloud/`, `trust-admin/`, `connectors/`, `pilot/`, `rc/`.
 
-**Desktop chrome (macOS):**  
-`src-tauri/tauri.macos.conf.json` — Overlay titlebar, `trafficLightPosition` `{x:16,y:20}`.  
-Project name chip on **titlebar right**; sidebar under traffic lights is empty drag rail.  
+**Desktop chrome (macOS):**
+`src-tauri/tauri.macos.conf.json` — Overlay titlebar, `trafficLightPosition` `{x:16,y:20}`.
+Project name chip on **titlebar right**; sidebar under traffic lights is empty drag rail.
 Dock icon regenerated with safe padding (`src-tauri/icons/`).
 
 **Sidebar IA:** Work · Team/Mesh · Agents · System (collapsed by default).
@@ -118,12 +121,12 @@ openmesh-cli org graph show --project "$PROJ"
 npm run tauri:dev
 ```
 
-- [ ] macOS traffic lights not glued to top; dock icon not oversized  
-- [ ] Project name on **nav right** (not under lights)  
-- [ ] Sidebar groups readable; System collapsed  
-- [ ] Sprint: empty board, no mock seed tasks; add + drag columns  
-- [ ] Continuity: Team / Trust / Connectors / Org / Pilot / RC tabs load without panic  
-- [ ] Agent Sessions: no permanent “Mock” badge; Scan empty state works  
+- [ ] macOS traffic lights not glued to top; dock icon not oversized
+- [ ] Project name on **nav right** (not under lights)
+- [ ] Sidebar groups readable; System collapsed
+- [ ] Sprint: empty board, no mock seed tasks; add + drag columns
+- [ ] Continuity: Team / Trust / Connectors / Org / Pilot / RC tabs load without panic
+- [ ] Agent Sessions: no permanent “Mock” badge; Scan empty state works
 
 ### Verify suite (pre-release always)
 
@@ -139,15 +142,15 @@ npm run typecheck
 
 Plan: `docs/development/openmesh-1.0.0-execution-plan.md`
 
-**Mission:** Ship 1.0 when product gates hold at real team scale.  
+**Mission:** Ship 1.0 when product gates hold at real team scale.
 **Non-goals:** Scope creep without Product Bible amendment.
 
 Suggested 1.0.0 package (implementation still open):
 
-1. **Gate verification pack** — formal evidence that RC PASS holds (pilot + rc + regression matrix + dogfood notes).  
-2. **Version bump** to `1.0.0` across package.json / Cargo crates / tauri.conf.  
-3. **CHANGELOG + ledger + unlock matrix** → RELEASED.  
-4. **Tag `v1.0.0` + GitHub release.**  
+1. **Gate verification pack** — formal evidence that RC PASS holds (pilot + rc + regression matrix + dogfood notes).
+2. **Version bump** to `1.0.0` across package.json / Cargo crates / tauri.conf.
+3. **CHANGELOG + ledger + unlock matrix** → RELEASED.
+4. **Tag `v1.0.0` + GitHub release.**
 5. Optional: thin Desktop “1.0 status” surface if useful; not required for gate.
 
 Do **not** treat 1.0.0 as another feature dump — it is a **gate**.
@@ -177,9 +180,9 @@ export SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
 export PATH="/opt/homebrew/bin:$HOME/.cargo/bin:$PATH"
 ```
 
-- Node ≥ 20, `npm` scripts: `typecheck`, `test`, `verify`, `tauri:dev`  
-- Rust workspace: `openmesh-core`, `openmesh-cli`, Tauri crate `openmesh`  
-- Parent Heli workspace: `openmesh-ws` — follow `Agents.md` → harness adapters when required  
+- Node ≥ 20, `npm` scripts: `typecheck`, `test`, `verify`, `tauri:dev`
+- Rust workspace: `openmesh-core`, `openmesh-cli`, Tauri crate `openmesh`
+- Parent Heli workspace: `openmesh-ws` — follow `Agents.md` → harness adapters when required
 
 ---
 
@@ -203,9 +206,9 @@ CHANGELOG.md
 
 Ship wave after **Unlock all** (0.1.15–1.0.0 authorized):
 
-- Desktop: macOS chrome, project name on nav, sprint without mock seeds, dock icon padding  
-- Domain: team → cloud → trust → connectors → org → pilot → rc  
-- All cut as tags `v0.1.15` … `v0.1.21` with PRs #7–#13  
+- Desktop: macOS chrome, project name on nav, sprint without mock seeds, dock icon padding
+- Domain: team → cloud → trust → connectors → org → pilot → rc
+- All cut as tags `v0.1.15` … `v0.1.21` with PRs #7–#13
 
 **Open work intentionally left:** GUI smoke; **real multi-person** RC dogfood; **1.0.0** gate package.
 
@@ -215,10 +218,10 @@ Ship wave after **Unlock all** (0.1.15–1.0.0 authorized):
 
 Mark complete when:
 
-- [x] Read this doc + unlock matrix + latest ledger entry *(2026-08-03 dogfood session)*  
-- [x] `main` at / past `v0.1.21`; `git status` clean or understood  
-- [x] Ran or explicitly skipped dogfood with reason *(CLI+tests ran; GUI skipped)*  
-- [x] Either fixed P0/P1 from dogfood **or** started 1.0.0 gate work **or** closed session with status *(flake test fix + docs/ledger update; 1.0.0 not started)*  
+- [x] Read this doc + unlock matrix + latest ledger entry *(2026-08-03 dogfood session)*
+- [x] `main` at / past `v0.1.21`; `git status` clean or understood
+- [x] Ran or explicitly skipped dogfood with reason *(CLI+tests ran; GUI skipped)*
+- [x] Either fixed P0/P1 from dogfood **or** started 1.0.0 gate work **or** closed session with status *(flake test fix + docs/ledger update; 1.0.0 not started)*
 
 **Still open for 1.0.0 readiness:** GUI Continuity smoke (`npm run tauri:dev`); RC PASS evidence on a **real team** project (not only `/tmp` lab).
 

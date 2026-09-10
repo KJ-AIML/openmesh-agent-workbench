@@ -16,7 +16,10 @@ export function isTauriRuntime(): boolean {
   const w = window as Window & {
     __TAURI_INTERNALS__?: unknown;
     isTauri?: boolean;
+    __OPENMESH_RUNTIME__?: "tauri" | "web";
   };
+  if (w.__OPENMESH_RUNTIME__ === "web") return false;
+  if (w.__OPENMESH_RUNTIME__ === "tauri") return true;
   return typeof w.__TAURI_INTERNALS__ !== "undefined" || w.isTauri === true;
 }
 

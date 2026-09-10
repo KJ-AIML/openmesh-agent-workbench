@@ -1,6 +1,6 @@
 {
   "name": "openmesh-agent-workbench",
-  "version": "0.1.40",
+  "version": "0.2.0-rc.1",
   "private": true,
   "type": "module",
   "packageManager": "npm@11.6.2",
@@ -20,9 +20,11 @@
     "test:e2e:ui": "PLAYWRIGHT_CHROMIUM_USE_HEADLESS_SHELL=0 playwright test --ui",
     "test:e2e:install": "playwright install chromium",
     "check:release-workflow": "node scripts/check-release-workflow.mjs",
+    "check:version-consistency": "node scripts/check-version-consistency.mjs 0.2.0-rc.1",
     "check:ipc": "node scripts/check-ipc-contract.mjs",
     "check:tauri-security": "node scripts/check-tauri-security.mjs",
     "verify": "npm run typecheck && npm run lint && npm run test && npm run check:ipc && npm run check:tauri-security && npm run check:release-workflow",
+    "verify:rc": "node scripts/verify-rc.mjs",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"

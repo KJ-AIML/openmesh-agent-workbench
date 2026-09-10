@@ -1,7 +1,9 @@
 # Dogfood checklist — OpenMesh Desktop v0.1.40
 
-**Build / tag:** `v0.1.40`
-**Purpose:** release smoke for the OpenMesh-owned proxy runtime and desktop surfaces.
+> **Historical / Superseded.** This checklist is a historical dogfood record for `v0.1.40`.
+> For the current v0.2 release candidate test matrix, see [`docs/release/V0.2_RC_MATRIX.md`](./release/V0.2_RC_MATRIX.md).
+
+**Build / tag:** `v0.1.40` (Historical)
 
 ## Release and launch
 

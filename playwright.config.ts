@@ -7,8 +7,15 @@ const root = path.dirname(fileURLToPath(import.meta.url));
 
 /** Prefer a complete local Chromium (manual/ditto extract or playwright install). */
 function resolveChromiumExecutable(): string | undefined {
+  if (
+    process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH &&
+    fs.existsSync(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH)
+  ) {
+    return process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+  }
+
+  const userHome = process.env.HOME || "";
   const candidates = [
-    process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
     path.join(
       root,
       ".pw-browsers/chromium-1161/chrome-mac/Chromium.app/Contents/MacOS/Chromium",
@@ -17,15 +24,18 @@ function resolveChromiumExecutable(): string | undefined {
       root,
       ".playwright-browsers/chromium-1161/chrome-mac/Chromium.app/Contents/MacOS/Chromium",
     ),
+    path.join(
+      userHome,
+      "Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+    ),
+    path.join(
+      userHome,
+      "Library/Caches/ms-playwright/chromium-1223/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing",
+    ),
   ].filter((x): x is string => !!x);
 
   for (const candidate of candidates) {
-    // Require Frameworks sibling so incomplete sandbox extracts are skipped.
-    const frameworks = path.resolve(
-      path.dirname(candidate),
-      "../Frameworks/Chromium Framework.framework",
-    );
-    if (fs.existsSync(candidate) && fs.existsSync(frameworks)) {
+    if (fs.existsSync(candidate)) {
       return candidate;
     }
   }

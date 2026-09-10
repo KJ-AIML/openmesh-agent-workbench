@@ -1,6 +1,6 @@
 # OpenMesh Desktop — Product Guide
 
-> Capability bible for humans. Accurate to `0.1.27`.  
+> Capability bible for humans. Accurate to `v0.2.0-rc.1`.
 > Limits: [LIMITATIONS.md](./LIMITATIONS.md) · Index: [README.md](./README.md)
 
 ## Contents
@@ -11,67 +11,69 @@
 4. [Projects](#projects)
 5. [Agent Chat](#agent-chat)
 6. [Agent Sessions](#agent-sessions)
-7. [Continuity / mesh / LAN](#continuity--mesh--lan)
-8. [Canvas](#canvas)
-9. [Work surfaces](#work-surfaces-home-sprint-docs-notes-context)
-10. [Terminal](#terminal)
-11. [Settings](#settings)
-12. [Storage & secrets](#storage--secrets)
-13. [CLI vs Desktop](#cli-vs-desktop)
-14. [Dogfood path (15 min)](#dogfood-path-15-min)
+7. [Runtime & Infrastructure](#runtime--infrastructure)
+8. [Continuity & Provenance](#continuity--provenance)
+9. [Canvas](#canvas)
+10. [Work surfaces](#work-surfaces-home-sprint-docs-notes-context)
+11. [Terminal](#terminal)
+12. [Settings](#settings)
+13. [Storage & secrets](#storage--secrets)
+14. [CLI vs Desktop](#cli-vs-desktop)
+15. [Dogfood path (15 min)](#dogfood-path-15-min)
 
 ---
 
 ## What it is
 
-**OpenMesh** is a **local-first desktop agent workbench** (Tauri v2 + Vue 3 + Rust `openmesh-core`):
+**OpenMesh** is a **local-first Agent Workbench for developers** (Tauri v2 + Vue 3 + Rust `openmesh-core`):
 
-- Manage a project folder as a workspace
-- Chat with an **Agent Engine** (OpenAI-compatible API) that can use confined workspace tools
-- Scan / continue sessions from Cursor, Claude Code, Codex, OpenCode, Gemini, Grok
-- Keep sprint/docs/notes/context on disk under `<project>/.openmesh/`
-- Optional **trusted-LAN alpha** peer relay, live ask, and human LAN chat
-- Embedded **PTY terminal** beside Chat; Canvas Auto UI / Network / Board
+- **Project-centric workflow**: Manage any local git or folder workspace without cloud lock-in
+- **Agent Chat**: Primary work surface with Ask / Plan / Act / Delegate modes, confined workspace tools, and embedded PTY
+- **Multi-session interoperability**: Scan and continue sessions from Codex, Claude Code, OpenCode, Cursor, Gemini, Grok
+- **Human-gated patch review**: Structured patch proposals with explicit human Apply/Reject authority
+- **Continuity work provenance**: Durable WorkSignal tracking for patch, verify, handoff, and import events
+- **Unified provider runtime**: Direct OpenAI-compatible execution for Chat plus optional built-in HTTP proxy listener (`localhost:8317`)
+- **Same-LAN collaboration**: Authenticated local peer pairing, live ask, and message relay
 
-It is **not** a finished multi-tenant cloud product, WhatsApp replacement, or WAN mesh with E2E crypto.
+It is **not** a multi-tenant cloud SaaS, WhatsApp replacement, or WAN mesh with E2E encryption.
 
 ---
 
 ## Mental model
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
-│  Desktop shell (Tauri)                                      │
+│  Desktop shell (Tauri v2)                                   │
 │  ┌──────────┐  ┌────────────────────┐  ┌─────────────────┐ │
-│  │ Sidebar  │  │ Pages (Vue)        │  │ Chat Terminal   │ │
-│  │ Projects │  │ Chat / Continuity  │  │ (embedded PTY)  │ │
-│  │ Nav      │  │ Sessions / Canvas  │  │                 │ │
+│  │ Sidebar  │  │ Pages (Vue 3)      │  │ Chat Terminal   │ │
+│  │ Projects │  │ Chat / Sessions    │  │ (embedded PTY)  │ │
+│  │ 4 Groups │  │ Workspace/Runtime  │  │                 │ │
 │  └──────────┘  └─────────┬──────────┘  └────────┬────────┘ │
-│                          │ IPC                  │          │
+│                          │ Typed IPC (80 cmds)  │          │
 │                 ┌────────▼──────────────────────▼────────┐ │
-│                 │ openmesh-core (+ desktop adapters)     │ │
+│                 │ openmesh-core (domain submodules)      │ │
+│                 │ authorize_agent_turn ──► LlmRuntime    │ │
 │                 └────────┬───────────────────────────────┘ │
 └──────────────────────────┼─────────────────────────────────┘
                            │
-              ~/.openmesh/ · <project>/.openmesh/ · user config secrets
+              ~/.openmesh/ · <project>/.openmesh/ · OS Keychain
 ```
 
-Same domain logic is also exposed via **`openmesh-cli`** for pack/approve/pilot/rc/LAN serve without the GUI.
+Same domain logic is also exposed via **`openmesh-cli`** for headless and CI workflows.
 
 ---
 
 ## Shell & navigation
 
-- Frameless desktop window; macOS traffic-light clearance in sidebar
-- **⌘K / Ctrl+K** command palette
-- Sidebar groups:
-  - **Work:** Home, Sprint, Docs, Notes, Canvas, Context
-  - **Team / Mesh:** Continuity
-  - **Agents:** Sessions
-- **Agent Chat** is a primary surface (sidebar + titlebar), not nested under Agents
-- Collapsed sidebar supports hover-peek without changing pin preference
+The v0.2 workbench organizes navigation through a single registry (`src/lib/navigation.ts`):
 
-Routes: see [docs/README.md](./README.md#app-entry-points-routes).
+- **Top**: Project switcher + **Primary Chat** (`/agent-chat` — primary work surface and default landing)
+- **Workspace**: Home (`/`), Context (`/context`), Docs (`/docs`), Notes (`/notes`), Canvas (`/canvas`), Sprint (`/sprint`)
+- **Agents**: Sessions (`/agent-sessions`)
+- **Runtime**: Providers (`/proxy-providers`), Connections (`/oauth`), HTTP proxy (`/proxy-runtime`), Usage (`/usage`), Pending & LAN (`/continuity`)
+- **Settings**: App preferences (`/settings`) in collapsible footer
+- Frameless desktop window with macOS traffic-light clearance in sidebar
+- **⌘K / Ctrl+K** command palette for instant navigation and actions
 
 ---
 
@@ -172,9 +174,11 @@ Deep dive: [TERMINAL.md](./TERMINAL.md)
 
 Deep dive: [SETTINGS.md](./SETTINGS.md)
 
-Groups: **Setup** (Overview, Provider, Voice) · **Runtime** (Agents, Extensions, Sessions, Server) · **Project** (Tools, Paths) · **App** (Appearance, Data, About/Updates).
+OpenMesh v0.2 separates infrastructure configuration from user preferences:
+- **Runtime Group** (`/proxy-providers`, `/oauth`, `/proxy-runtime`, `/usage`): Provider API credentials, OAuth connections, local HTTP proxy listener, and usage analytics.
+- **Settings Page** (`/settings`): App preferences (Overview, Tools, Paths, Appearance, Data, About & Updates).
 
-Legacy routes `/models` `/server` `/status` `/usage` `/dev-connector` redirect into Settings sections.
+Legacy routes (`/models`, `/server`, `/status`, `/dev-connector`) redirect safely into corresponding Settings and Runtime surfaces.
 
 ---
 

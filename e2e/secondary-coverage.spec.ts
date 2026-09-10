@@ -4,70 +4,41 @@ test.describe("Secondary browser feature coverage", () => {
   test("covers provider reorder guards, cancelled mutations, empty sections, and failures", async ({ openMesh, page }) => {
     await openMesh("/proxy-providers", { mockTauri: true });
     const recordNames = () => page.locator(".proxy-providers-page__record-title strong").allTextContents();
-    await expect.poll(recordNames).toEqual(["browser-gateway-a", "browser-gateway-b"]);
-    await expect(page.locator('button[title="Move up"]').first()).toBeDisabled();
-    await expect(page.locator('button[title="Move down"]').last()).toBeDisabled();
+    await expect.poll(recordNames).toEqual(["browser-upstream-a", "browser-upstream-b"]);
+    await expect(page.getByText("Key configured", { exact: true }).first()).toBeVisible();
 
     page.once("dialog", (dialog) => void dialog.dismiss());
-    await page.locator('button[title="Move up"]').nth(1).click();
-    await expect.poll(recordNames).toEqual(["browser-gateway-a", "browser-gateway-b"]);
-
-    page.once("dialog", (dialog) => void dialog.accept());
-    await page.locator('button[title="Move up"]').nth(1).click();
-    await expect.poll(recordNames).toEqual(["browser-gateway-b", "browser-gateway-a"]);
-    await expect.poll(() =>
-      page.evaluate(() =>
-        (window as unknown as { __OPENMESH_PROVIDER_COMMANDS__?: string[] })
-          .__OPENMESH_PROVIDER_COMMANDS__ ?? [],
-      ),
-    ).toContain("cliproxy_provider_reorder");
-
-    const routing = page.locator("#routing-strategy");
-    page.once("dialog", (dialog) => void dialog.dismiss());
-    await routing.selectOption("fill-first");
-    await expect(routing).toHaveValue("round-robin");
+    await page.locator("#routing-strategy").selectOption("fill-first");
+    await expect(page.locator("#routing-strategy")).toHaveValue("round-robin");
 
     await openMesh("/proxy-providers", { mockTauri: true, scenario: "provider-empty" });
-    await expect(page.getByText("No providers in this section", { exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Add provider" }).first()).toBeEnabled();
+    await expect(page.getByText("No upstreams configured", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Add upstream" }).first()).toBeEnabled();
 
     await openMesh("/proxy-providers", { mockTauri: true, scenario: "provider-mutation-error" });
     page.once("dialog", (dialog) => void dialog.accept());
-    await page.getByRole("button", { name: "Add provider" }).last().click();
+    await page.getByRole("button", { name: "Add upstream" }).first().click();
     const dialog = page.locator(".proxy-providers-page__dialog");
-    await dialog.getByLabel("Provider name").fill("failed-provider");
-    await dialog.getByLabel(/API key/).fill("write-only-key");
-    await dialog.getByLabel(/Base URL/).fill("https://failed.example.com/v1");
-    await dialog.getByRole("button", { name: "Save provider" }).click();
+    await dialog.getByLabel("Upstream id").fill("failed-upstream");
+    await dialog.getByRole("textbox", { name: /API key/ }).fill("write-only-key");
+    await dialog.getByLabel("Base URL").fill("https://failed.example.com/v1");
+    await dialog.getByLabel("Models").fill("failed-model");
+    await dialog.getByRole("button", { name: "Save upstream" }).click();
     await expect(page.getByRole("alert")).toContainText(
-      "Unable to update CLIProxyAPI provider configuration",
+      "Unable to update OpenMesh built-in proxy configuration.",
     );
-    await expect(page.getByText("failed-provider")).toHaveCount(0);
+    await expect(page.getByText("write-only-key", { exact: true })).toHaveCount(0);
   });
 
   test("covers runtime status variants, safe redaction, empty metadata, and every navigation link", async ({ openMesh, page }) => {
-    const variants = [
-      ["runtime-unauthorized", "Management secret rejected"],
-      ["runtime-chat-unauthorized", "Chat key rejected"],
-    ] as const;
-    for (const [scenario, label] of variants) {
-      await openMesh("/proxy-runtime", { mockTauri: true, scenario });
-      await expect(page.getByTestId("proxy-runtime-status")).toContainText(label);
-      await expect(page.getByText("management secret rejected by sidecar")).toHaveCount(0);
-      await expect(page.getByText("chat key rejected by sidecar")).toHaveCount(0);
-      await expect(page.getByText("The CLIProxyAPI runtime reported an error.")).toBeVisible();
-    }
-
-    await openMesh("/proxy-runtime", { mockTauri: true, scenario: "runtime-unsupported" });
-    await expect(page.getByText("Not supported by this sidecar", { exact: true })).toBeVisible();
-    await expect(page.getByText("configuration endpoint not supported")).toHaveCount(0);
-    await expect(page.getByText("No account metadata is available yet.", { exact: true })).toBeVisible();
+    await openMesh("/proxy-runtime", { mockTauri: true, scenario: "runtime-unavailable" });
+    await expect(page.getByTestId("proxy-runtime-status")).toContainText("Runtime error");
+    await expect(page.getByText("The OpenMesh built-in proxy reported an error.")).toBeVisible();
+    await expect(page.getByText("built-in proxy is unavailable")).toHaveCount(0);
 
     await openMesh("/proxy-runtime", { mockTauri: true, scenario: "runtime-empty" });
-    await expect(page.getByText("No account metadata is available yet.", { exact: true })).toBeVisible();
-    await expect(page.getByTestId("proxy-runtime-capabilities")).toContainText("Available");
-    await expect(page.getByTestId("proxy-runtime-capabilities")).toContainText("Read-only");
-    await expect(page.getByTestId("proxy-runtime-capabilities")).toContainText("Deferred");
+    await expect(page.getByTestId("proxy-runtime-status")).toContainText("Running");
+    await expect(page.getByText("0", { exact: true }).first()).toBeVisible();
 
     await openMesh("/proxy-runtime", { mockTauri: true });
     const runtimeCalls = () => page.evaluate(() =>
@@ -77,17 +48,8 @@ test.describe("Secondary browser feature coverage", () => {
     const initialRuntimeCalls = await runtimeCalls();
     await page.getByRole("button", { name: "Refresh", exact: true }).click();
     await expect.poll(runtimeCalls).toHaveLength(initialRuntimeCalls.length + 1);
-    await page.getByRole("link", { name: "Manage providers" }).click();
-    await expect(page).toHaveURL(/\/proxy-providers$/);
-    await openMesh("/proxy-runtime", { mockTauri: true });
-    await page.getByRole("link", { name: "Open sidecar settings" }).click();
-    await expect(page).toHaveURL(/\/settings\?section=server$/);
-    await openMesh("/proxy-runtime", { mockTauri: true });
-    await page.getByRole("link", { name: "Open provider configuration →" }).click();
-    await expect(page).toHaveURL(/\/proxy-providers$/);
-    await openMesh("/proxy-runtime", { mockTauri: true });
-    await page.getByRole("link", { name: "Open OAuth connections →" }).click();
-    await expect(page).toHaveURL(/\/oauth$/);
+    await page.getByRole("link", { name: "Open Provider settings" }).click();
+    await expect(page).toHaveURL(/\/settings\?section=provider$/);
   });
 
   test("covers Settings provider failures, server persistence, invalid paths, voice controls, and seeded extensions", async ({ openMesh, page }) => {
@@ -103,16 +65,17 @@ test.describe("Secondary browser feature coverage", () => {
     await expect(page.getByText("secret store unavailable", { exact: true })).toBeVisible();
 
     await openMesh("/settings?section=server", { mockTauri: true });
-    await page.getByRole("tab", { name: "Runtime", exact: true }).click();
+    await page.getByRole("tab", { name: "Local tools", exact: true }).click();
     await page.getByRole("tab", { name: "Server", exact: true }).click();
     const serverPanel = page.locator(".workbench-card:visible").filter({ hasText: "API Base URL" });
     await serverPanel.locator("input").first().fill("http://127.0.0.1:41778/v1");
     await page.getByRole("button", { name: "Save Server" }).click();
     await expect(page.getByText("server saved", { exact: true })).toBeVisible();
-    const sidecarToggle = page.getByRole("checkbox", { name: "Enable local CLIProxyAPI sidecar for Chat" });
-    await sidecarToggle.uncheck();
-    await page.getByRole("button", { name: "Save Sidecar Settings" }).click();
-    await expect(page.getByText("CLIProxyAPI sidecar settings saved", { exact: true })).toBeVisible();
+    await page.getByRole("spinbutton").fill("9001");
+    await page.getByRole("button", { name: "Save Built-in Proxy Settings" }).click();
+    await expect(page.getByText("Built-in proxy settings saved", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Stop proxy" }).click();
+    await expect(page.getByText("Built-in proxy stopped", { exact: true })).toBeVisible();
 
     await openMesh("/settings?section=sessions", { mockTauri: true, scenario: "path-invalid" });
     await page.getByText("Enable Codex Session Scanning").click();
@@ -193,7 +156,7 @@ test.describe("Secondary browser feature coverage", () => {
       route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify(release("v0.1.40", "Current browser release", [])),
+        body: JSON.stringify(release("v0.2.0-rc.1", "Current browser release", [])),
       }),
     );
     await openMesh("/settings?section=about", { mockTauri: true });
@@ -206,11 +169,11 @@ test.describe("Secondary browser feature coverage", () => {
         status: 200,
         contentType: "application/json",
         body: JSON.stringify(
-          release("v0.1.41", "Installer browser release", [
-            { name: "OpenMesh_0.1.41_aarch64.dmg", browser_download_url: "https://example.test/openmesh.dmg", size: 10 },
-            { name: "OpenMesh_0.1.41_x64-setup.exe", browser_download_url: "https://example.test/openmesh.exe", size: 10 },
-            { name: "OpenMesh_0.1.41.AppImage", browser_download_url: "https://example.test/openmesh.AppImage", size: 10 },
-            { name: "OpenMesh_0.1.41.deb", browser_download_url: "https://example.test/openmesh.deb", size: 10 },
+          release("v0.2.1", "Installer browser release", [
+            { name: "OpenMesh_0.2.1_aarch64.dmg", browser_download_url: "https://example.test/openmesh.dmg", size: 10 },
+            { name: "OpenMesh_0.2.1_x64-setup.exe", browser_download_url: "https://example.test/openmesh.exe", size: 10 },
+            { name: "OpenMesh_0.2.1.AppImage", browser_download_url: "https://example.test/openmesh.AppImage", size: 10 },
+            { name: "OpenMesh_0.2.1.deb", browser_download_url: "https://example.test/openmesh.deb", size: 10 },
           ]),
         ),
       }),

@@ -1,4 +1,4 @@
-import { legacyInvoke as invoke } from "../ipc";
+import { invokeTyped, legacyInvoke } from "../ipc";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { isTauriRuntime } from "../adapters/environment";
 import {
@@ -67,8 +67,8 @@ async function detectHostPlatform(): Promise<HostPlatform> {
 
   try {
     const [osRaw, archRaw] = await Promise.all([
-      invoke<string>("get_host_os"),
-      invoke<string>("get_host_arch"),
+      invokeTyped<string>("get_host_os"),
+      legacyInvoke<string>("get_host_arch"),
     ]);
     return { os: normalizeOs(osRaw), arch: normalizeArch(archRaw) };
   } catch {
@@ -119,7 +119,7 @@ export async function downloadAndOpenInstaller(
     };
   }
 
-  return invoke<InstallUpdateResult>("download_and_open_update", {
+  return legacyInvoke<InstallUpdateResult>("download_and_open_update", {
     url: asset.browserDownloadUrl,
     filename: asset.name,
   });

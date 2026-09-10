@@ -14,6 +14,7 @@ export async function installMockTauri(
     scenario?:
       | "seeded"
       | "empty"
+      | "chat-ready"
       | "patch"
       | "slow-chat"
       | "oauth-success"
@@ -31,6 +32,8 @@ export async function installMockTauri(
       | "provider-empty"
       | "provider-mutation-error"
       | "runtime-error"
+      | "runtime-port-conflict"
+      | "runtime-no-upstream"
       | "runtime-empty"
       | "runtime-unauthorized"
       | "runtime-chat-unauthorized"
@@ -117,11 +120,9 @@ export async function installMockTauri(
       const nextId = (prefix: string) => `${prefix}-${sequence++}`;
       const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 
-      target.__TAURI_INTERNALS__ = {};
-      if (runtime === "web") {
-        delete target.__TAURI__;
-        delete target.__TAURI_INTERNALS__;
-      }
+      target.__OPENMESH_RUNTIME__ = runtime ?? "tauri";
+      target.__TAURI__ = {};
+      if (runtime === "web") delete target.__TAURI__;
       target.__TAURI_EVENT_PLUGIN_INTERNALS__ = {
         unregisterListener: (event: string, callbackId: number) => {
           const listeners = eventListeners.get(event);
@@ -152,7 +153,7 @@ export async function installMockTauri(
           name: "",
           apiKeyConfigured: false,
           usageTrackingEnabled: false,
-          defaultModel: "sidecar-model",
+          defaultModel: "browser-model",
         },
         models: { localModelEnabled: false },
         server: {
@@ -194,6 +195,23 @@ export async function installMockTauri(
         settings.oauth.sidecarEnabled = false;
         settings.provider.defaultModel = "";
         settings.provider.apiKeyConfigured = false;
+      }
+
+      if (
+        [
+          "chat-ready",
+          "patch",
+          "slow-chat",
+          "chat-error",
+          "chat-tool-error",
+          "chat-rich",
+          "chat-invalid-rich",
+          "chat-progress",
+        ].includes(scenario)
+      ) {
+        settings.provider.name = "browser-provider";
+        settings.provider.apiKeyConfigured = true;
+        secretConfigured = true;
       }
 
       if (scenario === "extensions-seeded") {
@@ -630,6 +648,82 @@ export async function installMockTauri(
         mode: "local-scaffold",
         liveEngine: false,
       });
+      let builtInProxyRunning = !["runtime-unavailable", "runtime-port-conflict", "runtime-no-upstream"].includes(scenario as string);
+      const builtInProxyConfig: any = {
+        bindHost: "127.0.0.1",
+        port: 8317,
+        allowUnauthenticated: false,
+        requestTimeoutSecs: 60,
+        routingStrategy: "round-robin",
+        maxRetries: 3,
+        apiKeyCount: 2,
+        upstreamCount: 2,
+        modelAliasCount: 1,
+        upstreams: [
+          {
+            id: "browser-upstream-a",
+            baseUrl: "https://api.example.com/v1",
+            protocol: "open-ai-compatible",
+            apiKeyConfigured: true,
+            enabled: true,
+            priority: 10,
+            accountId: null,
+            oauthProvider: null,
+            models: [
+              {
+                id: "browser-model",
+                ownedBy: "browser-upstream-a",
+                capabilities: ["chat", "responses", "embeddings"],
+              },
+            ],
+          },
+          {
+            id: "browser-upstream-b",
+            baseUrl: "https://backup.example.com/v1",
+            protocol: "anthropic",
+            apiKeyConfigured: true,
+            enabled: true,
+            priority: 20,
+            accountId: null,
+            oauthProvider: null,
+            models: [
+              {
+                id: "browser-fallback",
+                ownedBy: "browser-upstream-b",
+                capabilities: ["chat"],
+              },
+            ],
+          },
+        ],
+        modelAliases: { "fast-browser-model": "browser-model" },
+        modelFallbacks: { "browser-model": ["browser-fallback"] },
+      };
+      if (scenario === "provider-empty" || scenario === "runtime-empty" || scenario === "runtime-no-upstream") {
+        builtInProxyConfig.upstreams = [];
+        builtInProxyConfig.upstreamCount = 0;
+        builtInProxyConfig.apiKeyCount = 0;
+      }
+      const builtInProxyStatus = () => ({
+        ownership: "built-in",
+        mode: "managed",
+        running: builtInProxyRunning,
+        bindHost: builtInProxyRunning ? "127.0.0.1" : null,
+        port: builtInProxyRunning ? 8317 : null,
+        endpoint: builtInProxyRunning ? "http://127.0.0.1:8317/v1" : null,
+        apiKeyConfigured: builtInProxyConfig.apiKeyCount > 0,
+        upstreamCount: builtInProxyConfig.upstreams.length,
+        modelCount: builtInProxyConfig.upstreams.reduce(
+          (total: number, upstream: any) => total + upstream.models.length,
+          0,
+        ),
+        error:
+          scenario === "runtime-error"
+            ? "built-in proxy status unavailable"
+            : scenario === "runtime-unavailable"
+              ? "built-in proxy is unavailable"
+              : null,
+      });
+
       const runtimeStatus = {
         mode: "attach-only",
         ownership: "external-sidecar",
@@ -709,7 +803,13 @@ export async function installMockTauri(
         invoke: async (command: string, args: any = {}) => {
           if (command.startsWith("cliproxy_")) providerCommands.push(command);
           if (command.startsWith("oauth_")) oauthCommands.push(command);
-          if (command === "oauth_runtime_status") runtimeCommands.push(command);
+          if (
+            command === "oauth_runtime_status" ||
+            command.startsWith("proxy_runtime_") ||
+            command.startsWith("proxy_management_")
+          ) {
+            runtimeCommands.push(command);
+          }
           const path =
             args.projectPath || currentProjectPath || project.folderPath;
           const data = dataFor(path);
@@ -720,6 +820,74 @@ export async function installMockTauri(
               return scenario === "update-unsupported" ? "freebsd" : "macos";
             case "get_host_arch":
               return "aarch64";
+            case "proxy_runtime_status":
+              if (scenario === "runtime-error") {
+                throw new Error("built-in proxy status unavailable");
+              }
+              return clone(builtInProxyStatus());
+            case "proxy_runtime_start_default":
+              if (scenario === "runtime-port-conflict") {
+                throw new Error("proxy listener could not be created: Address already in use (os error 48)");
+              }
+              if (scenario === "runtime-no-upstream") {
+                throw new Error("No provider upstream is configured before starting the built-in proxy.");
+              }
+              builtInProxyRunning = true;
+              return clone(builtInProxyStatus());
+            case "proxy_runtime_stop":
+              builtInProxyRunning = false;
+              return clone(builtInProxyStatus());
+            case "proxy_management_config":
+              if (scenario === "provider-error") {
+                throw new Error("built-in proxy configuration unavailable");
+              }
+              return clone({
+                ...builtInProxyConfig,
+                upstreamCount: builtInProxyConfig.upstreams.length,
+                modelAliasCount: Object.keys(builtInProxyConfig.modelAliases).length,
+              });
+            case "proxy_management_update": {
+              if (scenario === "provider-mutation-error") {
+                throw new Error("built-in proxy provider write rejected");
+              }
+              const patch = args.patch || {};
+              if (patch.routingStrategy) {
+                builtInProxyConfig.routingStrategy = patch.routingStrategy;
+              }
+              if (patch.modelAliases) {
+                builtInProxyConfig.modelAliases = clone(patch.modelAliases);
+              }
+              if (patch.modelFallbacks) {
+                builtInProxyConfig.modelFallbacks = clone(patch.modelFallbacks);
+              }
+              if (Object.prototype.hasOwnProperty.call(patch, "upstreams")) {
+                const previous = new Map<string, any>(
+                  builtInProxyConfig.upstreams.map((item: any) => [item.id, item]),
+                );
+                builtInProxyConfig.upstreams = (patch.upstreams || []).map(
+                  (item: any) => {
+                    const prior = previous.get(item.id);
+                    const { apiKey: _apiKey, ...safeItem } = item;
+                    return {
+                      ...safeItem,
+                      apiKeyConfigured: Object.prototype.hasOwnProperty.call(item, "apiKey")
+                        ? Boolean(item.apiKey)
+                        : Boolean(prior?.apiKeyConfigured),
+                      accountId: item.accountId ?? null,
+                      oauthProvider: item.oauthProvider ?? null,
+                    };
+                  },
+                );
+              }
+              builtInProxyConfig.upstreamCount = builtInProxyConfig.upstreams.length;
+              builtInProxyConfig.apiKeyCount = builtInProxyConfig.upstreams.filter(
+                (item: any) => item.apiKeyConfigured,
+              ).length;
+              builtInProxyConfig.modelAliasCount = Object.keys(
+                builtInProxyConfig.modelAliases,
+              ).length;
+              return clone(builtInProxyConfig);
+            }
             case "validate_path":
               if (scenario === "path-invalid") {
                 return {
@@ -1140,13 +1308,13 @@ export async function installMockTauri(
                   ].join("\n\n"),
                   toolSteps: [],
                   iterations: 1,
-                  model: "sidecar-model",
+                  model: "browser-model",
                   provider: "OpenAiCompatible",
                   refused: false,
                   route: {
-                    transport: "cli-proxy-api-sidecar",
-                    providerLabel: "CLIProxyAPI sidecar",
-                    endpointKind: "loopback-sidecar",
+                    transport: "direct-provider",
+                    providerLabel: "OpenMesh direct provider",
+                    endpointKind: "custom-compatible",
                     outcome: "completed",
                   },
                 };
@@ -1163,13 +1331,13 @@ export async function installMockTauri(
                   ].join("\n\n"),
                   toolSteps: [],
                   iterations: 1,
-                  model: "sidecar-model",
+                  model: "browser-model",
                   provider: "OpenAiCompatible",
                   refused: false,
                   route: {
-                    transport: "cli-proxy-api-sidecar",
-                    providerLabel: "CLIProxyAPI sidecar",
-                    endpointKind: "loopback-sidecar",
+                    transport: "direct-provider",
+                    providerLabel: "OpenMesh direct provider",
+                    endpointKind: "custom-compatible",
                     outcome: "completed",
                   },
                 };
@@ -1230,28 +1398,28 @@ export async function installMockTauri(
                     },
                   ],
                   iterations: 1,
-                  model: "sidecar-model",
+                  model: "browser-model",
                   provider: "OpenAiCompatible",
                   refused: false,
                   route: {
-                    transport: "cli-proxy-api-sidecar",
-                    providerLabel: "CLIProxyAPI sidecar",
-                    endpointKind: "loopback-sidecar",
+                    transport: "direct-provider",
+                    providerLabel: "OpenMesh direct provider",
+                    endpointKind: "custom-compatible",
                     outcome: "completed",
                   },
                 };
               }
               return {
-                assistantText: "mock sidecar reply",
+                assistantText: "mock direct-provider reply",
                 toolSteps: [],
                 iterations: 1,
-                model: "sidecar-model",
+                model: "browser-model",
                 provider: "OpenAiCompatible",
                 refused: false,
                 route: {
-                  transport: "cli-proxy-api-sidecar",
-                  providerLabel: "CLIProxyAPI sidecar",
-                  endpointKind: "loopback-sidecar",
+                  transport: "direct-provider",
+                  providerLabel: "OpenMesh direct provider",
+                  endpointKind: "custom-compatible",
                   outcome: "completed",
                 },
               };

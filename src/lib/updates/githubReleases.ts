@@ -143,12 +143,17 @@ export async function fetchLatestRelease(
 ): Promise<GithubRelease> {
   if (isPrereleaseVersion(currentAppVersion)) {
     const data = await fetchJson(RELEASES_LIST_URL);
-    if (!Array.isArray(data)) {
+    const list = Array.isArray(data)
+      ? data
+      : data && typeof data === "object" && (data as RawRelease).tag_name
+        ? [data]
+        : null;
+    if (!list) {
       throw new GithubReleaseError("Unexpected response from GitHub.", {
         code: "parse",
       });
     }
-    for (const item of data) {
+    for (const item of list) {
       const raw = item as RawRelease;
       if (raw.draft) continue;
       const mapped = mapRelease(raw);

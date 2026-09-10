@@ -2,8 +2,12 @@ import { test, expect } from "./fixtures";
 
 async function sendChat(page: import("@playwright/test").Page, text: string) {
   const input = page.getByRole("textbox", { name: "Message" });
+  const before = await page.locator(".msg--assistant").count();
   await input.fill(text);
   await page.getByTestId("composer-send").click();
+  await expect
+    .poll(() => page.locator(".msg--assistant").count(), { timeout: 10_000 })
+    .toBeGreaterThan(before);
   await expect(page.getByTestId("composer-send")).toBeVisible();
 }
 
@@ -107,7 +111,7 @@ test.describe("Residual browser feature coverage", () => {
     await expect(page.locator(".msg--assistant").last().locator(".tool--fail")).toBeVisible();
     await sendChat(page, "follow-up after tool failure");
     await expect(page.locator(".msg--assistant").last()).toContainText(
-      "mock sidecar reply",
+      "mock direct-provider reply",
     );
   });
 
@@ -176,7 +180,7 @@ test.describe("Residual browser feature coverage", () => {
     });
     await sendChat(page, "show progress");
     await expect(page.locator(".msg--assistant").last()).toContainText(
-      "mock sidecar reply",
+      "mock direct-provider reply",
     );
 
     await page.getByTestId("composer-status-terminal").click();
@@ -477,49 +481,30 @@ test.describe("Residual browser feature coverage", () => {
     await expect(page.getByText("No doc selected")).toBeVisible();
   });
 
-  test("covers empty OAuth administration, Kimi callback limitations, model-dialog cancellation, and empty models", async ({
+  test("covers empty built-in provider state and native OAuth capability boundaries", async ({
     openMesh,
     page,
   }) => {
-    await openMesh("/oauth", { mockTauri: true, scenario: "oauth-admin-empty" });
-    await expect(page.getByText("No auth-file metadata reported.")).toBeVisible();
-
-    await openMesh("/oauth", { mockTauri: true, scenario: "oauth-model-empty" });
-    const kimi = page.locator("article.oauth-card").filter({ hasText: "Kimi" });
-    await kimi.getByRole("button", { name: "Connect" }).click();
-    await expect(kimi.getByText("Waiting for browser authorization…")).toBeVisible();
-    await expect(kimi.getByPlaceholder(/localhost.*callback/)).toHaveCount(0);
-    await kimi.getByRole("button", { name: "Models" }).click();
-    await expect(page.getByText("No model definitions reported.")).toBeVisible();
-    await page.getByRole("button", { name: "Close" }).click();
-    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await openMesh("/oauth", { mockTauri: true, scenario: "runtime-empty" });
+    await expect(page.getByText(/No upstreams are configured yet/)).toBeVisible();
+    await expect(page.locator(".oauth-adapter-list li")).toHaveCount(8);
+    await expect(page.getByText("Endpoint required", { exact: true })).toHaveCount(3);
+    await expect(page.getByRole("button", { name: "Device login" })).toHaveCount(2);
   });
 
-  test("covers non-Codex OAuth cards and invalid callback recovery", async ({
+  test("covers non-Codex OAuth adapters and retry after a provider error", async ({
     openMesh,
     page,
   }) => {
     await openMesh("/oauth", { mockTauri: true, scenario: "oauth-success" });
-    const claude = page
-      .locator("article.oauth-card")
-      .filter({ hasText: "Claude" });
+    const claude = page.locator("li").filter({ hasText: /^Claude/ });
     await claude.getByRole("button", { name: "Connect" }).click();
-    await expect(
-      claude.getByText("Ready for use through the local provider endpoint."),
-    ).toBeVisible();
+    await expect(page.getByText("Claude account connected.", { exact: true })).toBeVisible();
 
-    const xai = page.locator("article.oauth-card").filter({ hasText: "xAI" });
-    await xai.getByRole("button", { name: "Connect" }).click();
-    await expect(
-      xai.getByText("Ready for use through the local provider endpoint."),
-    ).toBeVisible();
+    const grok = page.locator("li").filter({ hasText: /^Grok/ });
+    await grok.getByRole("button", { name: "Device login" }).click();
+    await expect(page.getByText("Grok account connected.", { exact: true })).toBeVisible();
 
-    await claude.getByRole("button", { name: "Refresh" }).click();
-    const callback = claude.getByPlaceholder(/localhost.*callback/);
-    await callback.fill("");
-    await expect(
-      claude.getByRole("button", { name: "Submit callback" }),
-    ).toBeDisabled();
   });
   test("drags Sprint tasks across Kanban columns and persists sprint status transitions", async ({
     openMesh,
@@ -554,93 +539,29 @@ test.describe("Residual browser feature coverage", () => {
     await expect(page.getByRole("button", { name: "Open Source" })).toHaveCount(0);
   });
 
-  test("covers OAuth port validation, direct-provider mode, invalid priority, and cancelled model edits", async ({
+  test("keeps OAuth endpoint-required adapters explicit and provider navigation intact", async ({
     openMesh,
     page,
   }) => {
     await openMesh("/oauth", { mockTauri: true });
-    const config = page.locator(".workbench-card.oauth-page__config");
-    await config.locator("input").first().fill("0");
-    await config.getByRole("button", { name: "Save port" }).click();
-    await expect(page.getByRole("status")).toContainText(
-      "Management port must be between 1 and 65535.",
-    );
-
-    const modeToggle = config.getByRole("checkbox");
-    await modeToggle.uncheck();
-    await config.getByRole("button", { name: "Save Chat mode" }).click();
-    await expect(page.getByRole("status")).toContainText(
-      "Direct provider mode restored for Chat.",
-    );
-    await expect(config).toContainText("Chat: direct provider mode");
-
-    const admin = page.locator(".workbench-card.oauth-page__admin");
-    page.once("dialog", async (dialog) => {
-      expect(dialog.type()).toBe("prompt");
-      await dialog.accept("not-an-integer");
-    });
-    await admin.getByRole("button", { name: "Edit priority for claude.json" }).click();
-    await expect(admin.getByRole("alert")).toContainText(
-      "Auth-file priority must be an integer",
-    );
-
-    const codex = page.locator("article.oauth-card").filter({ hasText: "Codex" });
-    await codex.getByRole("button", { name: "Models" }).click();
-    await expect(page.getByRole("dialog")).toBeVisible();
-    const before = await page.evaluate(
-      () => (window as unknown as { __OPENMESH_OAUTH_COMMANDS__?: string[] }).__OPENMESH_OAUTH_COMMANDS__?.length ?? 0,
-    );
-    await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
-    await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect
-      .poll(() =>
-        page.evaluate(
-          () => (window as unknown as { __OPENMESH_OAUTH_COMMANDS__?: string[] }).__OPENMESH_OAUTH_COMMANDS__?.length ?? 0,
-        ),
-      )
-      .toBe(before);
+    await expect(page.getByText("Configure an OpenAI-compatible endpoint while native auth is pinned.", { exact: true })).toHaveCount(2);
+    await expect(page.getByText("Endpoint required", { exact: true })).toHaveCount(3);
+    await page.getByRole("link", { name: /Provider registry/ }).first().click();
+    await expect(page).toHaveURL(/\/proxy-providers$/);
   });
 
-  test("covers optional provider endpoints, URL validation, and individual mutation failures", async ({
-    openMesh,
-    page,
-  }) => {
-    await openMesh("/proxy-providers", { mockTauri: true });
-    page.on("dialog", (dialog) => dialog.accept());
-
-    await page.locator(".proxy-providers-page__section-button").getByText("Claude API", { exact: true }).click();
-    await page.getByRole("button", { name: "Add provider" }).last().click();
-    let editor = page.locator(".proxy-providers-page__dialog");
-    await editor.getByLabel(/API key/).fill("claude-write-only");
-    await editor.getByRole("button", { name: "Save provider" }).click();
-    await expect(page.getByText("claude-api-key-browser")).toBeVisible();
-
-    await page.locator(".proxy-providers-page__section-button").getByText("Gemini API", { exact: true }).click();
-    await page.getByRole("button", { name: "Add provider" }).last().click();
-    editor = page.locator(".proxy-providers-page__dialog");
-    await editor.getByLabel(/API key/).fill("gemini-write-only");
-    await editor.getByRole("button", { name: "Save provider" }).click();
-    await expect(page.getByText("gemini-api-key-browser")).toBeVisible();
-
-    await page.locator(".proxy-providers-page__section-button").getByText("OpenAI compatible", { exact: true }).click();
-    await page.getByRole("button", { name: "Add provider" }).last().click();
-    editor = page.locator(".proxy-providers-page__dialog");
-    await editor.getByLabel("Provider name").fill("unsafe-url");
-    await editor.getByLabel(/API key/).fill("unsafe-write-only");
-    await editor.getByLabel(/Base URL/).fill("https://user:pass@example.com/v1?token=1#fragment");
-    await editor.getByRole("button", { name: "Save provider" }).click();
-    await expect(page.getByRole("alert")).toContainText("Unable to update CLIProxyAPI provider configuration");
-    await editor.getByRole("button", { name: "Cancel" }).click();
-
+  test("covers provider mutation failure without exposing credentials", async ({ openMesh, page }) => {
     await openMesh("/proxy-providers", { mockTauri: true, scenario: "provider-mutation-error" });
-    await page.locator('button[title="Move down"]').first().click();
-    await expect(page.getByRole("alert")).toContainText("Unable to update CLIProxyAPI provider configuration");
-    await page.getByRole("button", { name: "Disable" }).first().click();
-    await expect(page.getByRole("alert")).toContainText("Unable to update CLIProxyAPI provider configuration");
-    await page.getByRole("button", { name: "Delete" }).first().click();
-    await expect(page.getByRole("alert")).toContainText("Unable to update CLIProxyAPI provider configuration");
-    await page.locator("#routing-strategy").selectOption("fill-first");
-    await expect(page.getByRole("alert")).toContainText("Unable to update CLIProxyAPI provider configuration");
+    page.on("dialog", (dialog) => void dialog.accept());
+    await page.getByRole("button", { name: "Add upstream" }).first().click();
+    const editor = page.locator(".proxy-providers-page__dialog");
+    await editor.getByLabel("Upstream id").fill("failed-upstream");
+    await editor.getByLabel("Base URL").fill("https://failed.example.com/v1");
+    await editor.getByRole("textbox", { name: /API key/ }).fill("write-only-key");
+    await editor.getByLabel("Models").fill("failed-model");
+    await editor.getByRole("button", { name: "Save upstream" }).click();
+    await expect(page.getByRole("alert")).toContainText("Unable to update OpenMesh built-in proxy configuration.");
+    await expect(page.getByText("write-only-key", { exact: true })).toHaveCount(0);
   });
 
   test("keeps Cursor, Gemini, and Grok scanned sessions without unsupported terminal actions", async ({
@@ -808,9 +729,9 @@ test.describe("Residual browser feature coverage", () => {
     page,
   }) => {
     const release = (assets: unknown[]) => ({
-      tag_name: "v0.1.31",
+      tag_name: "v0.2.1",
       name: "Browser installer edge release",
-      html_url: "https://github.com/KJ-AIML/openmesh-agent-workbench/releases/tag/v0.1.31",
+      html_url: "https://github.com/KJ-AIML/openmesh-agent-workbench/releases/tag/v0.2.1",
       published_at: "2026-08-22T00:00:00.000Z",
       body: "Installer edge coverage",
       draft: false,
@@ -885,12 +806,12 @@ test.describe("Residual browser feature coverage", () => {
     await expect(page).toHaveURL(/\/agent-chat$/);
 
     await page.getByRole("button", { name: "OpenMesh Voice" }).click();
-    await expect(page.getByRole("status")).toBeVisible();
+    await expect(page.locator(".voice-hud")).toBeVisible();
     await expect(page.getByText("Hold the title-bar mic while you talk, then release.", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Voice reply on" }).click();
     await expect(page.getByRole("button", { name: "Voice reply off" })).toBeVisible();
     await page.getByTitle("Turn voice off").click();
-    await expect(page.getByRole("status")).toHaveCount(0);
+    await expect(page.locator(".voice-hud")).toHaveCount(0);
   });
 
   test("covers Settings no-project tools, risk confirmations, preset deletion, and browser folder choosing", async ({

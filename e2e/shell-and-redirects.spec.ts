@@ -73,13 +73,12 @@ test.describe("Shell, command palette, and redirects", () => {
     await expect(page).toHaveURL(/\/$/);
   });
 
-  test("redirects legacy routes to their Settings topics", async ({ openMesh, page }) => {
+  test("redirects legacy routes and preserves the live Usage Analytics route", async ({ openMesh, page }) => {
     const redirects = [
       { from: "/models", section: "Provider" },
       { from: "/dev-connector", section: "Tools" },
       { from: "/server", section: "Server" },
       { from: "/status", section: "Overview" },
-      { from: "/usage", section: "Overview" },
     ];
 
     for (const redirect of redirects) {
@@ -90,6 +89,10 @@ test.describe("Shell, command palette, and redirects", () => {
         page.getByRole("tab", { name: redirect.section, exact: true }),
       ).toHaveAttribute("aria-selected", "true");
     }
+
+    await openMesh("/usage", { mockTauri: true });
+    await expect(page).toHaveURL(/\/usage$/);
+    await expect(page.getByRole("heading", { name: "Usage" })).toBeVisible();
   });
 
   test("keeps the command palette usable on a mobile viewport", async ({

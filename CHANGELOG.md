@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-rc.1] - 2026-09-09
+
+### Unified Agent Workbench
+- Consolidated OpenMesh as a local-first Agent Workbench for developers, with Agent Chat as the primary work surface.
+- Project-centric workflow providing durable chat sessions, context pack assembly, and multi-session external agent scanning (Codex, Claude Code, OpenCode, Cursor, Gemini, Grok) with *Continue in Chat* and external CLI resumption.
+
+### Secure Agent Execution
+- Centralized turn authorization (`authorize_agent_turn`) enforcing origin validation, role-based tool allowlists, and execution boundaries.
+- Remote origins (such as LAN peers) strictly forbidden from proposing patches or mutating project files.
+- Desktop hardening with loopback default binding (`127.0.0.1`), strict webview CSP, removal of `plugin-fs`, and registered-path confinement.
+
+### Unified Provider Runtime
+- Direct OpenAI-compatible runtime execution for Agent Chat with normalized error handling and credential management in secure OS storage.
+- Optional built-in local HTTP proxy server (`localhost:8317`) for external client integration, complete with port conflict detection and health checks (`/v1/health`).
+- Retained AXGA strictly as an adapter for the tool-free Work Proxy draft and evidence boundary (ADR-0002).
+
+### Work Provenance / Continuity
+- Chat boundaries emit `WorkSignal` events for proposals, reviews, apply/reject outcomes, and handoffs without prematurely polluting the immutable `WorkEvent` ledger.
+- Deterministic signal provenance tracking and duplicate-retry idempotency across workspace operations.
+
+### Explicit Chat Commands
+- Strict slash command parser (`/plan`, `/act`, `/delegate`, `/verify`, `/rollback`, `/clear`) eliminating ambiguous keyword and substring heuristic routing.
+- Context mentions (`@docs`, `@notes`, `@context`) for precise prompt grounding.
+
+### Typed Desktop IPC
+- Comprehensive desktop IPC contract with 80 typed commands, 54 legacy commands contained behind adapters, 10 unused diagnostics, and 0 unknown commands.
+- Continuous static contract enforcement via `npm run check:ipc`.
+
+### Product UI Consolidation
+- Single-source navigation registry (`src/lib/navigation.ts`) organizing workbench views into 4 cohesive groups: Workspace, Agents, Runtime, and Settings.
+- Decomposed Agent Chat surface with dedicated mode switcher, composer menus, token metrics, and embedded PTY terminal panel.
+
+### Core Architecture Hardening
+- Monolithic `domain.rs` physically decomposed into modular submodules under `crates/openmesh-core/src/domain/` with clean unidirectional dependencies (`events`, `signals`, `corrections`, `projections`, `profile`, `context_pack`, `proxy_draft`).
+- Concurrency hardening eliminating directory races in test fixtures.
+
+### Known Limitations
+- Agent Engine non-streaming response model (assistant turns return on full completion).
+- Direct Chat requires OpenAI-compatible endpoints; Claude/Gemini formats route via built-in proxy.
+- LAN collaboration uses local bearer tokens rather than end-to-end cryptographic identity.
+- Preview binaries remain unsigned for developer dogfooding.
+
 ## [0.1.40] - 2026-08-24
 
 ### Added

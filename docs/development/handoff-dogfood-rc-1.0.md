@@ -1,5 +1,8 @@
 # Handoff runbook — RC dogfood → 1.0.0 gate
 
+> **Historical / Superseded.** This runbook is a historical artifact from the pre-v0.2 1.0.0 RC dogfood path.
+> The active program is **v0.2.0 unified agent workbench** — see [`docs/architecture/PRODUCT_CENTER.md`](../architecture/PRODUCT_CENTER.md) and [`docs/release/V0.2_RC_MATRIX.md`](../release/V0.2_RC_MATRIX.md).
+
 Companion to `handoff-post-0.1.21.md`. Short operational script.
 
 ## A. Pull & build
@@ -64,22 +67,22 @@ Check Continuity tabs: **Team · Trust · Connectors · Org · Pilot · RC**.
 
 ## E. If RC not ready
 
-1. Read fail rows from `rc check --json` / Continuity RC tab.  
-2. Fix only **P0/P1** (RC freeze forbids feature expansion).  
-3. Re-run `pilot check` then `rc check`.  
+1. Read fail rows from `rc check --json` / Continuity RC tab.
+2. Fix only **P0/P1** (RC freeze forbids feature expansion).
+3. Re-run `pilot check` then `rc check`.
 4. Record evidence in ledger when claiming PASS.
 
 ## F. When ready for 1.0.0
 
-1. Branch `feat/openmesh-1.0.0`  
-2. Follow `docs/development/openmesh-1.0.0-execution-plan.md`  
-3. Gate verification package + version `1.0.0` + CHANGELOG/ledger/matrix  
-4. Tag `v1.0.0` only with evidence of RC PASS on real team usage  
+1. Branch `feat/openmesh-1.0.0`
+2. Follow `docs/development/openmesh-1.0.0-execution-plan.md`
+3. Gate verification package + version `1.0.0` + CHANGELOG/ledger/matrix
+4. Tag `v1.0.0` only with evidence of RC PASS on real team usage
 
 ## Freeze reminder (from RC pack)
 
-**Allowed:** bugfix P0/P1, docs, tests, re-evaluate packs  
-**Forbidden:** new domain features, scope creep, breaking protocols without migration  
+**Allowed:** bugfix P0/P1, docs, tests, re-evaluate packs
+**Forbidden:** new domain features, scope creep, breaking protocols without migration
 
 ## G. Session evidence (2026-08-03)
 

@@ -1,12 +1,11 @@
 # Openmesh v0.3 Dogfood Checklist
 
-**Purpose:** Verify Openmesh v0.3 storage architecture is stable for daily use  
-**Version:** 0.3.0  
+**Purpose:** Verify Openmesh v0.3 storage architecture is stable for daily use
+**Version:** 0.3.0
 **Last Updated:** 2026-01-15
 
-> **Current product docs:** [`docs/README.md`](./README.md) · [`PRODUCT_GUIDE.md`](./PRODUCT_GUIDE.md) · [`DEVELOPMENT.md`](./DEVELOPMENT.md)  
-> **Current desktop dogfood (v0.1.28):** [`DOGFOOD_v0.1.28.md`](./DOGFOOD_v0.1.28.md)  
-> **Current RC / 1.0 path:** use [`docs/development/handoff-dogfood-rc-1.0.md`](development/handoff-dogfood-rc-1.0.md) (post v0.1.21). This v0.3 checklist remains historical for early storage QA.
+> **Historical / Superseded.** This document is a historical v0.3 storage architecture QA checklist.
+> Current product docs: [`docs/README.md`](./README.md) · [`PRODUCT_GUIDE.md`](./PRODUCT_GUIDE.md) · [`release/V0.2_RC_MATRIX.md`](./release/V0.2_RC_MATRIX.md)
 
 ---
 
@@ -490,9 +489,9 @@
 
 ## Sign-Off
 
-**Tester:** _________________  
-**Date:** _________________  
-**Result:** [ ] PASS  [ ] FAIL  
+**Tester:** _________________
+**Date:** _________________
+**Result:** [ ] PASS  [ ] FAIL
 **Notes:** _______________________________________________
 
 **Issues Found:**

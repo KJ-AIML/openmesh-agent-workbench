@@ -26,12 +26,17 @@ OpenMesh Desktop is **early preview (`0.x`)**: local dogfood, evolving APIs, uns
 
 | Want / easy to assume | Reality today |
 |----------------------|---------------|
+| Streaming tokens in Chat | **No** — Agent Engine is non-streaming; tool steps and assistant text return on turn completion |
+| Native Anthropic / Gemini direct in Chat | **No** — Chat requires OpenAI-compatible endpoint; Claude/Gemini must route via built-in proxy or compatible gateway |
 | Cloud sync of projects | **No** — local `~/.openmesh/` + `<project>/.openmesh/` only |
 | WAN / internet mesh | **No** — LAN only; no NAT traversal |
 | E2E encrypted mesh product | **No** — LAN uses local pairing bearers, not E2E crypto or an IdP |
 | WhatsApp-like DMs | **No** — Continuity Chat is LAN HTTP text only |
 | Multi-tenant team cloud admin | **No** — local team registry; cloud sync is dry-run scaffold |
 | Silent agent file writes | **No** — patches human-gated; Ask mode read-only tools |
+| AXGA completely removed | **No** — AXGA is retained specifically for tool-free Work Proxy draft / evidence boundary (ADR-0002) |
+| OAuth manages Agent Chat keys | **No** — OAuth connections configure built-in proxy upstreams; Agent Chat uses direct API key in user config |
+| 100% Typed IPC | **No** — 80 commands typed; 54 legacy commands contained behind adapters; 10 unused |
 | Cursor Canvas SDK (`.canvas.tsx`) | **No** — OpenMesh Auto UI is `openmesh.canvas/1` JSON |
 | “Work Proxy answered” theater | Live ask uses **Agent Engine**; missing key fails closed |
 | IdP / SSO trust | **No** — local trust-admin policy only |
@@ -44,16 +49,16 @@ OpenMesh Desktop is **early preview (`0.x`)**: local dogfood, evolving APIs, uns
 
 Implemented v0.2 trust matrix: [architecture/TRUST_MODEL.md](./architecture/TRUST_MODEL.md).
 
-- **LAN:** default bind `127.0.0.1`. Wildcard exposure needs explicit `--expose-lan` / `exposeLan`. Protected Agent Engine routes require a paired Bearer token + capability before the engine runs. `/v1/health` is still unauthenticated. Live-ask is budgeted (8 / 60s per peer). This is **not** E2E encryption or cloud identity.
-- **Webview:** production CSP is set; `withGlobalTauri` is false; `plugin-fs` is not shipped. `style-src 'unsafe-inline'` remains for Vue/Excalidraw. Dev CSP separately allows Vite HMR (`unsafe-eval` only there).
-- **OAuth:** system browser, not the webview. Provider origins are not in CSP.
-- **Relay:** approve required; received packages quarantine; secret class denied on wire policy for alpha
+- **LAN:** default bind `127.0.0.1`. Wildcard exposure needs explicit `--expose-lan` / `exposeLan`. Protected Agent Engine routes require a paired Bearer token + capability before the engine runs. `/v1/health` is unauthenticated by design for local reachability checks. Live-ask is budgeted (8 / 60s per peer). This is **not** E2E encryption or cloud identity.
+- **Webview:** production CSP is set; `withGlobalTauri` is false; `plugin-fs` is not shipped. `style-src 'unsafe-inline'` remains required for Vue and Excalidraw styling. Dev CSP separately allows Vite HMR (`unsafe-eval` only there).
+- **OAuth:** system browser, not the webview. Provider origins are not in CSP. Tokens encrypted in OS keychain.
+- **Relay:** approve required; received packages quarantine; secret class denied on wire policy for alpha.
 - **API keys:** user config file (mode `0600` on Unix) or env — not in project JSON. Pairing tokens hashed at rest outside project JSON.
-- **Path confinement:** mutating IPC and engine tools resolve a registered project root, then `safe_child_path` / `path_safety`. **Not all 181 commands** are on that guard; remaining reads and some canvas/continuity commands still take a caller path.
-- **Process:** PTY/terminal launchers use program + argv + registered cwd. A spawned PTY is a real shell. Recipes run argv under the project cwd with no program allowlist.
+- **Path confinement:** mutating IPC and engine tools resolve a registered project root, then `safe_child_path` / `path_safety`. **80 commands** are typed; remaining reads and some canvas/continuity commands still take a caller path with legacy containment.
+- **Process:** PTY/terminal launchers use program + argv + registered cwd. A spawned PTY is a real OS shell process. Recipes run argv under the project cwd with no program allowlist.
 - **Patch apply:** host-gated IPC (`agent_patch_apply`), never a model tool, never LAN.
-- **Unsigned installers:** verify you trust the release channel; OS will warn
-- **No SECURITY.md** in-repo as of this writing — report issues via GitHub
+- **Unsigned installers:** verify you trust the release channel; OS will warn.
+- **No SECURITY.md** in-repo as of this writing — report issues via GitHub.
 
 ---
 
@@ -101,13 +106,15 @@ Repo helper: [`scripts/macos-unquarantine.sh`](../scripts/macos-unquarantine.sh)
 
 ## Chat & agent
 
-- Needs configured OpenAI-compatible provider + key
-- DashScope **Coding Plan** keys ≠ Agent Engine chat/tools
-- Max tool-loop iterations bounded; long turns can still be heavy (mitigated with spawn_blocking + debounced persist)
-- Delegate / verify / patch depth is MVP — expect rough edges
-- Chat Continuity integration is boundary-based (patches, verify, handoff, import), not a transcript ledger
+- Agent Engine response model is non-streaming: turns return full assistant text and executed tool steps upon completion rather than per-token token streams.
+- Direct Chat requires OpenAI-compatible endpoints: native Anthropic Claude or Google Gemini messages API formats require routing through the built-in HTTP proxy (`localhost:8317`) or an OpenAI-compatible gateway.
+- Needs configured OpenAI-compatible provider + key stored in OS user config.
+- DashScope **Coding Plan** keys ≠ Agent Engine chat/tools (fails closed).
+- Max tool-loop iterations bounded; long turns can still be heavy (mitigated with spawn_blocking + debounced persist).
+- Delegate / verify / patch depth is MVP — expect rough edges.
+- Chat Continuity integration is boundary-based (patches, verify, handoff, import), not a transcript ledger.
 - Chat routing is explicit: `/command` is local; ordinary language always goes to Agent Engine. Keyword/substring shortcuts are gone.
-- Voice is optional and environment-dependent (mic permissions, TTS)
+- Voice is optional and environment-dependent (mic permissions, TTS).
 
 ---
 

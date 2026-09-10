@@ -2915,7 +2915,7 @@ dependencies = [
 
 [[package]]
 name = "openmesh"
-version = "0.1.40"
+version = "0.2.0-rc.1"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -2939,7 +2939,7 @@ dependencies = [
 
 [[package]]
 name = "openmesh-cli"
-version = "0.1.40"
+version = "0.2.0-rc.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -2952,7 +2952,7 @@ dependencies = [
 
 [[package]]
 name = "openmesh-core"
-version = "0.1.40"
+version = "0.2.0-rc.1"
 dependencies = [
  "async-trait",
  "axga-ai",

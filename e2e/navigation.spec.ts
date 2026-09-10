@@ -24,14 +24,20 @@ test.describe("Workbench navigation", () => {
       "aria-expanded",
       "false",
     );
+    await expect(nav.locator("[data-topic-toggle='settings']")).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
     await expect(nav.getByRole("link", { name: "Chat" })).toBeVisible();
     await expect(nav.getByRole("link", { name: "Home" })).toBeVisible();
     await expect(nav.getByRole("link", { name: "Context" })).toBeVisible();
     await expect(nav.getByRole("link", { name: "Docs" })).toBeVisible();
     await expect(nav.getByRole("link", { name: "Sessions" })).toBeVisible();
-    await expect(nav.getByRole("link", { name: "Settings" })).toBeVisible();
     await expect(nav.getByRole("link", { name: "HTTP proxy" })).toBeHidden();
     await expect(nav.getByRole("link", { name: "Pending & LAN" })).toBeHidden();
+
+    await nav.locator("[data-topic-toggle='settings']").click();
+    await expect(nav.getByRole("link", { name: "Settings" })).toBeVisible();
 
     await nav.locator("[data-topic-toggle='runtime']").click();
     await expect(nav.getByRole("link", { name: "Pending & LAN" })).toBeVisible();
@@ -91,6 +97,7 @@ test.describe("Workbench navigation", () => {
     await expect(page).toHaveURL(/\/agent-sessions$/);
     await expect(page.getByRole("heading", { name: "Agent Sessions" })).toBeVisible();
 
+    await nav.locator("[data-topic-toggle='settings']").click();
     await nav.getByRole("link", { name: "Settings" }).click();
     await expect(page).toHaveURL(/\/settings(?:\?section=overview)?$/);
     await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
@@ -134,9 +141,9 @@ test.describe("Workbench navigation", () => {
     const collapsedWidth = await main.evaluate((el) => el.getBoundingClientRect().width);
     expect(collapsedWidth).toBeGreaterThan(expandedWidth);
 
-    await page.locator(".shell__sidebar-slot").hover();
+    await page.locator(".shell__peek-zone").hover();
     await expect(page.getByRole("complementary")).toHaveCount(1);
-    await page.mouse.move(0, 0);
+    await page.mouse.move(500, 500);
     await expect(page.getByRole("complementary")).toHaveCount(0);
 
     await page.getByRole("button", { name: "Show sidebar" }).click();

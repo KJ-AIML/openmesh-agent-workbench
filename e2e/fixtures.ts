@@ -9,6 +9,7 @@ type OpenMeshFixtures = {
       scenario?:
         | "seeded"
         | "empty"
+        | "chat-ready"
         | "patch"
         | "slow-chat"
         | "oauth-success"
@@ -26,6 +27,8 @@ type OpenMeshFixtures = {
         | "provider-empty"
         | "provider-mutation-error"
         | "runtime-error"
+        | "runtime-port-conflict"
+        | "runtime-no-upstream"
         | "runtime-empty"
         | "runtime-unauthorized"
         | "runtime-chat-unauthorized"

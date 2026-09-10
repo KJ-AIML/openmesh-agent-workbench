@@ -22,7 +22,7 @@ test.describe("Settings and Continuity", () => {
     await page.locator("label.voice-settings__row").filter({ hasText: "Listen mode" }).locator("select").selectOption("ptt");
     await page.locator("label.voice-settings__row").filter({ hasText: "Speak replies" }).locator("input").check();
 
-    await page.getByRole("tab", { name: "Runtime" }).click();
+    await page.getByRole("tab", { name: "Local tools" }).click();
     await page.getByRole("tab", { name: "Agents" }).click();
     await page.getByPlaceholder(/default: codex/).fill("codex-browser");
     await page.getByRole("button", { name: "Validate" }).first().click();
@@ -57,22 +57,18 @@ test.describe("Settings and Continuity", () => {
     await page.getByRole("tab", { name: "Server" }).click();
     await page.getByRole("button", { name: "Check", exact: true }).click();
     const serverPanel = page.locator(".workbench-card").filter({ hasText: "API Base URL" });
-    await expect(serverPanel.locator(".badge")).toHaveText(/healthy|unreachable/);
+    await expect(serverPanel.locator(".badge").first()).toHaveText(/healthy|unreachable/);
+    const builtInProxyPanel = page.locator(".workbench-card").filter({ hasText: "OpenMesh Built-in Proxy" });
     await page.getByRole("spinbutton").fill("9001");
-    await page.getByRole("button", { name: "Save Sidecar Settings" }).click();
-    await expect(page.getByText("CLIProxyAPI sidecar settings saved", { exact: true })).toBeVisible();
-    const sidecarPanel = page.locator(".workbench-card").filter({ hasText: "Sidecar Client API Key" });
-    const sidecarKeyInput = sidecarPanel.getByPlaceholder("Saved locally, never shown");
-    if (await sidecarKeyInput.count() === 0) {
-      await sidecarPanel.getByRole("button", { name: "Clear", exact: true }).click();
-    }
-    await sidecarPanel.getByPlaceholder("Saved locally, never shown").fill("browser-client-key");
-    await sidecarPanel.getByRole("button", { name: "Save key", exact: true }).click();
-    await expect(sidecarPanel.getByText("Configured", { exact: true })).toBeVisible();
-    await sidecarPanel.getByRole("button", { name: "Clear", exact: true }).click();
+    await builtInProxyPanel.getByRole("button", { name: "Save Built-in Proxy Settings" }).click();
+    await expect(page.getByText("Built-in proxy settings saved", { exact: true })).toBeVisible();
+    await builtInProxyPanel.getByRole("button", { name: "Stop proxy", exact: true }).click();
+    await expect(builtInProxyPanel.getByText("Stopped", { exact: true })).toBeVisible();
+    await builtInProxyPanel.getByRole("button", { name: "Start proxy", exact: true }).click();
+    await expect(builtInProxyPanel.getByText("Running", { exact: true })).toBeVisible();
 
     await page.getByRole("tab", { name: "Project" }).click();
-    await page.getByRole("tab", { name: "Tools" }).click();
+    await page.getByRole("tab", { name: "Tools", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Command presets", exact: true })).toBeVisible();
     await page.getByPlaceholder("Preset name").fill("Browser preset");
     await page.getByPlaceholder("Command").fill("npm");
@@ -113,7 +109,7 @@ test.describe("Settings and Continuity", () => {
 
   test("covers Continuity pending, digest, mesh, team, trust, LAN, chat, proxy, relay, connectors, org, pilot, and RC", async ({ openMesh, page }) => {
     await openMesh("/continuity", { mockTauri: true });
-    await expect(page.getByRole("heading", { name: "Continuity" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Pending & LAN" })).toBeVisible();
     await expect(page.getByText("Review browser continuity")).toBeVisible();
 
     await page.getByRole("tab", { name: "Digest" }).click();
@@ -121,7 +117,8 @@ test.describe("Settings and Continuity", () => {
     await page.getByRole("spinbutton").fill("48");
     await page.getByRole("spinbutton").press("Enter");
 
-    await page.locator('[role="tablist"][aria-label="Section groups"]').getByRole("tab", { name: "Mesh" }).click();
+    await page.locator('[role="tablist"][aria-label="Section groups"]').getByRole("tab", { name: "Advanced" }).click();
+    await page.locator('[role="tablist"][aria-label="Views"]').getByRole("tab", { name: "Peers" }).click();
     await page.getByRole("textbox", { name: "Label (e.g. Yo)", exact: true }).fill("Second peer");
     await page.getByPlaceholder(/LAN host:port/).fill("127.0.0.1:41778");
     await page.getByPlaceholder("Notes (optional)").fill("Browser peer note");
@@ -134,7 +131,7 @@ test.describe("Settings and Continuity", () => {
     await page.getByRole("button", { name: "Query peer" }).click();
     await expect(page.getByText("Offline peer answer")).toBeVisible();
 
-    await page.locator('[role="tablist"][aria-label="Section groups"]').getByRole("tab", { name: "Team" }).click();
+    await page.locator('[role="tablist"][aria-label="Views"]').getByRole("tab", { name: "Team" }).click();
     await page.getByPlaceholder("Team display name").fill("Browser team");
     await page.getByRole("button", { name: "Initialize team" }).click();
     await expect(page.getByText("Browser team")).toBeVisible();
@@ -145,7 +142,7 @@ test.describe("Settings and Continuity", () => {
     await memberRow.getByRole("button", { name: "Remove" }).click();
     await expect(page.getByText("Browser member")).toHaveCount(0);
 
-    await page.getByRole("tab", { name: "Trust" }).click();
+    await page.locator('[role="tablist"][aria-label="Views"]').getByRole("tab", { name: "Trust" }).click();
     await expect(page.getByRole("heading", { name: "Initialize trust" })).toBeVisible();
     await page.getByRole("button", { name: "Initialize trust policy" }).click();
     await expect(page.getByText("Trust this peer on LAN")).toBeVisible();
@@ -157,8 +154,8 @@ test.describe("Settings and Continuity", () => {
     await page.getByRole("button", { name: "Remove" }).click();
     await expect(page.getByText(/allowlist 0/)).toBeVisible();
 
-    await page.locator('[role="tablist"][aria-label="Section groups"]').getByRole("tab", { name: "Mesh" }).click();
-    await page.getByRole("tab", { name: "LAN" }).click();
+    await page.locator('[role="tablist"][aria-label="Section groups"]').getByRole("tab", { name: "Share" }).click();
+    await page.locator('[role="tablist"][aria-label="Views"]').getByRole("tab", { name: "LAN" }).click();
     await page.getByRole("button", { name: "Start listener" }).click();
     await expect(page.getByText("Listening")).toBeVisible();
     await page.getByRole("button", { name: "Stop" }).click();
@@ -176,30 +173,30 @@ test.describe("Settings and Continuity", () => {
     await page.getByRole("button", { name: "Ask peer" }).click();
     await expect(page.getByText("Live fixture answer")).toBeVisible();
 
-    await page.getByRole("tab", { name: "Chat" }).click();
+    await page.locator('[role="tablist"][aria-label="Views"]').getByRole("tab", { name: "Chat" }).click();
     await page.getByRole("textbox", { name: "Peer host:port", exact: true }).fill("127.0.0.1:41778");
     await page.getByPlaceholder("Message…").fill("Hello peer");
     await page.getByRole("button", { name: "Send" }).click();
     await expect(page.getByText("Hello peer")).toBeVisible();
 
-    await page.getByRole("tab", { name: "Relay" }).click();
+    await page.locator('[role="tablist"][aria-label="Views"]').getByRole("tab", { name: "Relay" }).click();
     await expect(page.getByText("Audit trail")).toBeVisible();
-    await page.getByRole("tab", { name: "Proxy" }).click();
+
+    await page.locator('[role="tablist"][aria-label="Section groups"]').getByRole("tab", { name: "Advanced" }).click();
+    await page.locator('[role="tablist"][aria-label="Views"]').getByRole("tab", { name: "Proxy" }).click();
     await page.getByRole("button", { name: "Initialize Continuity Proxy" }).click();
     await expect(page.getByText("proxy-browser")).toBeVisible();
     await page.getByPlaceholder(/What needs attention/).fill("What needs attention?");
     await page.getByRole("button", { name: "Live ask" }).click();
     await expect(page.getByText("Browser continuity answer")).toBeVisible();
 
-    await page.locator('[role="tablist"][aria-label="Section groups"]').getByRole("tab", { name: "Team" }).click();
-    await page.getByRole("tab", { name: "Connectors" }).click();
+    await page.locator('[role="tablist"][aria-label="Views"]').getByRole("tab", { name: "Connectors" }).click();
     await expect(page.getByText("Browser fixture")).toBeVisible();
-    await page.getByRole("tab", { name: "Org" }).click();
+    await page.locator('[role="tablist"][aria-label="Views"]').getByRole("tab", { name: "Org" }).click();
     await expect(page.getByRole("heading", { name: "Nodes", exact: true })).toBeVisible();
-    await page.locator('[role="tablist"][aria-label="Section groups"]').getByRole("tab", { name: "Gate" }).click();
-    await page.getByRole("tab", { name: "Pilot" }).click();
+    await page.locator('[role="tablist"][aria-label="Views"]').getByRole("tab", { name: "Pilot" }).click();
     await expect(page.getByText(/pilot ready/)).toBeVisible();
-    await page.getByRole("tab", { name: "RC" }).click();
+    await page.locator('[role="tablist"][aria-label="Views"]').getByRole("tab", { name: "RC" }).click();
     await expect(page.getByText(/rc ready/)).toBeVisible();
   });
 
@@ -215,7 +212,7 @@ test.describe("Settings and Continuity", () => {
     await expect(page.getByRole("button", { name: "Refresh" })).toBeDisabled();
   });
 
-  test("covers provider secret lifecycle, invalid sidecar input, and every session directory toggle", async ({ openMesh, page }) => {
+  test("covers provider secret lifecycle, invalid built-in proxy input, and every session directory toggle", async ({ openMesh, page }) => {
     await openMesh("/settings?section=provider", { mockTauri: true });
     await page.getByPlaceholder("openai · deepseek · xai").fill("browser-direct");
     await page.getByPlaceholder("sk-…").fill("browser-direct-secret");
@@ -226,12 +223,12 @@ test.describe("Settings and Continuity", () => {
     await page.getByRole("button", { name: "Change" }).click();
     await expect(page.getByPlaceholder("sk-…")).toBeVisible();
 
-    await page.getByRole("tab", { name: "Runtime" }).click();
+    await page.getByRole("tab", { name: "Local tools" }).click();
     await page.getByRole("tab", { name: "Server" }).click();
     await page.getByRole("spinbutton").fill("0");
-    await page.getByRole("button", { name: "Save Sidecar Settings" }).click();
+    await page.getByRole("button", { name: "Save Built-in Proxy Settings" }).click();
     await expect(
-      page.getByText("Sidecar management port must be between 1 and 65535", { exact: true }),
+      page.getByText("Built-in proxy port must be between 1 and 65535", { exact: true }),
     ).toBeVisible();
 
     await page.getByRole("tab", { name: "Sessions" }).click();
@@ -282,9 +279,9 @@ test.describe("Settings and Continuity", () => {
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
-          tag_name: "v0.1.31",
+          tag_name: "v0.2.1",
           name: "Browser release",
-          html_url: "https://github.com/KJ-AIML/openmesh-agent-workbench/releases/tag/v0.1.31",
+          html_url: "https://github.com/KJ-AIML/openmesh-agent-workbench/releases/tag/v0.2.1",
           published_at: "2026-08-22T00:00:00.000Z",
           body: "Browser update notes",
           draft: false,
@@ -295,7 +292,7 @@ test.describe("Settings and Continuity", () => {
     );
     await openMesh("/settings?section=about", { mockTauri: true });
     await expect(page.getByText("Update available").first()).toBeVisible({ timeout: 8_000 });
-    await expect(page.getByText("Latest: v0.1.31")).toBeVisible();
+    await expect(page.getByText("Latest: v0.2.1")).toBeVisible();
     await expect(page.getByText("Browser update notes")).toBeVisible();
 
     await openMesh("/settings?section=about", { mockTauri: true });
@@ -313,7 +310,7 @@ test.describe("Settings and Continuity", () => {
     await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
     await expect(page.locator(".shell__sidebar-slot").getByRole("complementary")).toHaveCount(0);
     await openMesh("/continuity", { mockTauri: true });
-    await expect(page.getByRole("heading", { name: "Continuity" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Pending & LAN" })).toBeVisible();
     await expect(page.locator(".shell__sidebar-slot").getByRole("complementary")).toHaveCount(0);
   });
 });

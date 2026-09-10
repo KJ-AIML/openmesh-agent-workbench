@@ -1,8 +1,9 @@
 # Dogfood checklist — OpenMesh Desktop v0.1.30
 
-**Build / tag:** `v0.1.30`
-**Purpose:** Fillable pass/fail checklist for a real installed (or `tauri:dev`) session.
-**Supersedes:** [DOGFOOD_v0.1.28.md](./DOGFOOD_v0.1.28.md) for current dogfood (keep 0.1.28 for historical ticks).
+> **Historical / Superseded.** This checklist is a historical dogfood record for `v0.1.30`.
+> For the current v0.2 release candidate test matrix, see [`docs/release/V0.2_RC_MATRIX.md`](./release/V0.2_RC_MATRIX.md).
+
+**Build / tag:** `v0.1.30` (Historical)
 **Related:** [PRODUCT_GUIDE.md](./PRODUCT_GUIDE.md) · [CHAT.md](./CHAT.md) · [TERMINAL.md](./TERMINAL.md) · [SESSIONS.md](./SESSIONS.md) · [CONTINUITY_MESH.md](./CONTINUITY_MESH.md) · [SETTINGS.md](./SETTINGS.md) · [RELEASE_SMOKE.md](./RELEASE_SMOKE.md) · [LIMITATIONS.md](./LIMITATIONS.md)
 
 > Agents cannot physically click the GUI for you. Tick each box yourself.

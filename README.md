@@ -22,7 +22,8 @@
 </p>
 
 <p align="center">
-  <strong>Local-first desktop agent workbench</strong> — Agent Chat, sessions scan, Continuity/LAN alpha, Canvas, sprint/docs/notes, and an embedded PTY — backed by Rust <code>openmesh-core</code> + CLI.
+  <strong>OpenMesh is a local-first Agent Workbench for developers.</strong><br />
+  Project-centric workflow · Agent Chat work surface · Multi-session interoperability · Confined tools & embedded PTY · Human-gated patch authority · Continuity work provenance · Unified provider runtime · Optional OpenAI-compatible HTTP proxy.
 </p>
 
 <p align="center">
@@ -43,18 +44,18 @@
 
 ---
 
-## Features (current)
+## Core Workbench Surfaces
 
-| Area | What you get |
-|------|----------------|
-| **Agent Chat** | Ask / Plan / Act / Delegate · `/` tools · `@` mentions · durable chats · Stop · patches (human-gated) |
-| **Sessions** | Scan Codex / Claude / OpenCode / Cursor / Gemini / Grok · Continue in Chat · Resume in terminal (CLI agents) |
-| **Continuity** | Pending/digest · Team/Trust · Mesh peers · trusted-LAN relay/ask/chat · Pilot/RC |
-| **Canvas** | Auto UI (`openmesh.canvas/1`) · Network graph · Excalidraw boards |
-| **Work** | Home · Sprint · Docs · Notes · Context search |
-| **Terminal** | Embedded PTY sidebar in Chat + external OS/agent CLI launch |
-| **Settings** | Provider & models · Voice · Extensions · Sessions paths · Appearance · Updates |
-| **Local-first** | `~/.openmesh/` + `<project>/.openmesh/` · API key in user config (not project JSON) |
+OpenMesh organizes local-first engineering around four cohesive groups:
+
+| Group | Surface | What you get |
+|-------|---------|----------------|
+| **Agents** | **Agent Chat** | **Primary work surface** — Ask / Plan / Act / Delegate modes · `/` command tools · `@` context mentions · durable chats · Stop · human-gated patch review & apply · embedded PTY terminal |
+| **Agents** | **Sessions** | External agent scanner — Codex, Claude Code, OpenCode, Cursor, Gemini, Grok · Continue in Chat · Resume in external CLI terminal |
+| **Workspace** | **Project Core** | Home · Context search & indexing · Docs markdown editor · Notes scratchpad · Canvas Auto UI (`openmesh.canvas/1`) & Excalidraw boards · Sprint backlog & tasks |
+| **Runtime** | **Provider Runtime** | Direct OpenAI-compatible execution for Agent Chat · Optional built-in HTTP proxy listener (`localhost:8317`) for external clients · Connection credentials in secure OS keychain |
+| **Runtime** | **Pending & LAN** | Continuity work provenance — WorkSignal recording · pending questions & return digest · authenticated peer pairing · same-LAN live ask & message relay |
+| **Settings** | **Preferences** | App preferences — theme & appearance · CLI launcher paths · custom tools & dangerous presets · local data & update checker |
 
 Honest boundaries (no WAN mesh, no WhatsApp, no finished E2E crypto, unsigned previews): **[docs/LIMITATIONS.md](./docs/LIMITATIONS.md)**.
 
@@ -141,14 +142,15 @@ No cloud sync.
 ## Current status
 
 > [!NOTE]
-> OpenMesh is early preview software (`0.x`). Version baseline **0.1.28**. Intended for local dogfooding. See [docs/PRODUCT_GUIDE.md](./docs/PRODUCT_GUIDE.md) and [CHANGELOG.md](./CHANGELOG.md).
+> OpenMesh is in release preparation for **v0.2.0-rc.1**. Intended for local developer dogfooding. See [docs/PRODUCT_GUIDE.md](./docs/PRODUCT_GUIDE.md) and [CHANGELOG.md](./CHANGELOG.md).
 
 ### Known limitations (summary)
 
-- Trusted-LAN alpha only — no WAN/NAT, no product E2E mesh crypto
-- LAN Chat ≠ WhatsApp / cloud DMs
-- Unsigned installers
-- Desktop app required for PTY and most native features
+- Agent Engine response model is non-streaming
+- Direct provider for Chat; built-in HTTP proxy listener is optional infrastructure
+- Trusted-LAN alpha only — no WAN/NAT, bearer pairing rather than E2E identity
+- Unsigned preview installers (macOS Gatekeeper / Windows SmartScreen)
+- Desktop app required for PTY and native system features
 
 Full list: **[docs/LIMITATIONS.md](./docs/LIMITATIONS.md)**.
 

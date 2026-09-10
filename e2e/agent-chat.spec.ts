@@ -10,19 +10,19 @@ test.describe("Agent Chat", () => {
     await expect(page.getByText("Select a project first")).toBeVisible();
   });
 
-  test("sends a prompt and displays the selected sidecar route safely", async ({
+  test("sends a prompt and displays the selected direct-provider route safely", async ({
     openMesh,
     page,
   }) => {
-    await openMesh("/agent-chat", { mockTauri: true });
+    await openMesh("/agent-chat", { mockTauri: true, scenario: "chat-ready" });
     await page.locator("textarea").fill("hello from browser");
     await page.getByRole("button", { name: "Send" }).click();
 
-    await expect(page.getByText("mock sidecar reply")).toBeVisible();
+    await expect(page.getByText("mock direct-provider reply")).toBeVisible();
     const route = page.locator('[data-testid="chat-route-summary"]');
-    await expect(route).toContainText("CLIProxyAPI sidecar");
-    await expect(route).toContainText("loopback /v1");
-    await expect(route).toContainText("sidecar-model");
+    await expect(route).toContainText("Direct provider");
+    await expect(route).toContainText("custom compatible");
+    await expect(route).toContainText("browser-model");
     await expect(route).not.toContainText("127.0.0.1");
     await expect(route).not.toContainText("mock-secret-store");
   });
@@ -31,14 +31,14 @@ test.describe("Agent Chat", () => {
     openMesh,
     page,
   }) => {
-    await openMesh("/agent-chat", { mockTauri: true });
+    await openMesh("/agent-chat", { mockTauri: true, scenario: "chat-ready" });
     await page.locator("textarea").fill("first message");
     await page.getByRole("button", { name: "Send" }).click();
-    await expect(page.getByText("mock sidecar reply")).toBeVisible();
+    await expect(page.getByText("mock direct-provider reply")).toBeVisible();
     await page.getByTestId("chat-clear").click();
     await expect(page.getByText("Start a conversation")).toBeVisible();
 
-    await page.getByRole("button", { name: "New chat" }).click();
+    await page.getByRole("button", { name: "New chat", exact: true }).click();
     await expect(page.locator(".chat__rail-row")).toHaveCount(2);
     await expect(page.getByTestId("chat-route-summary")).toHaveCount(0);
   });
@@ -47,7 +47,7 @@ test.describe("Agent Chat", () => {
     openMesh,
     page,
   }) => {
-    await openMesh("/agent-chat", { mockTauri: true, runtime: "web" });
+    await openMesh("/agent-chat", { mockTauri: true, scenario: "chat-ready", runtime: "web" });
     const composer = page.getByTestId("chat-composer");
     const input = composer.getByRole("textbox", { name: "Message" });
 
@@ -100,7 +100,7 @@ test.describe("Agent Chat", () => {
 
     await input.fill("message actions browser coverage");
     await composer.getByTestId("composer-send").click();
-    await expect(page.getByText("mock sidecar reply")).toBeVisible();
+    await expect(page.getByText("mock direct-provider reply")).toBeVisible();
     const copyButtons = page.getByRole("button", { name: "Copy message" });
     await copyButtons.last().click({ force: true });
     await expect(page.locator(".chat__toast")).toContainText("Copied");
@@ -112,6 +112,9 @@ test.describe("Agent Chat", () => {
 
     await composer.getByTestId("composer-status-terminal").click();
     await expect(page.getByTestId("chat-terminal-panel")).toBeVisible();
+    if ((await page.getByTestId("term-empty-add").count()) > 0) {
+      await page.getByTestId("term-empty-add").click();
+    }
     await expect(page.getByTestId("embedded-term-error")).toContainText(
       "requires the desktop app",
     );
@@ -154,7 +157,7 @@ test.describe("Agent Chat", () => {
     await openMesh("/agent-chat", { mockTauri: true, scenario: "chat-not-ready" });
     await page.getByRole("textbox", { name: "Message" }).fill("try without a configured route");
     await page.getByTestId("composer-send").click();
-    await expect(page.getByText(/Configure the selected provider route/)).toBeVisible();
+    await expect(page.getByText(/Configure the selected provider, API key, and model/)).toBeVisible();
     await expect(page.getByTestId("chat-route-summary")).toHaveCount(0);
 
     await openMesh("/agent-chat", { mockTauri: true, scenario: "chat-error" });
