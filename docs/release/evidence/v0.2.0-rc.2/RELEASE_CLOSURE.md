@@ -56,3 +56,15 @@ All 8 distribution assets were downloaded from the published release and verifie
 - **macOS DMG Bundle:** Mounted via `hdiutil attach`
   - Info.plist `CFBundleShortVersionString`: `0.2.0-rc.2`
   - Info.plist `CFBundleVersion`: `0.2.0-rc.2`
+
+---
+
+## 5. Packaged Runtime Smoke Validation
+
+For full runtime verification details of the published artifact, see [RUNTIME_SMOKE.md](./RUNTIME_SMOKE.md).
+
+- **Tested macOS DMG:** `OpenMesh_0.2.0-rc.2_aarch64.dmg` (SHA-256 `d5fe55ade824446582bd0b5906f56a4ba91e9e70ef53ffa98eba288736629919`)
+- **Settings Toast Timer Race Fix (`src/pages/SettingsPage.vue`):** **VERIFIED**. Rapid sequential actions (`Export Project` → `Import Data`) properly reset the timer; toast persisted past the previous action's expiration window and expired cleanly after its 3000ms duration.
+- **Process Lifecycle & Persistence:** **VERIFIED**. Clean startup, project state restoration from `~/.openmesh/app-state.json`, clean SIGTERM shutdown (exit code 0), and clean relaunch.
+- **Windows Runtime Smoke:** **PENDING** (No Windows runtime host available in local Darwin environment).
+
