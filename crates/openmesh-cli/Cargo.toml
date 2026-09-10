@@ -1,6 +1,6 @@
 [package]
 name = "openmesh-cli"
-version = "0.2.0-rc.1"
+version = "0.2.0-rc.2"
 rust-version = "1.92.0"
 description = "OpenMesh CLI — the official programmable integration spine into the file-backed Signal Inbox"
 authors = ["Openmesh Team"]

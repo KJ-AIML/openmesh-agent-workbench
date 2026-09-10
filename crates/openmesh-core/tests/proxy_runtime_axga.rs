@@ -1404,9 +1404,14 @@ fn read_http_request(stream: &mut TcpStream) -> String {
     let mut buffer = vec![0_u8; 65_536];
     let mut total = 0_usize;
     loop {
-        let read = stream
-            .read(&mut buffer[total..])
-            .expect("read loopback request");
+        let read = match stream.read(&mut buffer[total..]) {
+            Ok(n) => n,
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                thread::sleep(Duration::from_millis(5));
+                continue;
+            }
+            Err(e) => panic!("read loopback request: {e}"),
+        };
         if read == 0 {
             break;
         }
@@ -1459,6 +1464,7 @@ fn spawn_loopback_server(
             }
             thread::sleep(Duration::from_millis(10));
         };
+        let _ = stream.set_nonblocking(false);
         let request = read_http_request(&mut stream);
         *capture_for_thread.request.lock().expect("lock") = Some(request.clone());
         let (status_line, body) = handler(request);

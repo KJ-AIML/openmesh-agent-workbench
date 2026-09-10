@@ -142,7 +142,7 @@ No cloud sync.
 ## Current status
 
 > [!NOTE]
-> OpenMesh is in release preparation for **v0.2.0-rc.1**. Intended for local developer dogfooding. See [docs/PRODUCT_GUIDE.md](./docs/PRODUCT_GUIDE.md) and [CHANGELOG.md](./CHANGELOG.md).
+> OpenMesh is in release preparation for **v0.2.0-rc.2**. Intended for local developer dogfooding. See [docs/PRODUCT_GUIDE.md](./docs/PRODUCT_GUIDE.md) and [CHANGELOG.md](./CHANGELOG.md).
 
 ### Known limitations (summary)
 

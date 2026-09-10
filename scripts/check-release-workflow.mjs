@@ -56,3 +56,47 @@ if (offenders.length > 0) {
 console.log(
   "check-release-workflow: ok — no APPLE_*/WINDOWS_* secret env mappings in release.yml",
 );
+
+/**
+ * REGRESSION GUARD (v0.2.0-rc.1 → v0.2.0-rc.2):
+ * WiX MSI bundling fails on Windows when the app version contains an alphanumeric
+ * pre-release identifier (e.g. "0.2.0-rc.2") with:
+ * "optional pre-release identifier in app version must be numeric-only and cannot be greater than 65535 for msi target".
+ * Therefore, whenever the project version contains a pre-release identifier,
+ * the release workflow matrix for windows-latest MUST restrict the bundle target
+ * to NSIS (--bundles nsis).
+ */
+const pkgPath = join(root, "package.json");
+const pkg = JSON.parse(readFileSync(pkgPath, "utf8"));
+const isPrerelease = Boolean(pkg.version && pkg.version.includes("-"));
+
+if (isPrerelease) {
+  const windowsMatrixMatch = text.match(
+    /-\s+platform:\s*['"]windows-latest['"][\s\S]*?args:\s*['"]([^'"]*)['"]/,
+  );
+  if (!windowsMatrixMatch) {
+    console.error(
+      "check-release-workflow: could not find 'windows-latest' matrix entry with 'args' in release.yml",
+    );
+    process.exit(1);
+  }
+  const windowsArgs = windowsMatrixMatch[1].trim();
+  const hasNsisBundle = /--bundles\s+nsis\b/.test(windowsArgs);
+  if (!hasNsisBundle) {
+    console.error(
+      `check-release-workflow: refusing Windows prerelease packaging regression.\n` +
+        `Current version "${pkg.version}" is a pre-release version.\n` +
+        `WiX MSI targets fail on alphanumeric pre-release identifiers.\n` +
+        `.github/workflows/release.yml windows-latest matrix must specify args: '--bundles nsis'.\n` +
+        `Observed args: "${windowsArgs}"`,
+    );
+    process.exit(1);
+  }
+  console.log(
+    `check-release-workflow: ok — prerelease version ${pkg.version} on Windows correctly restricted to NSIS (--bundles nsis)`,
+  );
+} else {
+  console.log(
+    `check-release-workflow: ok — stable version ${pkg.version} (Windows may build both MSI and NSIS)`,
+  );
+}

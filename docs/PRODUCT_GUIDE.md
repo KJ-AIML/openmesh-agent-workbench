@@ -1,6 +1,6 @@
 # OpenMesh Desktop — Product Guide
 
-> Capability bible for humans. Accurate to `v0.2.0-rc.1`.
+> Capability bible for humans. Accurate to `v0.2.0-rc.2`.
 > Limits: [LIMITATIONS.md](./LIMITATIONS.md) · Index: [README.md](./README.md)
 
 ## Contents

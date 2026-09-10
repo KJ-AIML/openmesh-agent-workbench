@@ -131,9 +131,15 @@ watch(
   { deep: true },
 );
 
+let toastTimeout: ReturnType<typeof setTimeout> | null = null;
+
 function showToast(msg: string) {
+  if (toastTimeout) clearTimeout(toastTimeout);
   toast.value = msg;
-  setTimeout(() => (toast.value = ""), 2000);
+  toastTimeout = setTimeout(() => {
+    toast.value = "";
+    toastTimeout = null;
+  }, 3000);
 }
 
 async function saveSection(section: string) {

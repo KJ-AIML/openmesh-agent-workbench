@@ -73,7 +73,9 @@ jobs:
           - platform: 'ubuntu-22.04'
             args: ''
           - platform: 'windows-latest'
-            args: ''
+            # Prerelease versions (e.g. 0.2.0-rc.2) must use NSIS; WiX MSI rejects
+            # alphanumeric prerelease identifiers. Guarded by check:release-workflow.
+            args: '--bundles nsis'
 
     runs-on: ${{ matrix.platform }}
     steps:

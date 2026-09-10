@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0-rc.2] - 2026-09-10
+
+### Packaging & Release
+- Fix Windows prerelease distribution by using a compatible NSIS packaging path (`--bundles nsis`). WiX MSI bundling fails on alphanumeric prerelease versions (e.g. `0.2.0-rc.2`). No Agent Workbench runtime behavior changed.
+- Added release-level regression guard in `scripts/check-release-workflow.mjs` verifying that Windows prerelease builds are restricted to NSIS bundle targets.
+
 ## [0.2.0-rc.1] - 2026-09-09
 
 ### Unified Agent Workbench

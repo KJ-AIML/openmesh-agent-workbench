@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* global process */
 /**
- * Canonical Release Candidate verification script for OpenMesh v0.2.0-rc.1.
+ * Canonical Release Candidate verification script for OpenMesh v0.2.0-rc.2.
  *
  * Runs all quality and consistency gates in order:
  * 1. Version consistency check (all 5 manifests)
@@ -20,7 +20,7 @@ import { fileURLToPath } from "node:url";
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 const STEPS = [
-  { name: "Version consistency check", cmd: "node scripts/check-version-consistency.mjs 0.2.0-rc.1" },
+  { name: "Version consistency check", cmd: "node scripts/check-version-consistency.mjs 0.2.0-rc.2" },
   { name: "Frontend verification gate", cmd: "npm run verify" },
   { name: "Rust formatting check", cmd: "cargo fmt --all -- --check" },
   { name: "Rust workspace check", cmd: "cargo check --workspace" },
@@ -30,7 +30,7 @@ const STEPS = [
 ];
 
 console.log("==================================================");
-console.log("  OpenMesh v0.2.0-rc.1 Release Candidate Verification");
+console.log("  OpenMesh v0.2.0-rc.2 Release Candidate Verification");
 console.log("==================================================\n");
 
 let stepNumber = 1;
@@ -54,5 +54,5 @@ for (const step of STEPS) {
 }
 
 console.log("==================================================");
-console.log("  ALL RELEASE CANDIDATE GATES PASSED (v0.2.0-rc.1)");
+console.log("  ALL RELEASE CANDIDATE GATES PASSED (v0.2.0-rc.2)");
 console.log("==================================================");
