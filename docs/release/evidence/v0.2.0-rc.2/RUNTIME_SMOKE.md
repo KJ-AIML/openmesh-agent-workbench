@@ -19,12 +19,30 @@ Validate that the published `v0.2.0-rc.2` packaged desktop distribution function
 
 ## 2. Runtime Platform Matrix
 
-| Platform | Distribution Asset | Runtime Validation Mode | Result | Notes |
-| :--- | :--- | :--- | :---: | :--- |
-| **macOS (arm64)** | `OpenMesh_0.2.0-rc.2_aarch64.dmg` | Live packaged execution via WKWebView on Darwin arm64 | **PASS** | Full UI navigation, toast race fix, persistence & clean shutdown verified |
-| **macOS (x86_64)** | `OpenMesh_0.2.0-rc.2_x64.dmg` | Binary structure & CI build validation | **PASS** | Shared codebase and Tauri packaging pipeline with arm64 |
-| **Linux (x64)** | `OpenMesh_0.2.0-rc.2_amd64.deb` / AppImage | CI runner packaging & compilation | **PASS** | Linux deb, AppImage, and rpm packages cleanly built |
-| **Windows (x64)** | `OpenMesh_0.2.0-rc.2_x64-setup.exe` | Binary structure (NSIS PE32) verified; runtime execution | **PENDING** | Local environment is macOS Darwin; no Windows runtime host available |
+```text
+macOS arm64
+  Packaging: SUCCESS
+  Runtime:   PASS
+
+macOS x86_64
+  Packaging: SUCCESS
+  Runtime:   NOT EXERCISED / CI-PACKAGED
+
+Linux x64
+  Packaging: SUCCESS
+  Runtime:   NOT EXERCISED / CI-PACKAGED
+
+Windows x64
+  Packaging: SUCCESS
+  Runtime:   PENDING
+```
+
+| Platform | Distribution Asset | Packaging Status | Runtime Smoke Status | Notes |
+| :--- | :--- | :---: | :---: | :--- |
+| **macOS (arm64)** | `OpenMesh_0.2.0-rc.2_aarch64.dmg` | **SUCCESS** | **PASS** | Live packaged execution via WKWebView on Darwin arm64; full UI navigation, toast race fix, persistence & clean shutdown verified |
+| **macOS (x86_64)** | `OpenMesh_0.2.0-rc.2_x64.dmg` | **SUCCESS** | **NOT EXERCISED / CI-PACKAGED** | Packaged via GitHub Actions runner (`macos-latest`); runtime execution not exercised on Darwin arm64 host |
+| **Linux (x64)** | `OpenMesh_0.2.0-rc.2_amd64.deb` / AppImage / rpm | **SUCCESS** | **NOT EXERCISED / CI-PACKAGED** | Packaged via GitHub Actions runner (`ubuntu-22.04`); runtime execution not exercised on Darwin arm64 host |
+| **Windows (x64)** | `OpenMesh_0.2.0-rc.2_x64-setup.exe` | **SUCCESS** | **PENDING** | NSIS installer packaged via GitHub Actions (`windows-latest`); pending verification on real Windows x64 host |
 
 ---
 
@@ -69,10 +87,64 @@ Toast race condition fix VERIFIED in packaged v0.2.0-rc.2 binary!
 
 ---
 
-## 5. Conclusion & Status Promotion
+## 5. Windows NSIS Runtime Smoke Protocol & Closure Criteria
+
+For final closure of the Windows packaging resolution, the published NSIS artifact (`OpenMesh_0.2.0-rc.2_x64-setup.exe`) must be validated on a real Windows x64 host following this sequence:
+
+```text
+download published setup.exe
+→ launch installer
+→ complete NSIS installation
+→ launch installed OpenMesh
+→ confirm version 0.2.0-rc.2
+→ confirm main UI renders
+→ open/select a disposable project
+→ navigate Chat
+→ short normal interaction / provider smoke if credentials are safely available
+→ Settings opens
+→ quit application
+→ relaunch
+→ project/app state restores
+→ uninstall successfully
+```
+
+### Minimum Mandatory Proof Checklist
+
+| # | Check Item | Requirement | Status |
+| :-: | :--- | :--- | :---: |
+| 1 | **Published Artifact Download** | Download `OpenMesh_0.2.0-rc.2_x64-setup.exe` directly from GitHub Releases tag `v0.2.0-rc.2` | PENDING |
+| 2 | **NSIS Installer Launch** | Installer executable starts without error or corruption | PENDING |
+| 3 | **Installation Completion** | NSIS installer finishes, writing binaries to standard location | PENDING |
+| 4 | **Process Launch** | Installed `OpenMesh.exe` launches | PENDING |
+| 5 | **Primary Window Render** | Primary application window renders via WebView2 | PENDING |
+| 6 | **Version Display** | Header or Settings page displays `0.2.0-rc.2` | PENDING |
+| 7 | **Project Open / Selection** | Select or open a disposable project directory | PENDING |
+| 8 | **Clean Quit** | Application terminates cleanly without hanging or orphan processes | PENDING |
+| 9 | **Relaunch & Persistence** | Relaunch application and verify project / app state restores | PENDING |
+
+### Optional / Additional Checks
+- No immediate WebView2 or bootstrap failure.
+- Tauri storage initializes (`%USERPROFILE%\.openmesh` or local app data).
+- Navigation works across Workspaces, Chat, and Settings.
+- No missing bundled resource or asset load error.
+- No Windows backslash/forward-slash path separator regression when opening a project.
+- Uninstaller (`Uninstall OpenMesh.exe`) completes cleanly and leaves no lingering processes.
+
+### Classification Promotion Criteria
+- **If all minimum mandatory checks pass on Windows:**
+  $\rightarrow$ **`RC PUBLISHED — HEALTHY`**
+- **If installation and core runtime succeed, but a non-release-critical manual area is not exercised:**
+  $\rightarrow$ **`RC PUBLISHED — HEALTHY WITH DOCUMENTED TEST COVERAGE LIMITATIONS`**
+- **If installer, launch, or project-open fails:**
+  $\rightarrow$ **`RC.2 RUNTIME BLOCKED`** *(Stop and report before changing code; requires a new RC candidate)*
+
+---
+
+## 6. Current Classification
 
 1. Candidate commit SHA `21fe4ca0ebf891f8525bcb2426765db2c1b0487e` and immutable release tag `v0.2.0-rc.2` are confirmed sound.
-2. The product-code fix in `src/pages/SettingsPage.vue` is validated in the actual packaged release artifact.
-3. Because all 4 CI platforms succeeded and macOS runtime verification passed with zero regressions, but a Windows runtime host is not locally available on this Darwin development machine, the formal classification for `v0.2.0-rc.2` is:
+2. The product-code fix in `src/pages/SettingsPage.vue` is validated on the live packaged macOS release artifact.
+3. Because all 4 CI platforms succeeded and macOS runtime verification passed with zero regressions, but Windows runtime execution on a real Windows x64 machine is awaiting manual/host execution, the active formal classification for `v0.2.0-rc.2` is:
 
 **RC PUBLISHED — HEALTHY WITH WINDOWS RUNTIME SMOKE PENDING**
+
